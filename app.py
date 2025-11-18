@@ -57,17 +57,55 @@ def extrageInfoProdus(text_produs):
     return (nume_parfum, cantitate_ml, int(numar_bucati))
 
 
+def detecteazaColoane(df):
+    """
+    Detectează automat coloanele necesare din Excel
+    Returns: (coloana_status, coloana_produse)
+    """
+    coloane = df.columns.tolist()
+
+    # Detectare coloană Status
+    coloana_status = None
+    for col in coloane:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['status', 'stare', 'statu']):
+            coloana_status = col
+            break
+
+    # Detectare coloană Produse
+    coloana_produse = None
+    for col in coloane:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['produse', 'produs', 'articol', 'item']):
+            coloana_produse = col
+            break
+
+    if not coloana_status:
+        raise ValueError('Nu s-a găsit coloana cu statusul comenzii (trebuie să conțină "Status" în nume)')
+
+    if not coloana_produse:
+        raise ValueError('Nu s-a găsit coloana cu produsele comandate (trebuie să conțină "Produse" în nume)')
+
+    return coloana_status, coloana_produse
+
+
 def proceseazaComenzi(fisier_path):
     """
     Procesează fișierul cu comenzi și returnează raportul de producție
+    Detectează automat coloanele necesare (ordinea nu mai contează)
     """
     df = pd.read_excel(fisier_path)
-    df_finalizate = df[df['Status Comanda'] == 'Comanda Finalizata (Facturata)']
+
+    # Detectare automată coloane
+    coloana_status, coloana_produse = detecteazaColoane(df)
+
+    # Filtrare comenzi finalizate (flexibil - acceptă variante)
+    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata', case=False, na=False)]
 
     raport = defaultdict(int)
 
     for idx, row in df_finalizate.iterrows():
-        produse = str(row['Produse comandate']).split(' | ')
+        produse = str(row[coloana_produse]).split(' | ')
         for produs in produse:
             info = extrageInfoProdus(produs.strip())
             if info:
@@ -223,6 +261,69 @@ def export_excel(filename):
 
     except Exception as e:
         return jsonify({'error': f'Eroare la export: {str(e)}'}), 500
+
+
+@app.route('/download-model')
+def download_model():
+    """
+    Download fișier model de import
+    """
+    try:
+        # Creare model în memorie
+        data = {
+            'Status Comanda': [
+                'Comanda Finalizata (Facturata)',
+                'Comanda Finalizata (Facturata)',
+                'Anulata'
+            ],
+            'Produse comandate': [
+                'Decant 3 ml parfum Yara Lattafa, parfum femei, 1.00 | Decant 5 ml parfum Eclaire Lattafa, parfum femei, 2.00',
+                'Decant 10 ml parfum Yum Yum Armaf, parfum femei, 1.00',
+                'Decant 3 ml parfum Khamrah Lattafa, unisex, 1.00'
+            ]
+        }
+
+        df_model = pd.DataFrame(data)
+
+        # Creare Excel în memorie
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_model.to_excel(writer, sheet_name='Model Import', index=False)
+
+            # Adaugă sheet cu instrucțiuni
+            instructiuni = pd.DataFrame({
+                'INSTRUCȚIUNI UTILIZARE': [
+                    '1. Coloane OBLIGATORII:',
+                    '   - Status Comanda: trebuie să conțină "Finalizata" pentru comenzi procesate',
+                    '   - Produse comandate: lista de produse separate prin " | "',
+                    '',
+                    '2. Coloanele pot fi în orice ordine',
+                    '',
+                    '3. Format produse:',
+                    '   Decant [CANTITATE] ml parfum [NUME PARFUM], [sex], [NUMĂR BUCĂȚI]',
+                    '',
+                    '4. Exemple valide:',
+                    '   - Decant 3 ml parfum Yara Lattafa, parfum femei, 1.00',
+                    '   - Decant 10 ml parfum Khamrah Lattafa, unisex, 2.00',
+                    '',
+                    '5. Multiple produse separate prin " | "',
+                    '',
+                    '6. Comenzile anulate sunt automat excluse din raport'
+                ]
+            })
+            instructiuni.to_excel(writer, sheet_name='Instrucțiuni', index=False)
+
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='model_import_obsid_decanturi.xlsx'
+        )
+
+    except Exception as e:
+        return jsonify({'error': f'Eroare la generare model: {str(e)}'}), 500
 
 
 @app.route('/health')
