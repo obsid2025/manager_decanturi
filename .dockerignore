@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Uploads și exports (vor fi create în container)
+uploads/
+exports/
+
+# Development
+.git/
+.gitignore
+*.md
+*.txt
+!requirements.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Folder decant-web (folosim fișierele din root)
+decant-web/
+
+# Scripts
+*.sh
+*.ps1

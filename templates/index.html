@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBSID - Manager Decanturi Parfumuri</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/svg+xml" href="https://gomagcdn.ro/domains3/obsid.ro/files/company/parfumuri-arabesti8220.svg">
+</head>
+<body>
+    <!-- Header cu meniu -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo-section">
+                    <img src="https://gomagcdn.ro/domains3/obsid.ro/files/company/parfumuri-arabesti8220.svg" alt="OBSID Logo" class="logo">
+                    <div class="brand-text">
+                        <h1>OBSID</h1>
+                        <p>Manager Decanturi</p>
+                    </div>
+                </div>
+                <nav class="nav-menu">
+                    <a href="https://www.obsid.ro/" target="_blank" class="nav-link">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        Site Principal
+                    </a>
+                    <a href="https://www.obsid.ro/gomag" target="_blank" class="nav-link">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="9" y1="3" x2="9" y2="21"></line>
+                        </svg>
+                        Dashboard
+                    </a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conținut principal -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Secțiune instrucțiuni -->
+            <div class="instructions-card">
+                <h2>📋 Instrucțiuni de utilizare</h2>
+                <ol>
+                    <li>Încărcați fișierul Excel exportat din sistemul de comenzi (format: .xlsx sau .xls)</li>
+                    <li>Sistemul va procesa automat comenzile finalizate și va exclude cele anulate</li>
+                    <li>Veți vedea raportul de producție direct în browser</li>
+                    <li>Descărcați raportul în format Excel pentru arhivare sau printare</li>
+                </ol>
+                <div class="info-box">
+                    <strong>📌 Notă:</strong> Raportul arată exact câte decanturi trebuie făcute din fiecare parfum,
+                    pe fiecare cantitate (3ml, 5ml, 10ml), pentru a evita desfacerea sticlelor deja decanate.
+                </div>
+            </div>
+
+            <!-- Secțiune upload -->
+            <div class="upload-section">
+                <div class="upload-card">
+                    <div class="upload-icon">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </div>
+                    <h3>Încarcă fișier comenzi</h3>
+                    <p>Selectează fișierul Excel cu comenzile de procesat</p>
+
+                    <div class="upload-zone" id="uploadZone">
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click();">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                            Selectează fișier
+                        </button>
+                        <span class="file-name" id="fileName"></span>
+                    </div>
+
+                    <button class="btn btn-success" id="processBtn" style="display: none;">
+                        Procesează comenzi
+                    </button>
+
+                    <div class="loading" id="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Se procesează comenzile...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Secțiune rezultate -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <!-- Info comenzi -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon success">✓</div>
+                        <div class="stat-content">
+                            <h4 id="comenziFinalizate">0</h4>
+                            <p>Comenzi Finalizate</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning">✕</div>
+                        <div class="stat-content">
+                            <h4 id="comenziAnulate">0</h4>
+                            <p>Comenzi Anulate</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon info">Σ</div>
+                        <div class="stat-content">
+                            <h4 id="totalComenzi">0</h4>
+                            <p>Total Comenzi</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabel raport -->
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>📊 Raport de Producție</h3>
+                        <button class="btn btn-export" id="exportBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Exportă în Excel
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table" id="raportTable">
+                            <thead>
+                                <tr>
+                                    <th>Parfum</th>
+                                    <th>Cantitate</th>
+                                    <th>Bucăți</th>
+                                    <th>Total Parfum</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <!-- Generat dinamic -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sumar global -->
+                <div class="summary-card">
+                    <h3>📈 Sumar Global</h3>
+                    <div class="summary-grid" id="summaryGrid">
+                        <!-- Generat dinamic -->
+                    </div>
+                    <div class="total-line">
+                        <strong>TOTAL GENERAL:</strong>
+                        <span id="totalGeneral">0</span> bucăți
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mesaje eroare -->
+            <div class="alert alert-error" id="errorAlert" style="display: none;">
+                <span id="errorMessage"></span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 OBSID - Parfumuri Arabești Premium. Toate drepturile rezervate.</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
