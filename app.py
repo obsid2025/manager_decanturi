@@ -13,6 +13,14 @@ import os
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
+import logging
+
+# Configurare logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
