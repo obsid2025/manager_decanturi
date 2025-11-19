@@ -508,7 +508,7 @@ function displayVoucherResults(data) {
 let currentBonuriData = null;
 
 /**
- * Start automatizare Oblio - Deschide tab-uri multiple în paralel
+ * Start automatizare Oblio - Folosind Selenium (backend)
  */
 async function startOblioAutomation() {
     if (!currentBonuriData || currentBonuriData.length === 0) {
@@ -517,21 +517,17 @@ async function startOblioAutomation() {
     }
 
     const totalBonuri = currentBonuriData.length;
-    const BATCH_SIZE = 5; // Număr de tab-uri în paralel (modifică dacă vrei mai multe/puține)
-    const DELAY_BETWEEN_TABS = 500; // ms între deschiderea fiecărui tab
-    const DELAY_BETWEEN_BATCHES = 8000; // ms între batch-uri (8 secunde)
-
     const startAutomationBtn = document.getElementById('startAutomationBtn');
     const originalHTML = startAutomationBtn.innerHTML;
 
     try {
         // Confirmă acțiunea
-        const confirmMsg = `🤖 AUTOMATIZARE OBLIO\n\n` +
-            `Total bonuri: ${totalBonuri}\n` +
-            `Tab-uri în paralel: ${BATCH_SIZE}\n` +
-            `Batches: ${Math.ceil(totalBonuri / BATCH_SIZE)}\n\n` +
-            `✅ Ești deja logat în Oblio?\n` +
-            `✅ Ai instalat Tampermonkey script?\n\n` +
+        const confirmMsg = `🤖 AUTOMATIZARE OBLIO CU SELENIUM\n\n` +
+            `Total bonuri: ${totalBonuri}\n\n` +
+            `✅ Ești logat în Oblio în Chrome?\n` +
+            `✅ Chrome va fi controlat automat de Selenium\n\n` +
+            `ℹ️ Browser-ul Chrome se va deschide automat\n` +
+            `ℹ️ NU închide browser-ul până la finalizare\n\n` +
             `Pornești automatizarea?`;
 
         if (!confirm(confirmMsg)) {
@@ -540,85 +536,69 @@ async function startOblioAutomation() {
 
         // Afișare loading
         startAutomationBtn.disabled = true;
+        startAutomationBtn.innerHTML = `
+            <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
+            Pornire Selenium...
+        `;
 
-        let processed = 0;
-        const batches = [];
+        console.log(`🚀 START SELENIUM AUTOMATION: ${totalBonuri} bonuri`);
+        console.log('📊 Lista bonuri:', currentBonuriData);
 
-        // Împarte bonurile în batch-uri
-        for (let i = 0; i < totalBonuri; i += BATCH_SIZE) {
-            batches.push(currentBonuriData.slice(i, i + BATCH_SIZE));
+        // Trimite request la backend pentru a porni Selenium
+        const response = await fetch('/start-automation-selenium', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bonuri: currentBonuriData
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Eroare la automatizare');
         }
 
-        console.log(`🚀 START AUTOMATION: ${totalBonuri} bonuri în ${batches.length} batch-uri`);
+        // Succes!
+        console.log('✅ Automatizare finalizată:', data);
 
-        // Procesează fiecare batch
-        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-            const batch = batches[batchIndex];
-            const batchNum = batchIndex + 1;
+        startAutomationBtn.innerHTML = `✅ Automatizare completă!`;
 
-            // Update buton cu progres
-            startAutomationBtn.innerHTML = `
-                <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
-                Batch ${batchNum}/${batches.length} (${processed + batch.length}/${totalBonuri})
-            `;
+        // Mesaj de succes
+        const stats = data.stats || {};
+        const successCount = stats.success || 0;
+        const failedCount = stats.failed || 0;
 
-            console.log(`\n📦 Batch ${batchNum}/${batches.length}: ${batch.length} tab-uri`);
+        let alertMsg = `🎉 AUTOMATIZARE FINALIZATĂ!\n\n`;
+        alertMsg += `✅ Bonuri create cu succes: ${successCount}/${totalBonuri}\n`;
 
-            // Deschide toate tab-urile din acest batch în paralel
-            for (let i = 0; i < batch.length; i++) {
-                const bon = batch[i];
-                const url = `https://www.oblio.eu/stock/production/?sku=${encodeURIComponent(bon.sku)}&qty=${bon.cantitate}&autoclose=true`;
-
-                console.log(`  → Tab ${i + 1}: SKU=${bon.sku}, QTY=${bon.cantitate}`);
-
-                // Deschide tab nou
-                window.open(url, '_blank');
-
-                // Pauză mică între tab-uri pentru a nu suprasolicita browser-ul
-                if (i < batch.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_TABS));
-                }
-            }
-
-            processed += batch.length;
-
-            // Dacă mai sunt batch-uri, așteaptă înainte de următorul
-            if (batchIndex < batches.length - 1) {
-                console.log(`⏳ Așteptare ${DELAY_BETWEEN_BATCHES/1000}s înainte de batch-ul următor...`);
-
-                // Countdown pentru următorul batch
-                for (let sec = DELAY_BETWEEN_BATCHES/1000; sec > 0; sec--) {
-                    startAutomationBtn.innerHTML = `
-                        <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
-                        Următorul batch în ${sec}s...
-                    `;
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
+        if (failedCount > 0) {
+            alertMsg += `❌ Bonuri eșuate: ${failedCount}\n\n`;
+            alertMsg += `Vezi log-ul pentru detalii (automatizare_oblio.log)`;
         }
 
-        // Succes
-        startAutomationBtn.innerHTML = `✅ ${totalBonuri} tab-uri deschise!`;
-        console.log(`\n✅ FINALIZAT: ${totalBonuri} tab-uri deschise în ${batches.length} batch-uri`);
+        alert(alertMsg);
 
-        // Mesaj final
+        // Restaurează butonul după 5 secunde
         setTimeout(() => {
-            alert(`🎉 AUTOMATIZARE LANSATĂ!\n\n` +
-                `✅ ${totalBonuri} tab-uri deschise\n` +
-                `📦 ${batches.length} batch-uri procesate\n\n` +
-                `Scriptul Tampermonkey creează bonurile automat!\n` +
-                `Tab-urile se vor închide singure când termină.`);
-
-            // Restaurează butonul după 3 secunde
-            setTimeout(() => {
-                startAutomationBtn.innerHTML = originalHTML;
-                startAutomationBtn.disabled = false;
-            }, 3000);
-        }, 1000);
+            startAutomationBtn.innerHTML = originalHTML;
+            startAutomationBtn.disabled = false;
+        }, 5000);
 
     } catch (error) {
         console.error('❌ Eroare automatizare:', error);
-        showVoucherError('Eroare la automatizare: ' + error.message);
+
+        let errorMsg = 'Eroare la automatizare: ' + error.message;
+
+        if (error.message.includes('Chrome WebDriver')) {
+            errorMsg += '\n\n💡 Asigură-te că:\n' +
+                        '- Google Chrome este instalat\n' +
+                        '- ChromeDriver este instalat (vezi documentația)';
+        }
+
+        showVoucherError(errorMsg);
         startAutomationBtn.disabled = false;
         startAutomationBtn.innerHTML = originalHTML;
     }

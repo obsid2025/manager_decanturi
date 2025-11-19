@@ -512,5 +512,47 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'OBSID Decant Manager'})
 
 
+@app.route('/start-automation-selenium', methods=['POST'])
+def start_automation_selenium():
+    """
+    Pornește automatizarea Selenium pentru crearea bonurilor în Oblio
+    """
+    try:
+        data = request.get_json()
+        bonuri = data.get('bonuri', [])
+
+        if not bonuri:
+            return jsonify({'error': 'Nu există bonuri de procesat'}), 400
+
+        # Import automation class
+        from automatizare_oblio_selenium import OblioAutomation
+
+        # Inițializare automation
+        automation = OblioAutomation(
+            use_existing_profile=True,  # Folosește profilul Chrome cu sesiune Oblio
+            headless=False  # Rulează cu interfață grafică
+        )
+
+        # Setup driver
+        if not automation.setup_driver():
+            return jsonify({'error': 'Nu s-a putut porni Chrome WebDriver. Verifică că Chrome este instalat.'}), 500
+
+        # Procesează bonurile
+        stats = automation.process_bonuri(bonuri)
+
+        # Închide browser
+        automation.close()
+
+        # Returnează rezultatul
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'message': f'Automatizare finalizată! {stats["success"]}/{stats["total"]} bonuri create cu succes.'
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Eroare la automatizare: {str(e)}'}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
