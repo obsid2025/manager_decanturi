@@ -545,9 +545,58 @@ function displayVoucherResults(data) {
 // ========== AUTOMATION FUNCTIONALITY ==========
 
 let currentBonuriData = null;
+let socket = null;
+let currentInputType = null;
 
 /**
- * Start automatizare Oblio - Folosind Selenium (backend)
+ * Inițializare Socket.IO connection
+ */
+function initializeSocket() {
+    if (socket) {
+        return; // Already connected
+    }
+
+    socket = io({
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5
+    });
+
+    // Connection events
+    socket.on('connect', () => {
+        console.log('🔌 Conectat la WebSocket');
+        updateTerminalStatus('🟢 Conectat', '#4ade80');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('⚠️ Deconectat de la WebSocket');
+        updateTerminalStatus('🔴 Deconectat', '#ef4444');
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('❌ Eroare conexiune WebSocket:', error);
+        updateTerminalStatus('🔴 Eroare conexiune', '#ef4444');
+    });
+
+    // Log events
+    socket.on('log', (data) => {
+        appendTerminalLog(data.type, data.message);
+    });
+
+    // Input required events
+    socket.on('input_required', (prompt) => {
+        showInputSection(prompt);
+    });
+
+    // Automation complete events
+    socket.on('automation_complete', (data) => {
+        handleAutomationComplete(data);
+    });
+}
+
+/**
+ * Start automatizare Oblio - Cu Terminal Live
  */
 async function startOblioAutomation() {
     if (!currentBonuriData || currentBonuriData.length === 0) {
@@ -556,98 +605,229 @@ async function startOblioAutomation() {
     }
 
     const totalBonuri = currentBonuriData.length;
-    const startAutomationBtn = document.getElementById('startAutomationBtn');
-    const originalHTML = startAutomationBtn.innerHTML;
 
-    try {
-        // Confirmă acțiunea
-        const confirmMsg = `🤖 AUTOMATIZARE OBLIO CU SELENIUM\n\n` +
-            `Total bonuri: ${totalBonuri}\n\n` +
-            `✅ Ești logat în Oblio în Chrome?\n` +
-            `✅ Chrome va fi controlat automat de Selenium\n\n` +
-            `ℹ️ Browser-ul Chrome se va deschide automat\n` +
-            `ℹ️ NU închide browser-ul până la finalizare\n\n` +
-            `Pornești automatizarea?`;
+    // Confirmă acțiunea
+    const confirmMsg = `🤖 AUTOMATIZARE OBLIO CU TERMINAL LIVE\n\n` +
+        `Total bonuri: ${totalBonuri}\n\n` +
+        `✅ Vei vedea logs live în terminal\n` +
+        `✅ Poți introduce credențiale când sunt necesare\n` +
+        `✅ Totul rulează pe server (cloud)\n\n` +
+        `Pornești automatizarea?`;
 
-        if (!confirm(confirmMsg)) {
-            return;
-        }
+    if (!confirm(confirmMsg)) {
+        return;
+    }
 
-        // Afișare loading
-        startAutomationBtn.disabled = true;
-        startAutomationBtn.innerHTML = `
-            <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
-            Pornire Selenium...
-        `;
+    // Deschide terminal modal
+    openTerminal();
 
-        console.log(`🚀 START SELENIUM AUTOMATION: ${totalBonuri} bonuri`);
-        console.log('📊 Lista bonuri:', currentBonuriData);
+    // Asigură-te că Socket.IO este inițializat
+    initializeSocket();
 
-        // Extrage cookies Oblio pentru sesiune (IMPORTANT pentru server Linux)
-        console.log('🍪 Extragere cookies Oblio...');
-        const oblioCookies = getCookiesForDomain('oblio.eu');
-        console.log(`🍪 Cookies Oblio găsite: ${oblioCookies.length}`);
+    // Trimite comenzi de start către server prin WebSocket
+    console.log(`🚀 START AUTOMATION LIVE: ${totalBonuri} bonuri`);
+    socket.emit('start_automation_live', {
+        bonuri: currentBonuriData
+    });
+}
 
-        // Trimite request la backend pentru a porni Selenium
-        const response = await fetch('/start-automation-selenium', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                bonuri: currentBonuriData,
-                oblio_cookies: oblioCookies  // Trimite cookies pentru autentificare
-            })
-        });
+/**
+ * Deschide Terminal Modal
+ */
+function openTerminal() {
+    const modal = document.getElementById('terminalModal');
+    const logsDiv = document.getElementById('terminalLogs');
+    const inputSection = document.getElementById('terminalInput');
 
-        const data = await response.json();
+    // Reset terminal
+    logsDiv.innerHTML = '';
+    inputSection.style.display = 'none';
 
-        if (!response.ok) {
-            throw new Error(data.error || 'Eroare la automatizare');
-        }
+    // Clear input fields
+    document.getElementById('emailInput').value = '';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('twoFAInput').value = '';
 
-        // Succes!
-        console.log('✅ Automatizare finalizată:', data);
+    // Afișează modal
+    modal.style.display = 'block';
 
-        startAutomationBtn.innerHTML = `✅ Automatizare completă!`;
+    // Set status
+    updateTerminalStatus('🟡 Conectare...', '#fbbf24');
+}
 
-        // Mesaj de succes
-        const stats = data.stats || {};
-        const successCount = stats.success || 0;
-        const failedCount = stats.failed || 0;
+/**
+ * Închide Terminal Modal
+ */
+function closeTerminal() {
+    const modal = document.getElementById('terminalModal');
+    modal.style.display = 'none';
+}
 
-        let alertMsg = `🎉 AUTOMATIZARE FINALIZATĂ!\n\n`;
-        alertMsg += `✅ Bonuri create cu succes: ${successCount}/${totalBonuri}\n`;
+/**
+ * Append log la terminal
+ */
+function appendTerminalLog(type, message) {
+    const logsDiv = document.getElementById('terminalLogs');
+    const logEntry = document.createElement('div');
+    logEntry.style.marginBottom = '0.5rem';
+    logEntry.style.lineHeight = '1.6';
 
-        if (failedCount > 0) {
-            alertMsg += `❌ Bonuri eșuate: ${failedCount}\n\n`;
-            alertMsg += `Vezi log-ul pentru detalii (automatizare_oblio.log)`;
-        }
+    // Culori în funcție de tip
+    let color = '#d4d4d8'; // default gray
+    let icon = 'ℹ️';
 
-        alert(alertMsg);
+    if (type === 'error') {
+        color = '#ef4444';
+        icon = '❌';
+    } else if (type === 'success') {
+        color = '#4ade80';
+        icon = '✅';
+    } else if (type === 'warning') {
+        color = '#fbbf24';
+        icon = '⚠️';
+    } else if (type === 'info') {
+        color = '#60a5fa';
+        icon = 'ℹ️';
+    }
 
-        // Restaurează butonul după 5 secunde
-        setTimeout(() => {
-            startAutomationBtn.innerHTML = originalHTML;
-            startAutomationBtn.disabled = false;
-        }, 5000);
+    logEntry.innerHTML = `<span style="color: ${color};">${icon} ${message}</span>`;
+    logsDiv.appendChild(logEntry);
 
-    } catch (error) {
-        console.error('❌ Eroare automatizare:', error);
+    // Auto-scroll la final
+    logsDiv.scrollTop = logsDiv.scrollHeight;
+}
 
-        let errorMsg = 'Eroare la automatizare: ' + error.message;
-
-        if (error.message.includes('Chrome WebDriver')) {
-            errorMsg += '\n\n💡 Asigură-te că:\n' +
-                        '- Google Chrome este instalat\n' +
-                        '- ChromeDriver este instalat (vezi documentația)';
-        }
-
-        showVoucherError(errorMsg);
-        startAutomationBtn.disabled = false;
-        startAutomationBtn.innerHTML = originalHTML;
+/**
+ * Update terminal status bar
+ */
+function updateTerminalStatus(text, color) {
+    const statusDiv = document.getElementById('terminalStatus');
+    if (statusDiv) {
+        statusDiv.textContent = text;
+        statusDiv.style.color = color;
     }
 }
+
+/**
+ * Afișare secțiune input când server-ul cere credențiale
+ */
+function showInputSection(prompt) {
+    const inputSection = document.getElementById('terminalInput');
+    const promptDiv = document.getElementById('inputPrompt');
+    const emailSection = document.getElementById('emailInputSection');
+    const passwordSection = document.getElementById('passwordInputSection');
+    const twoFASection = document.getElementById('twoFAInputSection');
+
+    // Ascunde toate input-urile
+    emailSection.style.display = 'none';
+    passwordSection.style.display = 'none';
+    twoFASection.style.display = 'none';
+
+    // Determină ce input să afișeze
+    if (prompt.type === 'email') {
+        currentInputType = 'email';
+        promptDiv.textContent = prompt.message || '📧 Introdu email-ul pentru Oblio:';
+        emailSection.style.display = 'block';
+        setTimeout(() => document.getElementById('emailInput').focus(), 100);
+    } else if (prompt.type === 'password') {
+        currentInputType = 'password';
+        promptDiv.textContent = prompt.message || '🔑 Introdu parola pentru Oblio:';
+        passwordSection.style.display = 'block';
+        setTimeout(() => document.getElementById('passwordInput').focus(), 100);
+    } else if (prompt.type === '2fa') {
+        currentInputType = '2fa';
+        promptDiv.textContent = prompt.message || '🔢 Introdu codul 2FA (6 cifre):';
+        twoFASection.style.display = 'block';
+        setTimeout(() => document.getElementById('twoFAInput').focus(), 100);
+    }
+
+    // Afișează secțiunea de input
+    inputSection.style.display = 'block';
+
+    // Append log
+    appendTerminalLog('warning', prompt.message || 'Se așteaptă input de la utilizator...');
+}
+
+/**
+ * Trimite input către server prin WebSocket
+ */
+function submitInput() {
+    let value = '';
+
+    if (currentInputType === 'email') {
+        value = document.getElementById('emailInput').value.trim();
+        if (!value) {
+            appendTerminalLog('error', '❌ Email-ul nu poate fi gol!');
+            return;
+        }
+    } else if (currentInputType === 'password') {
+        value = document.getElementById('passwordInput').value;
+        if (!value) {
+            appendTerminalLog('error', '❌ Parola nu poate fi goală!');
+            return;
+        }
+    } else if (currentInputType === '2fa') {
+        value = document.getElementById('twoFAInput').value.trim();
+        if (!/^\d{6}$/.test(value)) {
+            appendTerminalLog('error', '❌ Codul 2FA trebuie să aibă 6 cifre!');
+            return;
+        }
+    }
+
+    // Trimite input către server
+    socket.emit('user_input', {
+        type: currentInputType,
+        value: value
+    });
+
+    // Ascunde secțiunea de input
+    document.getElementById('terminalInput').style.display = 'none';
+
+    // Log
+    appendTerminalLog('info', `✉️ Input trimis către server...`);
+}
+
+/**
+ * Gestionare finalizare automatizare
+ */
+function handleAutomationComplete(data) {
+    const stats = data.stats || {};
+    const successCount = stats.success || 0;
+    const failedCount = stats.failed || 0;
+    const totalBonuri = currentBonuriData.length;
+
+    appendTerminalLog('success', `🎉 AUTOMATIZARE FINALIZATĂ!`);
+    appendTerminalLog('info', `✅ Bonuri create cu succes: ${successCount}/${totalBonuri}`);
+
+    if (failedCount > 0) {
+        appendTerminalLog('error', `❌ Bonuri eșuate: ${failedCount}`);
+    }
+
+    updateTerminalStatus('✅ Finalizat', '#4ade80');
+
+    // Afișează buton de închidere după 3 secunde
+    setTimeout(() => {
+        const logsDiv = document.getElementById('terminalLogs');
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✖️ Închide Terminal';
+        closeBtn.style.cssText = 'margin-top: 1rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold;';
+        closeBtn.onclick = closeTerminal;
+        logsDiv.appendChild(closeBtn);
+    }, 3000);
+}
+
+/**
+ * Handle Enter key for input submission
+ */
+document.addEventListener('keydown', (e) => {
+    const terminalModal = document.getElementById('terminalModal');
+    if (terminalModal.style.display === 'block' && e.key === 'Enter') {
+        const inputSection = document.getElementById('terminalInput');
+        if (inputSection.style.display === 'block') {
+            submitInput();
+        }
+    }
+});
 
 /**
  * Copiere SKU individual

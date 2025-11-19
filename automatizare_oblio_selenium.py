@@ -40,17 +40,21 @@ logger = logging.getLogger(__name__)
 class OblioAutomation:
     """Clasa pentru automatizarea bonurilor de producție în Oblio"""
 
-    def __init__(self, use_existing_profile=True, headless=False):
+    def __init__(self, use_existing_profile=True, headless=False, log_callback=None, input_callback=None):
         """
         Inițializare automation
 
         Args:
             use_existing_profile (bool): Folosește profilul Chrome existent (cu sesiune Oblio)
             headless (bool): Rulează în mod headless (fără interfață grafică)
+            log_callback (callable): Funcție pentru logging live: log_callback(message, level)
+            input_callback (callable): Funcție pentru input interactiv: input_callback(prompt_dict) -> str
         """
         self.driver = None
         self.use_existing_profile = use_existing_profile
         self.headless = headless
+        self.log_callback = log_callback
+        self.input_callback = input_callback
         self.stats = {
             'total': 0,
             'success': 0,
@@ -58,9 +62,239 @@ class OblioAutomation:
             'errors': []
         }
 
+    def _log(self, message, level='info'):
+        """
+        Log message prin callback sau logger standard
+
+        Args:
+            message (str): Mesajul de logat
+            level (str): Nivelul: 'info', 'warning', 'error', 'success'
+        """
+        # Trimite către callback dacă există
+        if self.log_callback:
+            try:
+                self.log_callback(message, level)
+            except Exception as e:
+                logger.warning(f"⚠️ Eroare la log_callback: {e}")
+
+        # Loghează și în logger standard
+        if level == 'error':
+            logger.error(message)
+        elif level == 'warning':
+            logger.warning(message)
+        elif level == 'success':
+            logger.info(message)
+        else:
+            logger.info(message)
+
+    def _request_input(self, prompt_dict):
+        """
+        Cere input de la utilizator prin callback sau input() standard
+
+        Args:
+            prompt_dict (dict): Dicționar cu 'type' ('email', 'password', '2fa') și 'message'
+
+        Returns:
+            str: Input-ul utilizatorului
+        """
+        if self.input_callback:
+            try:
+                return self.input_callback(prompt_dict)
+            except Exception as e:
+                self._log(f"⚠️ Eroare la input_callback: {e}", 'warning')
+                return None
+        else:
+            # Fallback la input() standard
+            return input(f"{prompt_dict['message']}: ")
+
+
+    def interactive_login(self):
+        """
+        Autentificare interactivă prin callback (suportă 2FA)
+
+        Returns:
+            bool: True dacă login reușit
+        """
+        self._log("🔐 Începere autentificare interactivă...", 'info')
+
+        try:
+            # Navighează la pagina de login
+            login_url = "https://www.oblio.eu/login/"
+            self._log(f"🌐 Navigare la: {login_url}", 'info')
+            self.driver.get(login_url)
+            time.sleep(2)
+
+            # Verifică dacă suntem deja logați
+            if "login" not in self.driver.current_url.lower():
+                self._log("✅ Deja autentificat în Oblio!", 'success')
+                return True
+
+            # STEP 1: Cere email
+            self._log("📧 Se așteaptă email-ul...", 'info')
+            email = self._request_input({
+                'type': 'email',
+                'message': '📧 Introdu email-ul pentru Oblio'
+            })
+
+            if not email:
+                raise Exception("Email-ul nu a fost furnizat!")
+
+            self._log(f"✅ Email primit: {email}", 'info')
+
+            # Găsește și completează câmpul de email
+            email_input = self.wait_for_element(By.ID, "username", timeout=10)
+            if not email_input:
+                email_input = self.wait_for_element(By.NAME, "username", timeout=5)
+            if not email_input:
+                email_input = self.wait_for_element(By.CSS_SELECTOR, "input[type='email']", timeout=5)
+
+            if not email_input:
+                raise Exception("Câmpul de email nu a fost găsit!")
+
+            email_input.clear()
+            email_input.send_keys(email)
+            time.sleep(0.5)
+
+            # STEP 2: Cere parolă
+            self._log("🔑 Se așteaptă parola...", 'info')
+            password = self._request_input({
+                'type': 'password',
+                'message': '🔑 Introdu parola pentru Oblio'
+            })
+
+            if not password:
+                raise Exception("Parola nu a fost furnizată!")
+
+            self._log("✅ Parolă primită", 'info')
+
+            # Găsește și completează câmpul de parolă
+            password_input = self.wait_for_element(By.ID, "password", timeout=10)
+            if not password_input:
+                password_input = self.wait_for_element(By.NAME, "password", timeout=5)
+            if not password_input:
+                password_input = self.wait_for_element(By.CSS_SELECTOR, "input[type='password']", timeout=5)
+
+            if not password_input:
+                raise Exception("Câmpul de parolă nu a fost găsit!")
+
+            password_input.clear()
+            password_input.send_keys(password)
+            time.sleep(0.5)
+
+            # Găsește și click buton login
+            self._log("🖱️ Click pe butonul de login...", 'info')
+            login_button = None
+            login_selectors = [
+                (By.ID, "login-button"),
+                (By.CSS_SELECTOR, "button[type='submit']"),
+                (By.CSS_SELECTOR, "input[type='submit']"),
+                (By.XPATH, "//button[contains(text(), 'Login')]"),
+                (By.XPATH, "//button[contains(text(), 'Autentificare')]"),
+            ]
+
+            for by, selector in login_selectors:
+                try:
+                    login_button = self.wait_for_clickable(by, selector, timeout=3)
+                    if login_button:
+                        break
+                except:
+                    continue
+
+            if not login_button:
+                # Încearcă ENTER
+                password_input.send_keys(Keys.ENTER)
+            else:
+                login_button.click()
+
+            time.sleep(3)
+
+            # STEP 3: Verifică dacă e nevoie de 2FA
+            current_url = self.driver.current_url
+            self._log(f"🌐 URL după login: {current_url}", 'info')
+
+            # Caută câmp 2FA
+            two_fa_input = None
+            try:
+                two_fa_selectors = [
+                    (By.ID, "two_factor_code"),
+                    (By.ID, "2fa_code"),
+                    (By.NAME, "code"),
+                    (By.CSS_SELECTOR, "input[type='text'][maxlength='6']"),
+                    (By.CSS_SELECTOR, "input[placeholder*='code']"),
+                ]
+
+                for by, selector in two_fa_selectors:
+                    try:
+                        two_fa_input = self.driver.find_element(by, selector)
+                        if two_fa_input.is_displayed():
+                            break
+                        else:
+                            two_fa_input = None
+                    except:
+                        continue
+            except:
+                pass
+
+            # Dacă există câmp 2FA, cere codul
+            if two_fa_input:
+                self._log("🔢 2FA detectat! Se așteaptă codul...", 'warning')
+                two_fa_code = self._request_input({
+                    'type': '2fa',
+                    'message': '🔢 Introdu codul 2FA (6 cifre)'
+                })
+
+                if not two_fa_code:
+                    raise Exception("Codul 2FA nu a fost furnizat!")
+
+                self._log("✅ Cod 2FA primit", 'info')
+
+                # Completează codul 2FA
+                two_fa_input.clear()
+                two_fa_input.send_keys(two_fa_code)
+                time.sleep(0.5)
+
+                # Găsește buton submit 2FA
+                submit_2fa_button = None
+                submit_selectors = [
+                    (By.CSS_SELECTOR, "button[type='submit']"),
+                    (By.ID, "submit_2fa"),
+                    (By.XPATH, "//button[contains(text(), 'Verify')]"),
+                    (By.XPATH, "//button[contains(text(), 'Verifică')]"),
+                ]
+
+                for by, selector in submit_selectors:
+                    try:
+                        submit_2fa_button = self.wait_for_clickable(by, selector, timeout=3)
+                        if submit_2fa_button:
+                            break
+                    except:
+                        continue
+
+                if submit_2fa_button:
+                    submit_2fa_button.click()
+                else:
+                    two_fa_input.send_keys(Keys.ENTER)
+
+                time.sleep(3)
+
+            # STEP 4: Verifică succesul
+            current_url = self.driver.current_url
+            if "login" not in current_url.lower() and "dashboard" in current_url or "stock" in current_url or "home" in current_url:
+                self._log("✅ Autentificare reușită în Oblio!", 'success')
+                return True
+            elif "login" not in current_url.lower():
+                self._log("✅ Autentificare reușită!", 'success')
+                return True
+            else:
+                raise Exception("Login eșuat - încă pe pagina de login")
+
+        except Exception as e:
+            self._log(f"❌ Eroare la autentificare: {e}", 'error')
+            return False
+
     def setup_driver(self):
         """Configurare și pornire Chrome WebDriver"""
-        logger.info("🔧 Configurare Chrome WebDriver...")
+        self._log("🔧 Configurare Chrome WebDriver...", 'info')
 
         # Detectează sistemul de operare
         is_linux = platform.system() == 'Linux'
@@ -516,44 +750,48 @@ class OblioAutomation:
         Returns:
             bool: True dacă succès, False dacă eșec
         """
-        logger.info(f"\n{'='*60}")
-        logger.info(f"🎯 Creare bon: SKU={sku}, Cantitate={quantity}")
-        logger.info(f"{'='*60}")
+        self._log(f"{'='*60}", 'info')
+        self._log(f"🎯 Creare bon: SKU={sku}, Cantitate={quantity}", 'info')
+        self._log(f"{'='*60}", 'info')
 
         try:
             # Navighează la pagina de producție
             url = "https://www.oblio.eu/stock/production/"
-            logger.info(f"🌐 Navigare la: {url}")
+            self._log(f"🌐 Navigare la: {url}", 'info')
             self.driver.get(url)
             time.sleep(2)
             
             # Verifică dacă suntem pe pagina de login (nu suntem autentificați)
             if "login" in self.driver.current_url.lower():
-                logger.warning("⚠️ Nu suntem autentificați!")
-                
+                self._log("⚠️ Nu suntem autentificați!", 'warning')
+
                 # PRIORITATE 1: Încearcă cookies (dacă sunt disponibile)
                 if oblio_cookies and len(oblio_cookies) > 0:
-                    logger.info("🍪 Încerc autentificare cu cookies...")
+                    self._log("🍪 Încerc autentificare cu cookies...", 'info')
                     if self.load_cookies_from_json(oblio_cookies):
-                        logger.info("✅ Autentificare cu cookies reușită!")
+                        self._log("✅ Autentificare cu cookies reușită!", 'success')
                         # Navighează din nou la pagina de producție
-                        logger.info(f"🌐 Re-navigare la: {url}")
+                        self._log(f"🌐 Re-navigare la: {url}", 'info')
                         self.driver.get(url)
                         time.sleep(2)
                     else:
-                        logger.warning("⚠️ Autentificare cu cookies eșuată")
-                        # Continuă cu login manual mai jos
-                
-                # PRIORITATE 2: Login manual (funcționează cu 2FA!)
-                # Dacă cookies nu au funcționat SAU nu existau
+                        self._log("⚠️ Autentificare cu cookies eșuată", 'warning')
+
+                # PRIORITATE 2: Login interactiv (dacă avem callback) sau login manual
                 if "login" in self.driver.current_url.lower():
-                    logger.info("👤 Voi aștepta login manual (suportă 2FA)")
-                    
-                    if not self.wait_for_manual_login(timeout=90):
-                        raise Exception("Login manual eșuat sau timeout!")
-                    
-                    # După login manual, navighează la pagina de producție
-                    logger.info(f"🌐 Navigare la pagina de producție...")
+                    if self.input_callback:
+                        # Folosește login interactiv cu callback
+                        self._log("🔐 Pornire login interactiv (cu callback)...", 'info')
+                        if not self.interactive_login():
+                            raise Exception("Login interactiv eșuat!")
+                    else:
+                        # Fallback la wait_for_manual_login (fără callback)
+                        self._log("👤 Voi aștepta login manual (suportă 2FA)", 'info')
+                        if not self.wait_for_manual_login(timeout=90):
+                            raise Exception("Login manual eșuat sau timeout!")
+
+                    # După login, navighează la pagina de producție
+                    self._log(f"🌐 Navigare la pagina de producție...", 'info')
                     self.driver.get(url)
                     time.sleep(2)
 
@@ -684,16 +922,16 @@ class OblioAutomation:
                 success = True
 
             if success:
-                logger.info(f"🎉 BON CREAT CU SUCCES! SKU={sku}, Cantitate={quantity}")
+                self._log(f"🎉 BON CREAT CU SUCCES! SKU={sku}, Cantitate={quantity}", 'success')
                 self.stats['success'] += 1
                 return True
             else:
-                logger.warning(f"⚠️ Nu s-a detectat confirmare clară, dar probabil e OK")
+                self._log(f"⚠️ Nu s-a detectat confirmare clară, dar probabil e OK", 'warning')
                 self.stats['success'] += 1
                 return True
 
         except Exception as e:
-            logger.error(f"❌ EROARE la crearea bonului: {e}")
+            self._log(f"❌ EROARE la crearea bonului: {e}", 'error')
             self.stats['failed'] += 1
             self.stats['errors'].append({
                 'sku': sku,
@@ -705,7 +943,7 @@ class OblioAutomation:
             try:
                 screenshot_path = f"error_screenshot_{sku}_{int(time.time())}.png"
                 self.driver.save_screenshot(screenshot_path)
-                logger.info(f"📸 Screenshot salvat: {screenshot_path}")
+                self._log(f"📸 Screenshot salvat: {screenshot_path}", 'info')
             except:
                 pass
 
@@ -724,8 +962,8 @@ class OblioAutomation:
         Returns:
             dict: Statistici procesare
         """
-        logger.info(f"\n🚀 START PROCESARE: {len(bonuri)} bonuri")
-        logger.info(f"{'='*60}\n")
+        self._log(f"🚀 START PROCESARE: {len(bonuri)} bonuri", 'info')
+        self._log(f"{'='*60}", 'info')
 
         self.stats['total'] = len(bonuri)
 
@@ -733,34 +971,34 @@ class OblioAutomation:
             sku = bon.get('sku')
             cantitate = bon.get('cantitate', 1)
 
-            logger.info(f"\n📦 Bon {i}/{len(bonuri)}")
+            self._log(f"📦 Bon {i}/{len(bonuri)}", 'info')
 
             success = self.create_production_voucher(sku, cantitate, oblio_cookies, oblio_email, oblio_password)
 
             if success:
-                logger.info(f"✅ Bon {i}/{len(bonuri)} - SUCCESS")
+                self._log(f"✅ Bon {i}/{len(bonuri)} - SUCCESS", 'success')
             else:
-                logger.error(f"❌ Bon {i}/{len(bonuri)} - FAILED")
+                self._log(f"❌ Bon {i}/{len(bonuri)} - FAILED", 'error')
 
             # Pauză între bonuri
             if i < len(bonuri):
-                logger.info(f"⏳ Pauză 2 secunde înainte de următorul bon...")
+                self._log(f"⏳ Pauză 2 secunde înainte de următorul bon...", 'info')
                 time.sleep(2)
 
         # Raport final
-        logger.info(f"\n{'='*60}")
-        logger.info(f"📊 RAPORT FINAL")
-        logger.info(f"{'='*60}")
-        logger.info(f"Total bonuri: {self.stats['total']}")
-        logger.info(f"✅ Succese: {self.stats['success']}")
-        logger.info(f"❌ Eșecuri: {self.stats['failed']}")
+        self._log(f"{'='*60}", 'info')
+        self._log(f"📊 RAPORT FINAL", 'info')
+        self._log(f"{'='*60}", 'info')
+        self._log(f"Total bonuri: {self.stats['total']}", 'info')
+        self._log(f"✅ Succese: {self.stats['success']}", 'success')
+        self._log(f"❌ Eșecuri: {self.stats['failed']}", 'error' if self.stats['failed'] > 0 else 'info')
 
         if self.stats['failed'] > 0:
-            logger.info(f"\n❌ Bonuri eșuate:")
+            self._log(f"❌ Bonuri eșuate:", 'error')
             for error in self.stats['errors']:
-                logger.info(f"  - SKU: {error['sku']}, Eroare: {error['error']}")
+                self._log(f"  - SKU: {error['sku']}, Eroare: {error['error']}", 'error')
 
-        logger.info(f"{'='*60}\n")
+        self._log(f"{'='*60}", 'info')
 
         return self.stats
 
