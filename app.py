@@ -700,7 +700,32 @@ def run_automation_with_live_logs(bonuri, client_sid):
                     'message': '🔧 START THREAD - Pornire automation...'
                 }, room=client_sid)
 
-                from automatizare_oblio_selenium import OblioAutomation
+                # CRITICAL: Try to import with detailed error
+                try:
+                    socketio.emit('log', {
+                        'type': 'info',
+                        'message': '📥 Încerc să importez automatizare_oblio_selenium...'
+                    }, room=client_sid)
+
+                    from automatizare_oblio_selenium import OblioAutomation
+
+                    socketio.emit('log', {
+                        'type': 'success',
+                        'message': '✅ OblioAutomation importat cu succes!'
+                    }, room=client_sid)
+                except ImportError as ie:
+                    socketio.emit('log', {
+                        'type': 'error',
+                        'message': f'❌ IMPORT ERROR: {str(ie)}'
+                    }, room=client_sid)
+                    raise
+                except Exception as ie:
+                    socketio.emit('log', {
+                        'type': 'error',
+                        'message': f'❌ EROARE LA IMPORT: {str(ie)}'
+                    }, room=client_sid)
+                    raise
+
                 import platform
 
                 socketio.emit('log', {
