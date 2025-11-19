@@ -16,7 +16,8 @@ from werkzeug.utils import secure_filename
 import io
 import logging
 import threading
-import queue
+import eventlet
+import eventlet.queue as queue
 import time
 
 # Configurare logging
