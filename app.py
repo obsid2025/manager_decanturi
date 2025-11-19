@@ -679,69 +679,72 @@ def handle_user_input(data):
 def run_automation_with_live_logs(bonuri, client_sid):
     """
     Rulează automatizarea în background și trimite logs live
+    IMPORTANT: Rulează cu app context pentru socketio.emit() din thread
     """
     global automation_active
 
-    try:
-        from automatizare_oblio_selenium import OblioAutomation
-        import platform
+    # CRITICA: socketio.emit() din thread NECESITĂ app context!
+    with app.app_context():
+        try:
+            from automatizare_oblio_selenium import OblioAutomation
+            import platform
 
-        # Emit log
-        socketio.emit('log', {
-            'type': 'info',
-            'message': '🔧 Inițializare Selenium...'
-        }, room=client_sid)
+            # Emit log
+            socketio.emit('log', {
+                'type': 'info',
+                'message': '🔧 Inițializare Selenium...'
+            }, room=client_sid)
 
-        is_linux = platform.system() == 'Linux'
+            is_linux = platform.system() == 'Linux'
 
-        # Inițializare automation cu logs live
-        automation = OblioAutomation(
-            use_existing_profile=not is_linux,
-            headless=is_linux,
-            log_callback=lambda msg, level: socketio.emit('log', {
-                'type': level,
-                'message': msg
-            }, room=client_sid),
-            input_callback=lambda prompt: wait_for_user_input(prompt, client_sid)
-        )
+            # Inițializare automation cu logs live
+            automation = OblioAutomation(
+                use_existing_profile=not is_linux,
+                headless=is_linux,
+                log_callback=lambda msg, level: socketio.emit('log', {
+                    'type': level,
+                    'message': msg
+                }, room=client_sid),
+                input_callback=lambda prompt: wait_for_user_input(prompt, client_sid)
+            )
 
-        # Setup driver
-        if not automation.setup_driver():
+            # Setup driver
+            if not automation.setup_driver():
+                socketio.emit('log', {
+                    'type': 'error',
+                    'message': '❌ Nu s-a putut porni Chrome WebDriver'
+                }, room=client_sid)
+                socketio.emit('automation_complete', {
+                    'success': False,
+                    'error': 'ChromeDriver failed to start'
+                }, room=client_sid)
+                return
+
+            # Procesează bonuri
+            stats = automation.process_bonuri(bonuri, None, None, None)
+
+            # Închide browser
+            automation.close()
+
+            # Trimite rezultat final
+            socketio.emit('automation_complete', {
+                'success': True,
+                'stats': stats,
+                'message': f'✅ Automatizare finalizată! {stats["success"]}/{stats["total"]} bonuri create'
+            }, room=client_sid)
+
+        except Exception as e:
+            logger.error(f"❌ Eroare în automation: {e}", exc_info=True)
             socketio.emit('log', {
                 'type': 'error',
-                'message': '❌ Nu s-a putut porni Chrome WebDriver'
+                'message': f'❌ Eroare: {str(e)}'
             }, room=client_sid)
             socketio.emit('automation_complete', {
                 'success': False,
-                'error': 'ChromeDriver failed to start'
+                'error': str(e)
             }, room=client_sid)
-            return
-
-        # Procesează bonuri
-        stats = automation.process_bonuri(bonuri, None, None, None)
-
-        # Închide browser
-        automation.close()
-
-        # Trimite rezultat final
-        socketio.emit('automation_complete', {
-            'success': True,
-            'stats': stats,
-            'message': f'✅ Automatizare finalizată! {stats["success"]}/{stats["total"]} bonuri create'
-        }, room=client_sid)
-
-    except Exception as e:
-        logger.error(f"❌ Eroare în automation: {e}", exc_info=True)
-        socketio.emit('log', {
-            'type': 'error',
-            'message': f'❌ Eroare: {str(e)}'
-        }, room=client_sid)
-        socketio.emit('automation_complete', {
-            'success': False,
-            'error': str(e)
-        }, room=client_sid)
-    finally:
-        automation_active = False
+        finally:
+            automation_active = False
 
 
 def wait_for_user_input(prompt, client_sid):
