@@ -13,12 +13,17 @@ const exportBtn = document.getElementById('exportBtn');
 
 /**
  * Extrage toate cookies pentru un domeniu specific
+ * NOTĂ: document.cookie NU poate accesa HttpOnly cookies (cele de sesiune)
+ * Pentru sesiune completă, trebuie să fie logat în același browser
+ * 
  * @param {string} domain - Domeniul pentru care să extragă cookies (ex: 'oblio.eu')
  * @returns {Array} Lista de cookies în format compatibil cu Selenium
  */
 function getCookiesForDomain(domain) {
     const allCookies = document.cookie.split(';');
     const cookies = [];
+    
+    console.log(`🍪 document.cookie raw: "${document.cookie}"`);
     
     for (let cookie of allCookies) {
         const [name, value] = cookie.trim().split('=');
@@ -32,7 +37,14 @@ function getCookiesForDomain(domain) {
                 httpOnly: false,
                 sameSite: 'Lax'
             });
+            console.log(`  🍪 Cookie found: ${name} = ${value.substring(0, 20)}...`);
         }
+    }
+    
+    if (cookies.length === 0) {
+        console.warn('⚠️ ATENȚIE: Niciun cookie găsit pentru ' + domain);
+        console.warn('⚠️ Cookies HttpOnly (sesiune) NU pot fi accesate din JavaScript');
+        console.warn('💡 Soluție: Folosește browser reuse pe Windows sau autentificare manuală pe server');
     }
     
     return cookies;

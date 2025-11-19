@@ -559,21 +559,27 @@ def start_automation_selenium():
                 'hint': 'Windows: Pornește Chrome cu remote debugging. Linux: Verifică logs.'
             }), 500
 
-        # Citește credențialele Oblio din environment variables (fallback)
+        # Citește credențialele Oblio din environment variables
         oblio_email = os.environ.get('OBLIO_EMAIL')
         oblio_password = os.environ.get('OBLIO_PASSWORD')
         
-        # Verifică că avem cel puțin cookies SAU credențiale
-        if not oblio_cookies and not (oblio_email and oblio_password):
-            return jsonify({
-                'error': 'Lipsesc cookies Oblio și credențialele de autentificare! Trebuie să trimiți cookies din frontend sau să setezi OBLIO_EMAIL/OBLIO_PASSWORD.'
-            }), 400
-        
-        # Log metoda de autentificare
-        if oblio_cookies:
+        # Log informații despre autentificare
+        if oblio_cookies and len(oblio_cookies) > 0:
+            logger.info(f"🍪 Cookies primite din frontend: {len(oblio_cookies)} cookies")
             logger.info("🍪 Autentificare cu cookies din frontend")
         else:
-            logger.info("🔐 Autentificare cu email/password din environment variables")
+            logger.info("⚠️ Cookies Oblio NU au fost primite (normal - sunt HttpOnly)")
+            
+        if oblio_email and oblio_password:
+            logger.info("🔐 Credențiale Oblio disponibile din environment variables")
+            logger.info("🔐 Voi folosi autentificare cu email/password")
+        else:
+            # Verifică că avem cel puțin credențiale
+            if not (oblio_email and oblio_password):
+                return jsonify({
+                    'error': 'Credențiale Oblio lipsă! Setează OBLIO_EMAIL și OBLIO_PASSWORD în environment variables.',
+                    'hint': 'Cookies HttpOnly nu pot fi accesate din JavaScript - folosim email/password.'
+                }), 500
         
         # Procesează bonurile
         stats = automation.process_bonuri(bonuri, oblio_cookies, oblio_email, oblio_password)

@@ -346,6 +346,29 @@ class OblioAutomation:
             logger.info("⌨️ Parolă introdusă")
             time.sleep(0.5)
             
+            # Verifică și închide cookie banner dacă există
+            try:
+                logger.info("🍪 Verificare cookie banner...")
+                cookie_accept_selectors = [
+                    (By.ID, "CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll"),
+                    (By.CSS_SELECTOR, ".CybotCookiebotDialogBodyButton"),
+                    (By.XPATH, "//button[contains(text(), 'Accept')]"),
+                    (By.XPATH, "//button[contains(text(), 'Acceptă')]"),
+                ]
+                
+                for by, selector in cookie_accept_selectors:
+                    try:
+                        cookie_button = self.driver.find_element(by, selector)
+                        if cookie_button.is_displayed():
+                            logger.info("🍪 Click pe buton 'Accept Cookies'...")
+                            cookie_button.click()
+                            time.sleep(1)
+                            break
+                    except:
+                        continue
+            except:
+                logger.debug("ℹ️ Nu există cookie banner")
+            
             # Găsește și apasă butonul de login
             logger.info("🔍 Căutare buton login...")
             login_button = None
