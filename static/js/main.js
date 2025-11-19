@@ -228,9 +228,288 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
+// ========== TAB SWITCHING ==========
+
+/**
+ * Gestionare schimbare tab
+ */
+function switchTab(tabId) {
+    // Remove active class from all tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+
+    // Add active class to selected tab
+    const selectedBtn = document.querySelector(`[data-tab="${tabId}"]`);
+    const selectedContent = document.getElementById(tabId);
+
+    if (selectedBtn && selectedContent) {
+        selectedBtn.classList.add('active');
+        selectedContent.classList.add('active');
+    }
+}
+
+// ========== VOUCHER FUNCTIONALITY ==========
+
+let currentVoucherFilename = null;
+
+// Elemente DOM pentru voucher
+const fileInputVoucher = document.getElementById('fileInputVoucher');
+const fileNameVoucher = document.getElementById('fileNameVoucher');
+const processBtnVoucher = document.getElementById('processBtnVoucher');
+const loadingVoucher = document.getElementById('loadingVoucher');
+const resultsSectionVoucher = document.getElementById('resultsSectionVoucher');
+const errorAlertVoucher = document.getElementById('errorAlertVoucher');
+const errorMessageVoucher = document.getElementById('errorMessageVoucher');
+const copyAllBtn = document.getElementById('copyAllBtn');
+
+// Event listeners pentru voucher
+if (fileInputVoucher) {
+    fileInputVoucher.addEventListener('change', handleVoucherFileSelect);
+}
+if (processBtnVoucher) {
+    processBtnVoucher.addEventListener('click', handleVoucherFileUpload);
+}
+if (copyAllBtn) {
+    copyAllBtn.addEventListener('click', handleCopyAllSKUs);
+}
+
+// Drag & drop pentru voucher upload zone
+const uploadZoneVoucher = document.getElementById('uploadZoneVoucher');
+if (uploadZoneVoucher) {
+    uploadZoneVoucher.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadZoneVoucher.style.background = '#e8e8e8';
+    });
+
+    uploadZoneVoucher.addEventListener('dragleave', () => {
+        uploadZoneVoucher.style.background = '';
+    });
+
+    uploadZoneVoucher.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZoneVoucher.style.background = '';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInputVoucher.files = files;
+            handleVoucherFileSelect();
+        }
+    });
+}
+
+/**
+ * Gestionare selectare fișier voucher
+ */
+function handleVoucherFileSelect() {
+    const file = fileInputVoucher.files[0];
+    if (file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'xlsx' && ext !== 'xls') {
+            showVoucherError('Vă rugăm selectați un fișier Excel (.xlsx sau .xls)');
+            return;
+        }
+
+        fileNameVoucher.textContent = file.name;
+        fileNameVoucher.style.display = 'inline-block';
+        processBtnVoucher.style.display = 'inline-block';
+        hideVoucherError();
+    }
+}
+
+/**
+ * Gestionare upload și procesare fișier voucher
+ */
+async function handleVoucherFileUpload() {
+    const file = fileInputVoucher.files[0];
+    if (!file) {
+        showVoucherError('Vă rugăm selectați un fișier');
+        return;
+    }
+
+    resultsSectionVoucher.style.display = 'none';
+    processBtnVoucher.style.display = 'none';
+    loadingVoucher.style.display = 'block';
+    hideVoucherError();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/process-vouchers', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Eroare la procesare');
+        }
+
+        currentVoucherFilename = data.filename;
+        displayVoucherResults(data);
+
+    } catch (error) {
+        showVoucherError(error.message);
+        processBtnVoucher.style.display = 'inline-block';
+    } finally {
+        loadingVoucher.style.display = 'none';
+    }
+}
+
+/**
+ * Afișare rezultate voucher
+ */
+function displayVoucherResults(data) {
+    // Afișare statistici
+    document.getElementById('totalBonuri').textContent = data.total_bonuri;
+    document.getElementById('totalBucati').textContent = data.total_bucati;
+
+    // Construire tabel
+    const tableBody = document.getElementById('voucherTableBody');
+    tableBody.innerHTML = '';
+
+    data.bonuri.forEach((bon, index) => {
+        const tr = document.createElement('tr');
+
+        // SKU
+        const tdSku = document.createElement('td');
+        tdSku.textContent = bon.sku;
+        tr.appendChild(tdSku);
+
+        // Nume
+        const tdNume = document.createElement('td');
+        tdNume.textContent = bon.nume;
+        tr.appendChild(tdNume);
+
+        // Cantitate
+        const tdCantitate = document.createElement('td');
+        tdCantitate.innerHTML = `<strong style="font-size: 1.2rem; color: var(--success-color);">${bon.cantitate}</strong>`;
+        tr.appendChild(tdCantitate);
+
+        // Comenzi
+        const tdComenzi = document.createElement('td');
+        const comenziText = bon.comenzi.join(', ');
+        const suffix = bon.total_comenzi > 5 ? '...' : '';
+        tdComenzi.textContent = comenziText + suffix;
+        tdComenzi.style.fontSize = '0.85rem';
+        tdComenzi.style.color = 'var(--text-secondary)';
+        tr.appendChild(tdComenzi);
+
+        // Acțiuni
+        const tdActiuni = document.createElement('td');
+        const btnCopy = document.createElement('button');
+        btnCopy.className = 'btn-copy-sku';
+        btnCopy.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copiază SKU
+        `;
+        btnCopy.addEventListener('click', () => copySKU(bon.sku, btnCopy));
+        tdActiuni.appendChild(btnCopy);
+        tr.appendChild(tdActiuni);
+
+        tableBody.appendChild(tr);
+    });
+
+    // Afișare secțiune rezultate
+    resultsSectionVoucher.style.display = 'block';
+    resultsSectionVoucher.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * Copiere SKU individual
+ */
+async function copySKU(sku, button) {
+    try {
+        await navigator.clipboard.writeText(sku);
+
+        // Feedback vizual
+        const originalHTML = button.innerHTML;
+        button.classList.add('copied');
+        button.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Copiat!
+        `;
+
+        setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = originalHTML;
+        }, 2000);
+
+    } catch (error) {
+        showVoucherError('Nu s-a putut copia SKU-ul');
+    }
+}
+
+/**
+ * Copiere toate SKU-urile
+ */
+async function handleCopyAllSKUs() {
+    const tableBody = document.getElementById('voucherTableBody');
+    const rows = tableBody.querySelectorAll('tr');
+
+    const skus = Array.from(rows).map(row => {
+        return row.querySelector('td:first-child').textContent;
+    });
+
+    const skuText = skus.join('\n');
+
+    try {
+        await navigator.clipboard.writeText(skuText);
+
+        // Feedback vizual
+        const originalHTML = copyAllBtn.innerHTML;
+        copyAllBtn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Copiate ${skus.length} SKU-uri!
+        `;
+
+        setTimeout(() => {
+            copyAllBtn.innerHTML = originalHTML;
+        }, 3000);
+
+    } catch (error) {
+        showVoucherError('Nu s-au putut copia SKU-urile');
+    }
+}
+
+/**
+ * Afișare eroare voucher
+ */
+function showVoucherError(message) {
+    errorMessageVoucher.textContent = message;
+    errorAlertVoucher.style.display = 'flex';
+    errorAlertVoucher.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/**
+ * Ascundere eroare voucher
+ */
+function hideVoucherError() {
+    errorAlertVoucher.style.display = 'none';
+}
+
 /**
  * Inițializare la încărcare pagină
  */
 document.addEventListener('DOMContentLoaded', () => {
     console.log('OBSID Decant Manager - Inițializat');
+
+    // Setup tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-tab');
+            switchTab(tabId);
+        });
+    });
 });

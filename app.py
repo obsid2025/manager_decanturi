@@ -151,6 +151,90 @@ def genereazaTabelRaport(raport):
     return randuri
 
 
+def proceseazaBonuriProductie(fisier_path):
+    """
+    Procesează fișierul și extrage bonuri de producție agregate pe SKU
+    Returns: lista de bonuri cu SKU, nume produs, cantitate agregată
+    """
+    df = pd.read_excel(fisier_path)
+
+    # Detectare automată coloane
+    coloana_status, coloana_produse = detecteazaColoane(df)
+
+    # Verificare coloană atribute
+    coloana_atribute = None
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['atribute', 'atribut']):
+            coloana_atribute = col
+            break
+
+    if not coloana_atribute:
+        raise ValueError('Nu s-a găsit coloana cu atributele produselor')
+
+    # Filtrare comenzi finalizate
+    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata', case=False, na=False)]
+
+    # Agregare bonuri pe SKU
+    bonuri_agregate = defaultdict(lambda: {'nume': '', 'cantitate': 0, 'comenzi': []})
+
+    for idx, row in df_finalizate.iterrows():
+        produse_text = str(row[coloana_produse])
+        atribute_text = str(row[coloana_atribute])
+
+        # Split produse
+        produse = produse_text.split(' | ')
+
+        # Extrage SKU-uri din atribute
+        sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text)
+
+        # Match produse cu SKU-uri
+        for i, produs in enumerate(produse):
+            produs = produs.strip()
+
+            # Doar decanturi
+            if 'Decant' not in produs:
+                continue
+
+            # Extrage cantitatea din produs
+            match_cantitate = re.search(r'(\d+\.\d+)$', produs)
+            cantitate = int(float(match_cantitate.group(1))) if match_cantitate else 1
+
+            # SKU pentru acest produs
+            sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+
+            # Extrage numele parfumului
+            match_parfum = re.search(r'Decant (\d+) ml parfum (.+?),', produs)
+            if match_parfum:
+                ml = match_parfum.group(1)
+                nume_parfum = match_parfum.group(2)
+                nume_complet = f"Decant {ml}ml {nume_parfum}"
+            else:
+                nume_complet = produs[:60]
+
+            # Agregare
+            bonuri_agregate[sku]['nume'] = nume_complet
+            bonuri_agregate[sku]['cantitate'] += cantitate
+            bonuri_agregate[sku]['comenzi'].append(str(row.get('Numar Comanda', '')))
+
+    # Sortare după cantitate (descrescător)
+    bonuri_sortate = sorted(bonuri_agregate.items(), key=lambda x: x[1]['cantitate'], reverse=True)
+
+    # Convertire la format pentru JSON
+    rezultat = []
+    for sku, info in bonuri_sortate:
+        comenzi_unice = list(set(info['comenzi']))[:5]
+        rezultat.append({
+            'sku': sku,
+            'nume': info['nume'],
+            'cantitate': info['cantitate'],
+            'comenzi': comenzi_unice,
+            'total_comenzi': len(set(info['comenzi']))
+        })
+
+    return rezultat
+
+
 @app.route('/')
 def index():
     """Pagina principală"""
@@ -206,6 +290,49 @@ def upload_file():
                 'cantitati': dict(sorted(sumar_cantitati.items())),
                 'total': total_decanturi
             }
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Eroare la procesare: {str(e)}'}), 500
+
+
+@app.route('/process-vouchers', methods=['POST'])
+def process_vouchers():
+    """
+    Procesare fișier pentru bonuri de producție (agregate pe SKU)
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'Nu a fost selectat niciun fișier'}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'error': 'Nu a fost selectat niciun fișier'}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Tipul fișierului nu este permis. Folosiți .xlsx sau .xls'}), 400
+
+    try:
+        # Salvare fișier temporar
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        save_filename = f"{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], save_filename)
+        file.save(filepath)
+
+        # Procesare bonuri de producție
+        bonuri = proceseazaBonuriProductie(filepath)
+
+        total_bonuri = len(bonuri)
+        total_bucati = sum(bon['cantitate'] for bon in bonuri)
+
+        # Pregătire răspuns
+        return jsonify({
+            'success': True,
+            'filename': save_filename,
+            'bonuri': bonuri,
+            'total_bonuri': total_bonuri,
+            'total_bucati': total_bucati
         })
 
     except Exception as e:
