@@ -557,10 +557,11 @@ function initializeSocket() {
     }
 
     socket = io({
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],  // Polling PRIMUL pentru a ocoli problema Traefik
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionAttempts: 5,
+        upgrade: false  // Nu încerca upgrade la WebSocket
     });
 
     // Connection events
