@@ -902,6 +902,29 @@ class OblioAutomation:
             if not save_button:
                 raise Exception("Butonul de salvare nu a fost găsit!")
 
+            # Încearcă să închidă orice modal care ar putea bloca butonul
+            try:
+                logger.info("🔍 Verificare modal-uri care ar putea bloca...")
+                modal_close_selectors = [
+                    (By.CSS_SELECTOR, "#modal-message .ok-message-modal"),
+                    (By.CSS_SELECTOR, "#modal-message .message-modal-close"),
+                    (By.CSS_SELECTOR, ".modal.show .btn[data-dismiss='modal']"),
+                    (By.CSS_SELECTOR, ".modal.show button[type='button']"),
+                ]
+
+                for by, selector in modal_close_selectors:
+                    try:
+                        modal_button = self.driver.find_element(by, selector)
+                        if modal_button.is_displayed():
+                            logger.info(f"✅ Modal găsit, închid: {selector}")
+                            modal_button.click()
+                            time.sleep(1)
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                logger.debug(f"ℹ️ Nu există modal de închis: {e}")
+
             # Click salvare
             logger.info("🖱️ Click buton salvare...")
             save_button.click()
