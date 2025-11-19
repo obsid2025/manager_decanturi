@@ -552,8 +552,16 @@ let currentInputType = null;
  * Inițializare Socket.IO connection
  */
 function initializeSocket() {
+    if (socket && socket.connected) {
+        console.log('✅ Socket deja conectat, păstrez conexiunea');
+        return; // Already connected and working
+    }
+
+    // Dacă socket-ul există dar e deconectat, recreează-l
     if (socket) {
-        return; // Already connected
+        console.log('🔄 Recreare socket...');
+        socket.disconnect();
+        socket = null;
     }
 
     socket = io({
