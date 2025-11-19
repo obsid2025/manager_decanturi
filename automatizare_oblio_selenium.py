@@ -398,8 +398,9 @@ class OblioAutomation:
 
         # Opțiuni comune pentru ambele platforme
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
+        # TEMPORAR DEZACTIVAT - cauzează eroare pe unele versiuni Chrome
+        # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        # chrome_options.add_experimental_option('useAutomationExtension', False)
 
         # User agent pentru a evita detecția bot
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36')
@@ -817,15 +818,19 @@ class OblioAutomation:
                     else:
                         self._log("⚠️ Autentificare cu cookies eșuată", 'warning')
 
-                # PRIORITATE 2: Login interactiv (dacă avem callback) sau login manual
+                # PRIORITATE 2: Autentificare automată cu email/parolă (dacă sunt disponibile)
                 if "login" in self.driver.current_url.lower():
-                    if self.input_callback:
-                        # Folosește login interactiv cu callback
+                    if oblio_email and oblio_password:
+                        self._log("🔐 Autentificare automată cu email/parolă...", 'info')
+                        if not self.login_to_oblio(oblio_email, oblio_password):
+                            raise Exception("Autentificare automată eșuată!")
+                    elif self.input_callback:
+                        # PRIORITATE 3: Login interactiv (dacă avem callback)
                         self._log("🔐 Pornire login interactiv (cu callback)...", 'info')
                         if not self.interactive_login():
                             raise Exception("Login interactiv eșuat!")
                     else:
-                        # Fallback la wait_for_manual_login (fără callback)
+                        # PRIORITATE 4: Fallback la wait_for_manual_login (fără callback)
                         self._log("👤 Voi aștepta login manual (suportă 2FA)", 'info')
                         if not self.wait_for_manual_login(timeout=90):
                             raise Exception("Login manual eșuat sau timeout!")
