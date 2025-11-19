@@ -798,14 +798,21 @@ def wait_for_user_input(prompt, client_sid):
     Returns:
         str: Input-ul utilizatorului
     """
+    # DEBUG logging
+    logger.info(f"🔍 DEBUG wait_for_user_input: prompt={prompt}, client_sid={client_sid}")
+
     # Trimite prompt către frontend
+    logger.info(f"📤 Emit 'input_required' către client {client_sid}")
     socketio.emit('input_required', prompt, room=client_sid)
+    logger.info(f"✅ Emit trimis! Aștept răspuns în queue...")
 
     # Așteaptă răspuns în queue (cu timeout)
     try:
         user_input = automation_input_queue.get(timeout=300)  # 5 minute timeout
+        logger.info(f"✅ Input primit din queue: {user_input}")
         return user_input.get('value')
     except queue.Empty:
+        logger.error("⏱️ TIMEOUT - nu s-a primit input în 5 minute!")
         socketio.emit('log', {
             'type': 'error',
             'message': '⏱️ Timeout - nu s-a primit input de la utilizator'
