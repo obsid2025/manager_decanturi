@@ -222,6 +222,31 @@ class OblioAutomation:
 
             time.sleep(3)
 
+            # Verifică dacă există erori de autentificare
+            try:
+                error_selectors = [
+                    (By.CSS_SELECTOR, ".alert-danger"),
+                    (By.CSS_SELECTOR, ".error"),
+                    (By.XPATH, "//*[contains(text(), 'incorect')]"),
+                    (By.XPATH, "//*[contains(text(), 'greșit')]"),
+                    (By.XPATH, "//*[contains(text(), 'invalid')]"),
+                ]
+
+                for by, selector in error_selectors:
+                    try:
+                        error_elem = self.driver.find_element(by, selector)
+                        if error_elem.is_displayed():
+                            error_text = error_elem.text
+                            self._log(f"❌ EROARE AUTENTIFICARE: {error_text}", 'error')
+                            self._log("🔄 Email sau parolă incorectă! Rulează din nou automation-ul și introdu credențialele corecte.", 'error')
+                            raise Exception(f"Credențiale incorecte: {error_text}")
+                    except NoSuchElementException:
+                        continue
+            except Exception as e:
+                if "Credențiale incorecte" in str(e):
+                    raise  # Re-raise dacă e eroarea noastră
+                # Altfel ignoră - poate nu există elementele de eroare
+
             # STEP 3: Verifică dacă e nevoie de 2FA
             current_url = self.driver.current_url
             self._log(f"🌐 URL după login: {current_url}", 'info')
