@@ -3,11 +3,25 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + Chromium + ChromeDriver
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
+    chromium \
+    chromium-driver \
+    # Dependencies pentru Chromium headless
+    libnss3 \
+    libgconf-2-4 \
+    libfontconfig1 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
+
+# Setează variabile de mediu pentru Chromium
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # Copy requirements first for better caching
 COPY requirements.txt .

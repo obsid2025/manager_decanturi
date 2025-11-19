@@ -526,16 +526,29 @@ def start_automation_selenium():
 
         # Import automation class
         from automatizare_oblio_selenium import OblioAutomation
+        import platform
 
-        # Inițializare automation
+        # Detectează dacă rulează în container/Linux (server) sau Windows (local)
+        is_linux = platform.system() == 'Linux'
+
+        # Inițializare automation cu parametri corecți
         automation = OblioAutomation(
-            use_existing_profile=True,  # Folosește profilul Chrome cu sesiune Oblio
-            headless=False  # Rulează cu interfață grafică
+            use_existing_profile=not is_linux,  # False pe server, True pe Windows local
+            headless=is_linux  # True pe server (headless), False pe Windows (cu GUI)
         )
 
         # Setup driver
         if not automation.setup_driver():
-            return jsonify({'error': 'Nu s-a putut porni Chrome WebDriver. Verifică că Chrome este instalat.'}), 500
+            error_msg = 'Nu s-a putut porni Chrome WebDriver.'
+            if is_linux:
+                error_msg += ' Verifică logs în automatizare_oblio.log pentru detalii.'
+            else:
+                error_msg += ' Verifică că Chrome este instalat.'
+
+            return jsonify({
+                'error': error_msg,
+                'hint': 'Consultă SELENIUM_SETUP.md pentru troubleshooting detaliat.'
+            }), 500
 
         # Procesează bonurile
         stats = automation.process_bonuri(bonuri)

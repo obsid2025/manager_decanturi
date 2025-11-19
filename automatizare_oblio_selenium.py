@@ -130,9 +130,18 @@ class OblioAutomation:
         try:
             if is_linux:
                 # Pe Linux, folosește chromedriver din sistem
-                service = Service('/usr/bin/chromedriver')
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                logger.info("✅ Chromium WebDriver pornit cu succes (Linux)!")
+                chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
+
+                # Verifică dacă ChromeDriver există
+                if os.path.exists(chromedriver_path):
+                    service = Service(chromedriver_path)
+                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                    logger.info(f"✅ Chromium WebDriver pornit cu succes (Linux)! Path: {chromedriver_path}")
+                else:
+                    # Încearcă fără service explicit (pentru snap pe Ubuntu)
+                    logger.warning(f"⚠️ ChromeDriver nu găsit la {chromedriver_path}, încerc autodetectare...")
+                    self.driver = webdriver.Chrome(options=chrome_options)
+                    logger.info("✅ Chromium WebDriver pornit cu succes (Linux - autodetectat)!")
             else:
                 # Pe Windows, folosește chromedriver automat
                 self.driver = webdriver.Chrome(options=chrome_options)
@@ -145,6 +154,15 @@ class OblioAutomation:
             return True
         except Exception as e:
             logger.error(f"❌ Eroare la pornirea Chrome: {e}")
+            logger.error(f"💡 Asigură-te că: Chromium și ChromeDriver sunt instalate")
+
+            # Log paths pentru debugging
+            if is_linux:
+                chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
+                chrome_bin = os.environ.get('CHROME_BIN', '/usr/bin/chromium')
+                logger.error(f"🔍 ChromeDriver path: {chromedriver_path} (exists: {os.path.exists(chromedriver_path)})")
+                logger.error(f"🔍 Chrome binary: {chrome_bin} (exists: {os.path.exists(chrome_bin)})")
+
             return False
 
     def wait_for_element(self, by, selector, timeout=15):
