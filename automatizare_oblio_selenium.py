@@ -285,9 +285,58 @@ class OblioAutomation:
             logger.error(f"❌ Eroare la încărcarea cookies: {e}")
             return False
 
+    def wait_for_manual_login(self, timeout=90):
+        """
+        Așteaptă ca utilizatorul să se logheze manual (inclusiv 2FA)
+        
+        Args:
+            timeout (int): Timeout în secunde pentru login manual
+            
+        Returns:
+            bool: True dacă utilizatorul s-a logat cu succes
+        """
+        logger.info("👤 Așteaptă login manual...")
+        logger.info(f"⏰ Ai {timeout} secunde să te loghezi în Oblio (inclusiv 2FA)")
+        logger.info("🌐 Browser-ul va fi deschis - loghează-te acum!")
+        
+        # Navighează la pagina de login
+        login_url = "https://www.oblio.eu/login/"
+        logger.info(f"🌐 Navigare la: {login_url}")
+        self.driver.get(login_url)
+        time.sleep(2)
+        
+        # Așteaptă ca utilizatorul să se logheze
+        start_time = time.time()
+        logged_in = False
+        
+        while time.time() - start_time < timeout:
+            current_url = self.driver.current_url
+            
+            # Verifică dacă nu mai suntem pe pagina de login
+            if "login" not in current_url.lower():
+                logger.info(f"✅ Login detectat! URL curent: {current_url}")
+                logged_in = True
+                break
+            
+            # Verifică periodic
+            elapsed = int(time.time() - start_time)
+            remaining = timeout - elapsed
+            
+            if elapsed % 10 == 0:  # Log la fiecare 10 secunde
+                logger.info(f"⏳ Așteaptă login... ({remaining}s rămase)")
+            
+            time.sleep(1)
+        
+        if logged_in:
+            logger.info("✅ Utilizator autentificat cu succes!")
+            return True
+        else:
+            logger.error(f"❌ Timeout - utilizatorul nu s-a autentificat în {timeout}s")
+            return False
+
     def login_to_oblio(self, email, password):
         """
-        Autentificare în Oblio (DOAR pentru fallback când cookies nu sunt disponibile)
+        Autentificare automată în Oblio (NU funcționează cu 2FA activat!)
 
         Args:
             email (str): Email-ul utilizatorului Oblio
@@ -296,8 +345,9 @@ class OblioAutomation:
         Returns:
             bool: True dacă login reușit, False altfel
         """
-        logger.info("🔐 Începere autentificare în Oblio...")
-        logger.warning("⚠️ ATENȚIE: Autentificarea cu parolă poate necesita 2FA!")
+        logger.info("🔐 Începere autentificare automată în Oblio...")
+        logger.warning("⚠️ ATENȚIE: Această metodă NU funcționează dacă 2FA este activat!")
+        logger.warning("💡 Pentru 2FA, folosește metoda wait_for_manual_login()")
         
         try:
             # Navighează la pagina de login
@@ -481,8 +531,8 @@ class OblioAutomation:
             if "login" in self.driver.current_url.lower():
                 logger.warning("⚠️ Nu suntem autentificați!")
                 
-                # PRIORITATE 1: Încearcă cookies (pe Linux/server)
-                if oblio_cookies:
+                # PRIORITATE 1: Încearcă cookies (dacă sunt disponibile)
+                if oblio_cookies and len(oblio_cookies) > 0:
                     logger.info("🍪 Încerc autentificare cu cookies...")
                     if self.load_cookies_from_json(oblio_cookies):
                         logger.info("✅ Autentificare cu cookies reușită!")
@@ -491,26 +541,21 @@ class OblioAutomation:
                         self.driver.get(url)
                         time.sleep(2)
                     else:
-                        logger.warning("⚠️ Autentificare cu cookies eșuată, încerc cu email/password...")
-                        if not oblio_email or not oblio_password:
-                            raise Exception("Nici cookies, nici credențiale nu sunt disponibile!")
-                        
-                        if not self.login_to_oblio(oblio_email, oblio_password):
-                            raise Exception("Autentificarea cu email/password a eșuat!")
-                        
-                        self.driver.get(url)
-                        time.sleep(2)
+                        logger.warning("⚠️ Autentificare cu cookies eșuată")
+                        # Continuă cu login manual mai jos
                 
-                # PRIORITATE 2: Fallback la email/password (pe Windows poate funcționa fără 2FA cu browser reuse)
-                elif oblio_email and oblio_password:
-                    logger.info("🔐 Încerc autentificare cu email/password...")
-                    if not self.login_to_oblio(oblio_email, oblio_password):
-                        raise Exception("Autentificarea în Oblio a eșuat!")
+                # PRIORITATE 2: Login manual (funcționează cu 2FA!)
+                # Dacă cookies nu au funcționat SAU nu existau
+                if "login" in self.driver.current_url.lower():
+                    logger.info("👤 Voi aștepta login manual (suportă 2FA)")
                     
+                    if not self.wait_for_manual_login(timeout=90):
+                        raise Exception("Login manual eșuat sau timeout!")
+                    
+                    # După login manual, navighează la pagina de producție
+                    logger.info(f"🌐 Navigare la pagina de producție...")
                     self.driver.get(url)
                     time.sleep(2)
-                else:
-                    raise Exception("Nu sunt disponibile nici cookies, nici credențiale pentru autentificare!")
 
             # PASUL 1: Găsește și completează câmpul SKU
             logger.info("🔍 Căutare câmp SKU (#pp_name)...")
