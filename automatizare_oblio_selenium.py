@@ -129,6 +129,20 @@ class OblioAutomation:
                 self._log("✅ Deja autentificat în Oblio!", 'success')
                 return True
 
+            # Acceptă cookie consent popup dacă există
+            try:
+                self._log("🍪 Verificare cookie consent popup...", 'info')
+                cookie_button = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.ID, 'CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll'))
+                )
+                cookie_button.click()
+                self._log("✅ Cookie consent acceptat!", 'success')
+                time.sleep(1)
+            except TimeoutException:
+                self._log("ℹ️ Cookie consent nu a apărut (deja acceptat)", 'info')
+            except Exception as e:
+                self._log(f"⚠️ Eroare la cookie consent: {str(e)[:100]}", 'warning')
+
             # STEP 1: Cere email
             self._log("📧 Se așteaptă email-ul...", 'info')
             email = self._request_input({
@@ -216,6 +230,7 @@ class OblioAutomation:
             two_fa_input = None
             try:
                 two_fa_selectors = [
+                    (By.ID, "sms_code"),  # Oblio folosește acest ID pentru 2FA
                     (By.ID, "two_factor_code"),
                     (By.ID, "2fa_code"),
                     (By.NAME, "code"),
