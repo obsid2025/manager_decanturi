@@ -508,7 +508,7 @@ function displayVoucherResults(data) {
 let currentBonuriData = null;
 
 /**
- * Start automatizare Oblio
+ * Start automatizare Oblio - Deschide tab-uri multiple în paralel
  */
 async function startOblioAutomation() {
     if (!currentBonuriData || currentBonuriData.length === 0) {
@@ -516,46 +516,109 @@ async function startOblioAutomation() {
         return;
     }
 
+    const totalBonuri = currentBonuriData.length;
+    const BATCH_SIZE = 5; // Număr de tab-uri în paralel (modifică dacă vrei mai multe/puține)
+    const DELAY_BETWEEN_TABS = 500; // ms între deschiderea fiecărui tab
+    const DELAY_BETWEEN_BATCHES = 8000; // ms între batch-uri (8 secunde)
+
     const startAutomationBtn = document.getElementById('startAutomationBtn');
     const originalHTML = startAutomationBtn.innerHTML;
 
     try {
         // Confirmă acțiunea
-        if (!confirm(`Vrei să pornești automatizarea pentru ${currentBonuriData.length} bonuri?\n\nBrowser-ul se va deschide automat și va completa bonurile în Oblio.`)) {
+        const confirmMsg = `🤖 AUTOMATIZARE OBLIO\n\n` +
+            `Total bonuri: ${totalBonuri}\n` +
+            `Tab-uri în paralel: ${BATCH_SIZE}\n` +
+            `Batches: ${Math.ceil(totalBonuri / BATCH_SIZE)}\n\n` +
+            `✅ Ești deja logat în Oblio?\n` +
+            `✅ Ai instalat Tampermonkey script?\n\n` +
+            `Pornești automatizarea?`;
+
+        if (!confirm(confirmMsg)) {
             return;
         }
 
         // Afișare loading
         startAutomationBtn.disabled = true;
-        startAutomationBtn.innerHTML = `
-            <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
-            Automatizare în curs...
-        `;
 
-        // Trimite cerere către backend
-        const response = await fetch('/start-automation', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                bonuri: currentBonuriData
-            })
-        });
+        let processed = 0;
+        const batches = [];
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Eroare la pornire automatizare');
+        // Împarte bonurile în batch-uri
+        for (let i = 0; i < totalBonuri; i += BATCH_SIZE) {
+            batches.push(currentBonuriData.slice(i, i + BATCH_SIZE));
         }
 
-        // Afișare mesaj de succes
-        alert(`✅ Automatizare pornită!\n\n${data.message}\n\nVerifică terminalul pentru progres.`);
+        console.log(`🚀 START AUTOMATION: ${totalBonuri} bonuri în ${batches.length} batch-uri`);
+
+        // Procesează fiecare batch
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+            const batch = batches[batchIndex];
+            const batchNum = batchIndex + 1;
+
+            // Update buton cu progres
+            startAutomationBtn.innerHTML = `
+                <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
+                Batch ${batchNum}/${batches.length} (${processed + batch.length}/${totalBonuri})
+            `;
+
+            console.log(`\n📦 Batch ${batchNum}/${batches.length}: ${batch.length} tab-uri`);
+
+            // Deschide toate tab-urile din acest batch în paralel
+            for (let i = 0; i < batch.length; i++) {
+                const bon = batch[i];
+                const url = `https://www.oblio.eu/stock/production/?sku=${encodeURIComponent(bon.sku)}&qty=${bon.cantitate}&autoclose=true`;
+
+                console.log(`  → Tab ${i + 1}: SKU=${bon.sku}, QTY=${bon.cantitate}`);
+
+                // Deschide tab nou
+                window.open(url, '_blank');
+
+                // Pauză mică între tab-uri pentru a nu suprasolicita browser-ul
+                if (i < batch.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_TABS));
+                }
+            }
+
+            processed += batch.length;
+
+            // Dacă mai sunt batch-uri, așteaptă înainte de următorul
+            if (batchIndex < batches.length - 1) {
+                console.log(`⏳ Așteptare ${DELAY_BETWEEN_BATCHES/1000}s înainte de batch-ul următor...`);
+
+                // Countdown pentru următorul batch
+                for (let sec = DELAY_BETWEEN_BATCHES/1000; sec > 0; sec--) {
+                    startAutomationBtn.innerHTML = `
+                        <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
+                        Următorul batch în ${sec}s...
+                    `;
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        // Succes
+        startAutomationBtn.innerHTML = `✅ ${totalBonuri} tab-uri deschise!`;
+        console.log(`\n✅ FINALIZAT: ${totalBonuri} tab-uri deschise în ${batches.length} batch-uri`);
+
+        // Mesaj final
+        setTimeout(() => {
+            alert(`🎉 AUTOMATIZARE LANSATĂ!\n\n` +
+                `✅ ${totalBonuri} tab-uri deschise\n` +
+                `📦 ${batches.length} batch-uri procesate\n\n` +
+                `Scriptul Tampermonkey creează bonurile automat!\n` +
+                `Tab-urile se vor închide singure când termină.`);
+
+            // Restaurează butonul după 3 secunde
+            setTimeout(() => {
+                startAutomationBtn.innerHTML = originalHTML;
+                startAutomationBtn.disabled = false;
+            }, 3000);
+        }, 1000);
 
     } catch (error) {
-        showVoucherError('Eroare la pornire automatizare: ' + error.message);
-    } finally {
-        // Restaurează butonul
+        console.error('❌ Eroare automatizare:', error);
+        showVoucherError('Eroare la automatizare: ' + error.message);
         startAutomationBtn.disabled = false;
         startAutomationBtn.innerHTML = originalHTML;
     }
@@ -656,5 +719,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const startAutomationBtn = document.getElementById('startAutomationBtn');
     if (startAutomationBtn) {
         startAutomationBtn.addEventListener('click', startOblioAutomation);
+    }
+
+    // Setup help button
+    const helpAutomationBtn = document.getElementById('helpAutomationBtn');
+    if (helpAutomationBtn) {
+        helpAutomationBtn.addEventListener('click', () => {
+            document.getElementById('helpModal').style.display = 'block';
+        });
+    }
+
+    // Close modal on background click
+    const helpModal = document.getElementById('helpModal');
+    if (helpModal) {
+        helpModal.addEventListener('click', (e) => {
+            if (e.target === helpModal) {
+                helpModal.style.display = 'none';
+            }
+        });
     }
 });

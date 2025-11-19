@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OBSID - Manager Decanturi Parfumuri</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20251119">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20251119_2">
     <link rel="icon" type="image/svg+xml" href="https://gomagcdn.ro/domains3/obsid.ro/files/company/parfumuri-arabesti8220.svg">
 </head>
 <body>
@@ -267,7 +267,7 @@
                     <div class="table-card">
                         <div class="table-header">
                             <h3>📋 Bonuri de Producție (Agregate pe SKU)</h3>
-                            <div style="display: flex; gap: 0.5rem;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
                                 <button class="btn btn-export" id="copyAllBtn">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -281,6 +281,14 @@
                                         <polygon points="10 8 16 12 10 16 10 8"></polygon>
                                     </svg>
                                     🤖 START AUTOMATIZARE OBLIO
+                                </button>
+                                <button class="btn" id="helpAutomationBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;" title="Ghid instalare și utilizare">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                    </svg>
+                                    ❓ Cum funcționează?
                                 </button>
                             </div>
                         </div>
@@ -333,6 +341,119 @@
         </div>
     </footer>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=20251119"></script>
+    <!-- Modal Help pentru Automatizare -->
+    <div id="helpModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; overflow-y: auto;">
+        <div style="max-width: 900px; margin: 2rem auto; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem 2rem; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin: 0; font-size: 1.5rem;">🤖 Ghid Automatizare Oblio</h2>
+                <button onclick="document.getElementById('helpModal').style.display='none'" style="background: transparent; border: none; color: white; font-size: 2rem; cursor: pointer; line-height: 1; padding: 0; width: 32px; height: 32px;">&times;</button>
+            </div>
+
+            <!-- Content -->
+            <div style="padding: 2rem; line-height: 1.6;">
+                <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;">
+                    <strong>📌 Ce face automatizarea?</strong><br>
+                    Creează automat bonurile de producție în Oblio, deschizând <strong>5 tab-uri în paralel</strong> pentru procesare rapidă!
+                </div>
+
+                <!-- Pașii de instalare -->
+                <h3 style="color: #667eea; margin-top: 1.5rem;">⚡ Instalare (O SINGURĂ DATĂ)</h3>
+
+                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <h4 style="margin-top: 0;">1️⃣ Instalează Tampermonkey</h4>
+                    <p style="margin: 0.5rem 0;">Extensie browser pentru scripturi personalizate:</p>
+                    <ul style="margin: 0.5rem 0;">
+                        <li><strong>Edge:</strong> <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank" style="color: #667eea;">Descarcă Tampermonkey pentru Edge</a></li>
+                        <li><strong>Chrome:</strong> <a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" style="color: #667eea;">Descarcă Tampermonkey pentru Chrome</a></li>
+                    </ul>
+                </div>
+
+                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                    <h4 style="margin-top: 0;">2️⃣ Instalează Scriptul OBSID</h4>
+                    <ol style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                        <li>Click pe iconița <strong>Tampermonkey</strong> din browser (colț dreapta sus)</li>
+                        <li>Selectează <strong>"Dashboard"</strong></li>
+                        <li>Click pe <strong>"+"</strong> (script nou)</li>
+                        <li><strong>Copiază</strong> tot conținutul din fișierul <code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">tampermonkey_oblio_auto.js</code></li>
+                        <li><strong>Lipește</strong> în editor și <strong>Salvează</strong> (Ctrl+S)</li>
+                    </ol>
+                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-top: 1rem; border-radius: 4px;">
+                        <strong>📂 Unde găsesc fișierul?</strong><br>
+                        Fișierul <code>tampermonkey_oblio_auto.js</code> se află în același folder cu această aplicație.
+                    </div>
+                </div>
+
+                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                    <h4 style="margin-top: 0;">3️⃣ Loghează-te în Oblio</h4>
+                    <ol style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                        <li>Deschide <a href="https://www.oblio.eu" target="_blank" style="color: #667eea;">www.oblio.eu</a></li>
+                        <li>Loghează-te cu credențialele tale</li>
+                        <li><strong>Lasă tab-ul deschis!</strong> (sesiunea rămâne activă)</li>
+                    </ol>
+                </div>
+
+                <!-- Utilizare -->
+                <h3 style="color: #28a745; margin-top: 1.5rem;">🚀 Utilizare Zilnică</h3>
+
+                <div style="background: #f1f8ff; border-left: 4px solid #28a745; padding: 1.5rem; border-radius: 4px; margin-bottom: 1rem;">
+                    <ol style="margin: 0; padding-left: 1.5rem; line-height: 2;">
+                        <li>Tab <strong>"Raport Producție Decanturi"</strong> → Încarcă Excel → <strong>"Procesează Comenzi"</strong></li>
+                        <li>Tab <strong>"Bonuri de Producție"</strong> → Verifică datele</li>
+                        <li>Click pe <strong>"🤖 START AUTOMATIZARE OBLIO"</strong></li>
+                        <li>Confirmă în popup</li>
+                        <li><strong>GATA!</strong> Browser-ul creează bonurile automat! 🎉</li>
+                    </ol>
+                </div>
+
+                <!-- Verificare -->
+                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;">
+                    <strong>✅ Prima rulare?</strong><br>
+                    Testează cu <strong>2-3 bonuri</strong> și verifică în Oblio că totul funcționează corect!
+                </div>
+
+                <!-- Troubleshooting -->
+                <h3 style="color: #f5576c; margin-top: 1.5rem;">🐛 Probleme Comune</h3>
+
+                <div style="font-size: 0.9rem;">
+                    <details style="margin-bottom: 0.5rem;">
+                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ Tab-urile se deschid dar nu fac nimic</summary>
+                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
+                            <strong>Soluție:</strong> Verifică că ești logat în Oblio și că Tampermonkey script este activ (icon verde).
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 0.5rem;">
+                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ "Element not found" în console</summary>
+                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
+                            <strong>Soluție:</strong> Reîmprospătează pagina (Ctrl+F5) sau verifică că Oblio nu a schimbat interfața.
+                        </div>
+                    </details>
+
+                    <details style="margin-bottom: 0.5rem;">
+                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ Browser-ul se blochează</summary>
+                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
+                            <strong>Soluție:</strong> Micșorează BATCH_SIZE la 3 în <code>main.js</code> (linia ~520).
+                        </div>
+                    </details>
+                </div>
+
+                <!-- Footer modal -->
+                <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; text-align: center; color: #666;">
+                    <p style="margin: 0.5rem 0;">📖 Pentru ghid complet, vezi fișierele:</p>
+                    <p style="margin: 0.5rem 0;"><code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">INSTALARE_TAMPERMONKEY.md</code> • <code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">QUICK_START.md</code></p>
+                </div>
+
+                <!-- Close button -->
+                <div style="text-align: center; margin-top: 1.5rem;">
+                    <button onclick="document.getElementById('helpModal').style.display='none'" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 0.75rem 2rem; font-size: 1rem; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);">
+                        Am înțeles!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=20251119_2"></script>
 </body>
 </html>
