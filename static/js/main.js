@@ -567,6 +567,7 @@ function initializeSocket() {
     // Connection events
     socket.on('connect', () => {
         console.log('🔌 Conectat la WebSocket');
+        console.log('🆔 Socket ID frontend:', socket.id);
         updateTerminalStatus('🟢 Conectat', '#4ade80');
     });
 
@@ -626,11 +627,21 @@ async function startOblioAutomation() {
     // Asigură-te că Socket.IO este inițializat
     initializeSocket();
 
-    // Trimite comenzi de start către server prin WebSocket
-    console.log(`🚀 START AUTOMATION LIVE: ${totalBonuri} bonuri`);
-    socket.emit('start_automation_live', {
-        bonuri: currentBonuriData
-    });
+    // IMPORTANT: Așteaptă ca socket-ul să fie conectat înainte de emit
+    const waitForConnection = () => {
+        if (socket && socket.connected) {
+            console.log(`🚀 START AUTOMATION LIVE: ${totalBonuri} bonuri`);
+            console.log('🔗 Socket connected:', socket.connected, 'ID:', socket.id);
+            socket.emit('start_automation_live', {
+                bonuri: currentBonuriData
+            });
+        } else {
+            console.log('⏳ Aștept conexiune socket...');
+            setTimeout(waitForConnection, 100);
+        }
+    };
+
+    waitForConnection();
 }
 
 /**
