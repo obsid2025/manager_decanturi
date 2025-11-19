@@ -84,35 +84,39 @@ class OblioAutomation:
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--window-size=1920,1080')
 
-            # Chromium pe Ubuntu (snap)
-            # Nu setăm binary_location - Selenium va găsi automat chromium-browser
-            # chrome_options.binary_location = '/snap/bin/chromium'
-
             logger.info("👁️ Mod headless activat (server)")
 
         elif is_windows:
             # Configurare pentru Windows (local development)
             logger.info("🪟 Configurare pentru Windows...")
 
-            # Folosește profilul Chrome existent pentru sesiune Oblio (doar pe Windows)
+            # DEBUGGING MODE: Încearcă să se conecteze la Chrome existent cu remote debugging
+            # Pornește Chrome manual cu: chrome.exe --remote-debugging-port=9222
             if self.use_existing_profile:
-                # Path-ul către profilul Chrome (expandează %USERNAME%)
-                username = os.environ.get('USERNAME', 'ukfdb')
-                user_data_dir = f"C:\\Users\\{username}\\AppData\\Local\\Google\\Chrome\\User Data"
+                try:
+                    logger.info("🔍 Încerc să mă conectez la Chrome cu remote debugging (port 9222)...")
+                    chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+                    logger.info("✅ Configurare remote debugging activată")
+                    logger.info("📌 IMPORTANT: Asigură-te că Chrome rulează cu --remote-debugging-port=9222")
+                except Exception as e:
+                    logger.warning(f"⚠️ Nu pot configura remote debugging: {e}")
+                    logger.info("📌 Voi porni un Chrome nou cu profil...")
+                    
+                    # Fallback: folosește profilul Chrome (ca înainte)
+                    username = os.environ.get('USERNAME', 'ukfdb')
+                    user_data_dir = f"C:\\Users\\{username}\\AppData\\Local\\Google\\Chrome\\User Data"
 
-                # Verifică dacă directorul există
-                if os.path.exists(user_data_dir):
-                    chrome_options.add_argument(f"user-data-dir={user_data_dir}")
-                    chrome_options.add_argument("profile-directory=Default")
-                    logger.info(f"📂 Folosesc profilul Chrome: {user_data_dir}")
-                else:
-                    logger.warning(f"⚠️ Profilul Chrome nu există: {user_data_dir}")
+                    if os.path.exists(user_data_dir):
+                        chrome_options.add_argument(f"user-data-dir={user_data_dir}")
+                        chrome_options.add_argument("profile-directory=Default")
+                        logger.info(f"📂 Folosesc profilul Chrome: {user_data_dir}")
+                    else:
+                        logger.warning(f"⚠️ Profilul Chrome nu există: {user_data_dir}")
 
-            # Headless mode opțional pe Windows
+            # NICIODATĂ headless pe Windows pentru debugging
             if self.headless:
-                chrome_options.add_argument('--headless=new')
-                chrome_options.add_argument('--disable-gpu')
-                logger.info("👁️ Mod headless activat")
+                logger.warning("⚠️ Headless dezactivat pe Windows pentru debugging vizual")
+                self.headless = False
 
             # Opțiuni pentru stabilitate (Windows)
             chrome_options.add_argument('--no-sandbox')
@@ -207,6 +211,209 @@ class OblioAutomation:
             logger.warning(f"⚠️ Element {selector} nu e clickable după {timeout}s")
             return None
 
+    def load_cookies_from_json(self, cookies_json):
+        """
+        Încarcă cookies din JSON în browser pentru sesiune Oblio
+
+        Args:
+            cookies_json (str or dict): Cookies în format JSON
+
+        Returns:
+            bool: True dacă cookies au fost încărcate cu succes
+        """
+        logger.info("🍪 Începere încărcare cookies în browser...")
+        
+        try:
+            # Parse cookies dacă e string
+            if isinstance(cookies_json, str):
+                cookies = json.loads(cookies_json)
+            else:
+                cookies = cookies_json
+            
+            # Navighează la domeniul Oblio mai întâi (necesar pentru a seta cookies)
+            logger.info("🌐 Navigare la domeniul Oblio pentru a seta cookies...")
+            self.driver.get("https://www.oblio.eu")
+            time.sleep(1)
+            
+            # Adaugă fiecare cookie
+            logger.info(f"🍪 Încărcare {len(cookies)} cookies...")
+            cookies_loaded = 0
+            
+            for cookie in cookies:
+                try:
+                    # Selenium necesită doar anumite câmpuri
+                    cookie_dict = {
+                        'name': cookie['name'],
+                        'value': cookie['value'],
+                        'domain': cookie.get('domain', '.oblio.eu'),
+                    }
+                    
+                    # Adaugă câmpuri opționale dacă există
+                    if 'path' in cookie:
+                        cookie_dict['path'] = cookie['path']
+                    if 'secure' in cookie:
+                        cookie_dict['secure'] = cookie['secure']
+                    if 'httpOnly' in cookie:
+                        cookie_dict['httpOnly'] = cookie['httpOnly']
+                    if 'sameSite' in cookie:
+                        cookie_dict['sameSite'] = cookie['sameSite']
+                    
+                    self.driver.add_cookie(cookie_dict)
+                    cookies_loaded += 1
+                    logger.debug(f"✅ Cookie încărcat: {cookie['name']}")
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Nu pot încărca cookie {cookie.get('name', 'unknown')}: {e}")
+            
+            logger.info(f"✅ {cookies_loaded}/{len(cookies)} cookies încărcate cu succes!")
+            
+            # Refresh pagina pentru a aplica cookies
+            logger.info("🔄 Refresh pagină pentru aplicare cookies...")
+            self.driver.refresh()
+            time.sleep(2)
+            
+            # Verifică dacă suntem autentificați
+            current_url = self.driver.current_url
+            if "login" not in current_url.lower():
+                logger.info("✅ Cookies aplicate cu succes - sesiune activă!")
+                return True
+            else:
+                logger.warning("⚠️ Încă pe pagina de login după aplicare cookies")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Eroare la încărcarea cookies: {e}")
+            return False
+
+    def login_to_oblio(self, email, password):
+        """
+        Autentificare în Oblio (DOAR pentru fallback când cookies nu sunt disponibile)
+
+        Args:
+            email (str): Email-ul utilizatorului Oblio
+            password (str): Parola utilizatorului Oblio
+
+        Returns:
+            bool: True dacă login reușit, False altfel
+        """
+        logger.info("🔐 Începere autentificare în Oblio...")
+        logger.warning("⚠️ ATENȚIE: Autentificarea cu parolă poate necesita 2FA!")
+        
+        try:
+            # Navighează la pagina de login
+            login_url = "https://www.oblio.eu/login/"
+            logger.info(f"🌐 Navigare la: {login_url}")
+            self.driver.get(login_url)
+            time.sleep(2)
+            
+            # Verifică dacă suntem deja logați (redirectați către dashboard)
+            if "dashboard" in self.driver.current_url or "stock" in self.driver.current_url:
+                logger.info("✅ Deja autentificat în Oblio!")
+                return True
+            
+            # Găsește câmpul de email
+            logger.info("🔍 Căutare câmp email...")
+            email_input = self.wait_for_element(By.ID, "username", timeout=10)
+            if not email_input:
+                # Încearcă alte selectoare
+                email_input = self.wait_for_element(By.NAME, "username", timeout=5)
+            if not email_input:
+                email_input = self.wait_for_element(By.CSS_SELECTOR, "input[type='email']", timeout=5)
+            
+            if not email_input:
+                raise Exception("Câmpul de email nu a fost găsit!")
+            
+            logger.info("✅ Câmp email găsit")
+            email_input.clear()
+            email_input.send_keys(email)
+            logger.info(f"⌨️ Email introdus: {email}")
+            time.sleep(0.5)
+            
+            # Găsește câmpul de parolă
+            logger.info("🔍 Căutare câmp parolă...")
+            password_input = self.wait_for_element(By.ID, "password", timeout=10)
+            if not password_input:
+                password_input = self.wait_for_element(By.NAME, "password", timeout=5)
+            if not password_input:
+                password_input = self.wait_for_element(By.CSS_SELECTOR, "input[type='password']", timeout=5)
+            
+            if not password_input:
+                raise Exception("Câmpul de parolă nu a fost găsit!")
+            
+            logger.info("✅ Câmp parolă găsit")
+            password_input.clear()
+            password_input.send_keys(password)
+            logger.info("⌨️ Parolă introdusă")
+            time.sleep(0.5)
+            
+            # Găsește și apasă butonul de login
+            logger.info("🔍 Căutare buton login...")
+            login_button = None
+            login_selectors = [
+                (By.ID, "login-button"),
+                (By.CSS_SELECTOR, "button[type='submit']"),
+                (By.CSS_SELECTOR, "input[type='submit']"),
+                (By.XPATH, "//button[contains(text(), 'Login')]"),
+                (By.XPATH, "//button[contains(text(), 'Autentificare')]"),
+                (By.CSS_SELECTOR, ".btn-login"),
+            ]
+            
+            for by, selector in login_selectors:
+                try:
+                    login_button = self.wait_for_clickable(by, selector, timeout=3)
+                    if login_button:
+                        logger.info(f"✅ Buton login găsit: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not login_button:
+                # Încearcă să dai ENTER pe câmpul de parolă
+                logger.info("⚠️ Buton login nu găsit, încerc ENTER...")
+                password_input.send_keys(Keys.ENTER)
+            else:
+                logger.info("🖱️ Click pe butonul de login...")
+                login_button.click()
+            
+            # Așteaptă să se încarce pagina după login
+            time.sleep(3)
+            
+            # Verifică dacă login-ul a reușit
+            current_url = self.driver.current_url
+            logger.info(f"🌐 URL curent după login: {current_url}")
+            
+            # Verifică dacă suntem pe dashboard sau stock
+            if "dashboard" in current_url or "stock" in current_url or "home" in current_url:
+                logger.info("✅ Autentificare reușită în Oblio!")
+                return True
+            
+            # Verifică dacă există mesaj de eroare
+            error_elements = self.driver.find_elements(By.CSS_SELECTOR, ".alert-danger, .error, .alert-error")
+            if error_elements:
+                error_msg = error_elements[0].text
+                logger.error(f"❌ Eroare la autentificare: {error_msg}")
+                raise Exception(f"Login eșuat: {error_msg}")
+            
+            # Dacă suntem încă pe pagina de login, probabil e o eroare
+            if "login" in current_url:
+                raise Exception("Login eșuat - încă pe pagina de login")
+            
+            logger.warning("⚠️ Nu pot confirma 100% login-ul, dar continui...")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Eroare la autentificare: {e}")
+            
+            # Screenshot pentru debugging
+            try:
+                screenshot_path = f"error_login_{int(time.time())}.png"
+                self.driver.save_screenshot(screenshot_path)
+                logger.info(f"📸 Screenshot salvat: {screenshot_path}")
+            except:
+                pass
+            
+            return False
+
     def type_slowly(self, element, text, delay=0.05):
         """
         Tastează text character-by-character (pentru autocomplete)
@@ -222,13 +429,16 @@ class OblioAutomation:
             time.sleep(delay)
         logger.debug(f"⌨️ Tastat: {text}")
 
-    def create_production_voucher(self, sku, quantity):
+    def create_production_voucher(self, sku, quantity, oblio_cookies=None, oblio_email=None, oblio_password=None):
         """
         Creează un bon de producție în Oblio
 
         Args:
             sku (str): Codul SKU al produsului
             quantity (int): Cantitatea
+            oblio_cookies (str/dict): Cookies Oblio pentru sesiune (PREFERAT - pe Linux)
+            oblio_email (str): Email Oblio (fallback pentru autentificare)
+            oblio_password (str): Parolă Oblio (fallback pentru autentificare)
 
         Returns:
             bool: True dacă succès, False dacă eșec
@@ -243,6 +453,41 @@ class OblioAutomation:
             logger.info(f"🌐 Navigare la: {url}")
             self.driver.get(url)
             time.sleep(2)
+            
+            # Verifică dacă suntem pe pagina de login (nu suntem autentificați)
+            if "login" in self.driver.current_url.lower():
+                logger.warning("⚠️ Nu suntem autentificați!")
+                
+                # PRIORITATE 1: Încearcă cookies (pe Linux/server)
+                if oblio_cookies:
+                    logger.info("🍪 Încerc autentificare cu cookies...")
+                    if self.load_cookies_from_json(oblio_cookies):
+                        logger.info("✅ Autentificare cu cookies reușită!")
+                        # Navighează din nou la pagina de producție
+                        logger.info(f"🌐 Re-navigare la: {url}")
+                        self.driver.get(url)
+                        time.sleep(2)
+                    else:
+                        logger.warning("⚠️ Autentificare cu cookies eșuată, încerc cu email/password...")
+                        if not oblio_email or not oblio_password:
+                            raise Exception("Nici cookies, nici credențiale nu sunt disponibile!")
+                        
+                        if not self.login_to_oblio(oblio_email, oblio_password):
+                            raise Exception("Autentificarea cu email/password a eșuat!")
+                        
+                        self.driver.get(url)
+                        time.sleep(2)
+                
+                # PRIORITATE 2: Fallback la email/password (pe Windows poate funcționa fără 2FA cu browser reuse)
+                elif oblio_email and oblio_password:
+                    logger.info("🔐 Încerc autentificare cu email/password...")
+                    if not self.login_to_oblio(oblio_email, oblio_password):
+                        raise Exception("Autentificarea în Oblio a eșuat!")
+                    
+                    self.driver.get(url)
+                    time.sleep(2)
+                else:
+                    raise Exception("Nu sunt disponibile nici cookies, nici credențiale pentru autentificare!")
 
             # PASUL 1: Găsește și completează câmpul SKU
             logger.info("🔍 Căutare câmp SKU (#pp_name)...")
@@ -398,12 +643,15 @@ class OblioAutomation:
 
             return False
 
-    def process_bonuri(self, bonuri):
+    def process_bonuri(self, bonuri, oblio_cookies=None, oblio_email=None, oblio_password=None):
         """
         Procesează o listă de bonuri
 
         Args:
             bonuri (list): Lista de dicționare cu 'sku' și 'cantitate'
+            oblio_cookies (str/dict): Cookies Oblio pentru sesiune (PREFERAT)
+            oblio_email (str): Email Oblio (fallback pentru autentificare)
+            oblio_password (str): Parolă Oblio (fallback pentru autentificare)
 
         Returns:
             dict: Statistici procesare
@@ -419,7 +667,7 @@ class OblioAutomation:
 
             logger.info(f"\n📦 Bon {i}/{len(bonuri)}")
 
-            success = self.create_production_voucher(sku, cantitate)
+            success = self.create_production_voucher(sku, cantitate, oblio_cookies, oblio_email, oblio_password)
 
             if success:
                 logger.info(f"✅ Bon {i}/{len(bonuri)} - SUCCESS")

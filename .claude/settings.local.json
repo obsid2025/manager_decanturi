@@ -1,17 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(findstr:*)",
-      "Bash(git init:*)",
-      "Bash(git add:*)",
-      "Bash(git config:*)",
-      "Bash(git commit:*)",
-      "Bash(git remote add:*)",
-      "Bash(git branch:*)",
-      "Bash(git push:*)",
-      "Bash(python:*)",
-      "Bash(timeout:*)",
-      "Bash(pip install:*)"
+      "Bash(ssh:*)",
+      "Bash(scp:*)"
     ],
     "deny": [],
     "ask": []

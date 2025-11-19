@@ -11,6 +11,33 @@ const errorAlert = document.getElementById('errorAlert');
 const errorMessage = document.getElementById('errorMessage');
 const exportBtn = document.getElementById('exportBtn');
 
+/**
+ * Extrage toate cookies pentru un domeniu specific
+ * @param {string} domain - Domeniul pentru care să extragă cookies (ex: 'oblio.eu')
+ * @returns {Array} Lista de cookies în format compatibil cu Selenium
+ */
+function getCookiesForDomain(domain) {
+    const allCookies = document.cookie.split(';');
+    const cookies = [];
+    
+    for (let cookie of allCookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name && value) {
+            cookies.push({
+                name: name,
+                value: value,
+                domain: '.' + domain,
+                path: '/',
+                secure: true,
+                httpOnly: false,
+                sameSite: 'Lax'
+            });
+        }
+    }
+    
+    return cookies;
+}
+
 // Event listeners
 fileInput.addEventListener('change', handleFileSelect);
 processBtn.addEventListener('click', handleFileUpload);
@@ -544,6 +571,11 @@ async function startOblioAutomation() {
         console.log(`🚀 START SELENIUM AUTOMATION: ${totalBonuri} bonuri`);
         console.log('📊 Lista bonuri:', currentBonuriData);
 
+        // Extrage cookies Oblio pentru sesiune (IMPORTANT pentru server Linux)
+        console.log('🍪 Extragere cookies Oblio...');
+        const oblioCookies = getCookiesForDomain('oblio.eu');
+        console.log(`🍪 Cookies Oblio găsite: ${oblioCookies.length}`);
+
         // Trimite request la backend pentru a porni Selenium
         const response = await fetch('/start-automation-selenium', {
             method: 'POST',
@@ -551,7 +583,8 @@ async function startOblioAutomation() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                bonuri: currentBonuriData
+                bonuri: currentBonuriData,
+                oblio_cookies: oblioCookies  // Trimite cookies pentru autentificare
             })
         });
 

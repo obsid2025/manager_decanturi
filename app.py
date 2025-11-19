@@ -520,6 +520,7 @@ def start_automation_selenium():
     try:
         data = request.get_json()
         bonuri = data.get('bonuri', [])
+        oblio_cookies = data.get('oblio_cookies')  # Cookies trimise din frontend
 
         if not bonuri:
             return jsonify({'error': 'Nu există bonuri de procesat'}), 400
@@ -543,15 +544,31 @@ def start_automation_selenium():
             if is_linux:
                 error_msg += ' Verifică logs în automatizare_oblio.log pentru detalii.'
             else:
-                error_msg += ' Verifică că Chrome este instalat.'
+                error_msg += ' Verifică că Chrome este instalat și rulează cu --remote-debugging-port=9222'
 
             return jsonify({
                 'error': error_msg,
-                'hint': 'Consultă SELENIUM_SETUP.md pentru troubleshooting detaliat.'
+                'hint': 'Windows: Pornește Chrome cu remote debugging. Linux: Verifică logs.'
             }), 500
 
+        # Citește credențialele Oblio din environment variables (fallback)
+        oblio_email = os.environ.get('OBLIO_EMAIL')
+        oblio_password = os.environ.get('OBLIO_PASSWORD')
+        
+        # Verifică că avem cel puțin cookies SAU credențiale
+        if not oblio_cookies and not (oblio_email and oblio_password):
+            return jsonify({
+                'error': 'Lipsesc cookies Oblio și credențialele de autentificare! Trebuie să trimiți cookies din frontend sau să setezi OBLIO_EMAIL/OBLIO_PASSWORD.'
+            }), 400
+        
+        # Log metoda de autentificare
+        if oblio_cookies:
+            logger.info("🍪 Autentificare cu cookies din frontend")
+        else:
+            logger.info("🔐 Autentificare cu email/password din environment variables")
+        
         # Procesează bonurile
-        stats = automation.process_bonuri(bonuri)
+        stats = automation.process_bonuri(bonuri, oblio_cookies, oblio_email, oblio_password)
 
         # Închide browser
         automation.close()
