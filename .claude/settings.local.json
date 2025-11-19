@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(ssh:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix: Simplificare dependencies Dockerfile - doar esențiale\n\nPROBLEMA: libgdk-pixbuf2.0-0 nu există în Debian Trixie\nCAUZĂ: Prea multe dependencies explicite care nu mai există\n\nSOLUȚIE: Instalăm DOAR pachetele esențiale\n- gcc, curl (build tools)\n- chromium (browser)\n- chromium-driver (WebDriver)\n\n✅ Debian va instala AUTOMAT toate dependencies necesare\n✅ Evităm problemele cu pachete deprecate în Trixie\n✅ Build mai rapid și mai stabil\n\nFuncționează cu noua abordare:\n- Windows: Remote debugging sau profil existent\n- Linux: Cookie-based auth + headless Chromium\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

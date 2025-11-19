@@ -1,0 +1,1392 @@
+function show_notification(message, type, format) {
+	if (type == "err") {
+		hide = false;
+	}
+	if (typeof format === 'undefined') {
+		format = true;
+	} //console.log(message);
+	message = html_decode(message);
+	message = nl2br(message);
+	if (message.substr(-4) == "<br>") {
+		message = message.substr(0, message.length-4);
+	}
+	message = message.split("<br>");//console.log(message);
+	var text_html = "", //<strong>"+language.message+"</strong><br>"
+		empty_line = "";
+	for(i in message) {
+		empty_line = '';
+		if (message[i] == '\r\n') {
+			message[i] = "&nbsp;";
+			empty_line = "1";
+		} 
+		text_html += '<div';
+		if (format) {
+			text_html += ' class="message-line'+empty_line+'"';
+		}
+		text_html += '>'+message[i]+'</div>';
+	} //console.log(text_html);
+	$("#modal-body-message").html(text_html);//console.log(text_html);
+	//console.log(message.split("<br>"));
+	$("#modal-message").modal('show');
+	wait_cursor(false);
+}
+
+function show_message(data, format) {//console.log(data);
+	if (data.hasOwnProperty("custom_text_button")) {
+		$(".ok-message-modal").html(data.custom_text_button);
+		$("#to-do-after-close").val("reset_message_button_text");
+	}
+	if (typeof data == "string") {
+		data = data.split("|");
+		if (data.length > 1) {
+			show_notification(data[1], data[0], format);
+		} else {
+			show_notification(data[0], '', format);
+		}
+	} else if (typeof data == "object") {
+		show_notification(data.message, data.type, format);
+	}
+}
+function show_confirm(message) {
+	$("#modal-body-confirm").html(nl2br(html_decode(message)));
+	$("#modal-confirm").modal('show');
+}
+function showConfirm(message, params) {
+    return new Promise(function(resolve, reject) {
+        $('.ok-confirm-modal').data('funct_to_exe', resolve).data('params', params);
+        $('.cancel-confirm-modal').data('funct_to_exe', reject).data('params', params);
+        show_confirm(message);
+    });
+}
+function show_error_page() {
+    wait_cursor(false);
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+	$(".btn-submit").removeClass("disabled");
+    //show_message('err|Eroare conexiune');
+}
+function redirectTo(page) {
+	location.href = page;
+}
+function check_login(data) {
+	if (data == "redirect_to_login") {
+		location.href = "/login";
+	}
+}
+function check_login_admin(data) {
+	if (data == "redirect_to_login") {
+		location.href = "/admin/login";
+	}
+}
+
+function check_info_cif(app) {
+	if (typeof app === 'undefined') {
+		app = "";
+	}
+	var cif = $.trim($("#cif"+app).val());
+	if (cif.length > 0) {
+		if (from_admin) {
+			var jqxhr = getjqxhr("/admin/do_check_info_cif/", {"cif": cif}, "POST", "json");
+		} else {
+			var jqxhr = getjqxhr("/account/do_check_info_cif/", {"cif": cif}, "POST", "json");
+		}
+		$(".add-cs-mb").prop("disabled", true);
+		jqxhr.done(function(data) {
+			$(".add-cs-mb").prop("disabled", false);
+			check_login(data);//console.log(data);
+			if (data.hasOwnProperty("dummy")) {
+				$("#state" + app).val("-");
+			}
+			if (data.hasOwnProperty("type") && data.type == "err") {
+				if (is_cif_ro(cif)) {
+					show_message(data);
+				}
+			} else {
+				if (!data.hasOwnProperty("platitor_tva")) {
+					$("#platitor_tva" + app + "0").prop("checked", true);
+				}
+				if (data.hasOwnProperty("activ") && data.activ == "0") {
+					$(".alert-warning-issue-inner-cl-radiat").html(language.cif_radiat);
+					$(".alert-warning-issue-inner-cl-radiat").removeClass("hidden");
+				} else {
+					$(".alert-warning-issue-inner-cl-radiat").html("").addClass("hidden");
+				}
+				for (var key in data) {
+					if (data.hasOwnProperty(key)) {
+						if (key == "platitor_tva" || key == "tva_incasare") {
+							$("#" + key + app + data[key]).prop("checked", true);
+							if (key == "platitor_tva") {
+								if (window.hasOwnProperty("check_cui_intracomunitar")) {
+									check_cui_intracomunitar(data[key]);
+								}
+							}
+						} else {
+							if (data[key]) {
+								$("#" + key + app).val(data[key]);
+							}
+						}
+					}
+				}
+			}
+			wait_cursor(false);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+
+var c_control;
+var c_position = 0;
+
+//get and set carret position in a textarea
+function getCaretPosition (ctrl) {
+    var CaretPos = 0;   // IE Support
+    if (document.selection) {
+    ctrl.focus ();
+        var Sel = document.selection.createRange ();
+        Sel.moveStart ('character', -ctrl.value.length);
+        CaretPos = Sel.text.length;
+    }
+    // Firefox support
+    else if (ctrl.selectionStart || ctrl.selectionStart == '0')
+        CaretPos = ctrl.selectionStart;
+    return (CaretPos);
+}
+function setCaretPosition(ctrl, pos){
+    if(ctrl.setSelectionRange) {
+        ctrl.focus();
+        ctrl.setSelectionRange(pos,pos);
+    } else if (ctrl.createTextRange) { 
+        var range = ctrl.createTextRange();
+        range.collapse(true);
+        range.moveEnd('character', pos);
+        range.moveStart('character', pos);
+        range.select();
+    }
+}
+//myField accepts an object reference, myValue accepts the text string to add
+function insertAtCursor(myField, myValue) {
+    //fixed scroll position
+    textAreaScrollPosition = myField.scrollTop;
+    //IE support
+    if (document.selection) {
+        myField.focus();
+        //in effect we are creating a text range with zero length at the cursor location and replacing it with myValue
+        sel = document.selection.createRange();
+        sel.text = myValue;
+    //Mozilla/Firefox/Netscape 7+ support
+    } else if (myField.selectionStart || myField.selectionStart == '0') {
+        myField.focus();
+        //Here we get the start and end points of the selection. Then we create substrings up to the start of the selection and from the end point of the selection to the end of the field value.
+        //Then we concatenate the first substring, myValue, and the second substring to get the new value.
+        var startPos = myField.selectionStart;
+        var endPos = myField.selectionEnd;
+        myField.value = myField.value.substring(0, startPos) + myValue + myField.value.substring(endPos, myField.value.length);
+        myField.setSelectionRange(endPos+myValue.length, endPos+myValue.length);
+    } else {
+        myField.value += myValue;
+    }
+    //fixed scroll position
+    myField.scrollTop = textAreaScrollPosition;
+}
+function SetCaretAtEnd(elem) {//console.log(elem);
+    var elemLen = elem.val().length;//console.log(elemLen);
+    // For IE Only
+    if (document.selection) {
+        // Set focus
+        elem.focus();
+        // Use IE Ranges
+        var oSel = document.selection.createRange();
+        // Reset position to 0 & then set at end
+        oSel.moveStart('character', -elemLen);
+        oSel.moveStart('character', elemLen);
+        oSel.moveEnd('character', 0);
+        oSel.select();
+    }
+    else if (elem.selectionStart || elem.selectionStart == '0') {
+        // Firefox/Chrome
+        elem.selectionStart = elemLen;
+        elem.selectionEnd = elemLen;
+        elem.focus();
+    } // if
+} // SetCaretAtEnd()
+function showCashRegisterErrorModal(cashRegisterId, data, delay) {
+    if (typeof delay !== 'number') {
+        delay = 10;
+    }
+    message = language.cash_register_status_error_message;
+    if (typeof data === 'object' && typeof data.message === 'string') {
+        message = data.message;
+    }
+    setTimeout(function() {
+        window.redirectCashRegisterSettings = function(data) {
+            if (typeof data === 'object' && typeof data.cashRegisterId === 'number') {
+                var redirectLink = baseurl + 'account/case_de_marcat/?act=edit-register&id=' + data.cashRegisterId;
+                if (typeof data.errcode !== 'undefined') {
+                    switch (parseInt(data.errcode)) {
+                        case 1: redirectLink += '#vat-rates'; break;
+                    }
+                }
+                window.open(redirectLink, '_self');
+            }
+        }
+        $('.ok-confirm-modal')
+            .text(language.ok)
+            .data('funct_to_exe', 'redirectCashRegisterSettings')
+            .data('params', false);
+        $('.cancel-confirm-modal')
+            .text(language.check_cash_register_settings)
+            .data('funct_to_exe', 'redirectCashRegisterSettings')
+            .data('funcExecuted', true)
+            .data('params', {"cashRegisterId": parseInt(cashRegisterId), "errcode": data.errcode || 0});
+        show_confirm(message);
+    }, delay);
+}
+//var timeout_cursor;
+function wait_cursor(enable) {
+	if (window.innerWidth < 980) {
+		let container = document.getElementById('cursor-container');
+		if (!container) {
+			container = document.createElement('div');
+			container.id = 'cursor-container';
+			container.style.position = 'fixed';
+			container.style.top = '50%';
+			container.style.left = '50%';
+			container.style.transform = 'translate(-50%, -50%)';
+			container.style.zIndex = '1000';
+			container.innerHTML = '<i class="fas fa-pulse fa-spinner fa-3x"></i>';
+			document.body.append(container);
+		}
+		container.style.display = enable ? 'block' : 'none';
+	}
+    $(document.body).toggleClass('page-is-loading', enable);
+}
+function is_cif(v) {
+	nv = $.trim(v.replace(/^ro/ig, ''));
+	if ($.isNumeric(nv)) {
+		return true;
+	}
+	return false;
+}
+function is_cif_ro(v) {
+	v = $.trim(v);
+	if ($.isNumeric(v)) {
+		return true;
+	}
+	return is_cif(v);
+}
+function cleanNrInmatriculare(s) {
+	s = $.trim(s.replace(/[^a-zA-Z0-9]/ig, ''));
+	s = s.toUpperCase(s);
+	return s;
+}
+function checkNrInmatriculare(s) { //var s = "CT123ABC";
+	if (s.length < 2 || s.length > 20 ) {
+		return false;
+	}
+	return true;
+	/*
+	s = $.trim(s);
+	if (s.match(/^B\d{2,3}[A-Z]{3}$/ig)) {
+		return true;
+	}
+	if (s.match(/^[A-Z]{2}\d{2}[A-Z]{3}$/ig)) {
+		return true;
+	}
+	return false;
+	*/
+}
+function sleepFor( sleepDuration ){
+    var now = new Date().getTime();
+    while(new Date().getTime() < now + sleepDuration){ /* do nothing */ }
+}
+function niceDateChunk(v) {
+	v = parseInt(v, 10);
+	if (v < 10) {
+		return "0"+v;
+	}
+	return v;
+}
+function isValidDate(day, month, year){
+	day = parseInt(day, 10);
+	month = parseInt(month, 10);
+	year = parseInt(year, 10);//console.log(day, month, year);
+	if (!day || !year) {
+		return false;
+	}
+    // Check the ranges of month and year
+    if(year < 1000 || year > 3000 || month < 0 || month > 12)
+        return false;
+    var monthLength = [ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 ];
+    // Adjust for leap years
+    if(year % 400 == 0 || (year % 100 != 0 && year % 4 == 0))
+        monthLength[1] = 29;
+    // Check the range of the day
+    return day > 0 && day <= monthLength[month];
+};
+function check_and_parse_price(id, fn, precision, as_float, default_to_zero, default_value, allow_zero, allow_negatives, negatives_tooltip) {
+    var th;
+    if (typeof id === 'object') {
+        th = $(id);
+        id = th.attr('id');
+    } else {
+        th = $("#"+id);
+    }
+	if (typeof fn === 'undefined') {
+		fn = function(){};
+	}
+	if (typeof default_to_zero === 'undefined') {
+		default_to_zero = false;
+	}
+	if (typeof default_value === 'undefined') {
+		default_value = 0;
+	}
+	if (typeof allow_zero === 'undefined') {
+		allow_zero = false;
+	}
+	if (typeof allow_negatives === 'undefined') {
+		allow_negatives = true;
+	}
+	if (typeof negatives_tooltip === 'undefined') {
+		negatives_tooltip = "";
+	}
+	var price = th.val();
+	if (typeof precision === 'undefined') {
+		if ($("#precision").length > 0) {
+			precision = $("#precision").val();
+		} else {
+			precision = get_precision(price);
+		}
+	}
+	price = formatPrice(price, precision, as_float); //console.log(default_to_zero,price,default_value);
+	if (!default_to_zero && (price == "0" || price == "0.00") && default_value != 0) {
+		price = default_value;
+	}
+	if (!allow_zero && default_to_zero && (price == "0" || price == "0.00")) {
+		price = "";
+	}
+	if (!allow_negatives && price && price < 0) {
+		price = Math.abs(price);
+		if (negatives_tooltip) { 
+			show_message("info|"+negatives_tooltip, false);
+		}
+	}
+	th.val(price);//console.log(price, fn);
+	fn(id);
+}
+function get_precision(n) { //console.log("n",n);
+	if (n) { //var n_init = n;
+		n = n+"";// cast to string
+		n = n.split(".");//console.log(n);
+		var decs = n[1];//console.log("decs",decs);
+		if (decs) {
+			var decs_length = decs.length;//console.log("length", decs_length);
+			if (decs_length > 4) {
+				decs_length = 4;
+				decs = decs.substr(0, 4);
+			}
+			while(decs_length > 2) {
+				var dec = parseInt(decs.substr(decs.length-1));//console.log("dec", dec);
+				if (dec) { //console.log("decs_length",decs_length);
+					return decs_length;
+				}
+				decs = decs.substr(0, decs.length-1);
+				decs_length--;
+			}
+		}
+	}
+	return 2;
+}
+function format_with_precision(n, as_float) {
+	if (typeof as_float === 'undefined') {
+		as_float = false;
+	}
+	var precision = get_precision(n);
+	return number_format(n, precision, ".", "", as_float);
+}
+function create_input_hidden(name, key, step, index, value) {
+	return "<input type=\"hidden\" name=\""+name+"["+key+step+"]["+index+"]\" value=\""+value+"\" />";
+}
+function create_input_hidden_prod(step, index, value) {
+	return create_input_hidden("entry", "item", step, index, value);
+}
+function get_user_precision() {
+	if ($("#precision").length > 0) {
+		return parseFloat($("#precision").val());
+	}
+	return 2;
+}
+function setOnBeforeUnload(message) {
+	/*
+    window.onbeforeunload = function (evt) {
+		if($("#totals").is(":hidden")) {
+		    return undefined;
+        }
+        var message = language.leave_page+"?";
+        if (typeof evt == 'undefined') {
+            evt = window.event;
+        }
+        if (evt) {
+            evt.returnValue = message;
+        }
+        return message;
+    };
+	*/
+}
+function createRowFromColumns(obj, items, g, nl) {
+	var row = "", glue = "";
+	if (typeof g === 'undefined') {
+		g = ", ";
+	}
+	if (typeof nl === 'undefined') {
+		nl = true;
+	}
+	for(key in items) {
+		if (!$.isEmptyObject(obj[items[key]])) {
+			row += glue;//console.log(items[key]);
+			if (items[key] == "cif") {
+				row += language.cif+": ";
+			}
+			row += obj[items[key]];
+			glue = g;
+		}
+	}
+	if (row != "") {
+		if (nl) {
+			row = "<br/>" + row;
+		}
+	}
+	return row;
+}
+function cleanString(s) {
+	if ($.isEmptyObject(s)) return s;
+	s = s.replace(new RegExp('"', "g"), "'");
+	s = strip_tags(s);
+	return s;
+}
+function stripCharsFromString(s, chars) { 
+	if ($.isEmptyObject(s)) return s;
+	for(i in chars) { 
+		if (chars[i] == "|") {
+			s = s.replace(/\|/g, "");
+		} else {
+			s = s.replace(new RegExp(chars[i], "g"), "");
+		}
+	} 
+	return s;
+}
+function strip_tags (input, allowed) {
+    // making sure the allowed arg is a string containing only tags in lowercase (<a><b><c>)
+  allowed = (((allowed || '') + '').toLowerCase().match(/<[a-z][a-z0-9]*>/g) || []).join('');
+  var tags = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi
+  var commentsAndPhpTags = /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi
+
+  return input.replace(commentsAndPhpTags, '').replace(tags, function ($0, $1) {
+    return allowed.indexOf('<' + $1.toLowerCase() + '>') > -1 ? $0 : ''
+  });
+}
+String.prototype.ucfirst = function() {
+    return this.charAt(0).toUpperCase() + this.slice(1);
+}
+Number.isNaN = Number.isNaN || function(value) {     
+    return value !== value;
+}
+function number_format(number, decimals, dec_point, thousands_sep, as_float) {
+    var n = number, prec = decimals;
+
+    var toFixedFix = function (n,prec) {//return n.toString();
+        var k = Math.pow(10,prec);//console.log("k=",k, Math.round(n*k));
+        return (Math.round(safemul(n, k))/k).toString();
+    };
+	
+	if (typeof as_float === 'undefined') {
+		as_float = true;
+	}
+    n = !isFinite(+n) ? 0 : +n;//console.log("n=",n);
+    prec = !isFinite(+prec) ? 0 : Math.abs(prec);
+    var sep = (typeof thousands_sep === 'undefined') ? '' : thousands_sep;
+    var dec = (typeof dec_point === 'undefined') ? '.' : dec_point;
+
+    var s = (prec > 0) ? toFixedFix(n, prec) : toFixedFix(Math.round(n), prec); 
+    //fix for IE parseFloat(0.55).toFixed(0) = 0;
+
+    var abs = toFixedFix(Math.abs(n), prec);
+    var _, i;
+//console.log("nf: ", n, prec, abs, s);
+    if (abs >= 1000) {
+        _ = abs.split(/\D/);
+        i = _[0].length % 3 || 3;
+
+        _[0] = s.slice(0,i + (n < 0)) +
+               _[0].slice(i).replace(/(\d{3})/g, sep+'$1');
+        s = _.join(dec);
+    } else {
+        s = s.replace('.', dec);
+    }
+
+    var decPos = s.indexOf(dec);
+    if (prec >= 1 && decPos !== -1 && (s.length-decPos-1) < prec) {
+        s += new Array(prec-(s.length-decPos-1)).join(0)+'0';
+    }
+    else if (prec >= 1 && decPos === -1) {
+        s += dec+new Array(prec).join(0)+'0';
+    }
+	if (as_float) {
+		return parseFloat(s);
+	}
+	return s;
+}
+// return a formated price
+// formats all types of prices: 2,345.00, 2000,89, 3000.89, .....
+function formatPrice(price, decimals, as_float, dec_point) {
+		if (typeof decimals === 'undefined') {
+			decimals = 2;
+		}
+		if (typeof as_float === 'undefined') {
+			as_float = false;
+		}
+		if (typeof dec_point === 'undefined') {
+			dec_point = ".";
+		}
+		price = price.toString();
+		//console.log(price);
+		price = price.replace(/,/, '.');
+		price = price.replace(/[^0-9\.\-]/ig, "");//console.log(price);
+		var pos = price.lastIndexOf(".");//console.log(pos);
+		if (pos != -1) {
+			var pp = price.substring(0, pos);
+			var th = pp.replace(/[^0-9\-]/ig, "");
+			var sents = price.substr(pos);
+			price = th+sents;
+		} //console.log(price);
+		return number_format(price, decimals, dec_point, "", as_float);
+	}
+function resizeIframe(id, hh) {
+	var db = document.getElementById(id).contentWindow.document;
+	var body = db.body, html = db.documentElement;
+	var height = Math.max( body.scrollHeight, body.offsetHeight,html.clientHeight, html.scrollHeight, html.offsetHeight );
+	if (typeof hh !== 'undefined') {
+		height += hh;
+	}
+	//height += 200;
+	$("#"+id).attr("height", height+"px");//console.log(height);
+}
+function checkAllClass(cl, status) {
+	$("."+cl+":enabled").prop("checked", status);
+}
+function checkAllClassVisible(cl, status) {
+	$("."+cl+":visible").prop("checked", status);
+}
+function truncate(text, maxLen) {
+	if (typeof maxLen === 'undefined') {
+		maxLen = 200;
+	}
+	text = String(text);
+	var len = text.length;
+	if (len > maxLen) {
+		text = text.substr(0, maxLen);
+		text += '...';
+	}
+	return text;
+}
+function sprintf() {
+  //  discuss at: http://locutus.io/php/sprintf/
+  // original by: Ash Searle (http://hexmen.com/blog/)
+  // improved by: Michael White (http://getsprink.com)
+  // improved by: Jack
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Kevin van Zonneveld (http://kvz.io)
+  // improved by: Dj
+  // improved by: Allidylls
+  //    input by: Paulo Freitas
+  //    input by: Brett Zamir (http://brett-zamir.me)
+  //   example 1: sprintf("%01.2f", 123.1)
+  //   returns 1: '123.10'
+  //   example 2: sprintf("[%10s]", 'monkey')
+  //   returns 2: '[    monkey]'
+  //   example 3: sprintf("[%'#10s]", 'monkey')
+  //   returns 3: '[####monkey]'
+  //   example 4: sprintf("%d", 123456789012345)
+  //   returns 4: '123456789012345'
+  //   example 5: sprintf('%-03s', 'E')
+  //   returns 5: 'E00'
+
+  var regex = /%%|%(\d+\$)?([\-+'#0 ]*)(\*\d+\$|\*|\d+)?(?:\.(\*\d+\$|\*|\d+))?([scboxXuideEfFgG])/g
+  var a = arguments
+  var i = 0
+  var format = a[i++]
+
+  var _pad = function (str, len, chr, leftJustify) {
+    if (!chr) {
+      chr = ' '
+    }
+    var padding = (str.length >= len) ? '' : new Array(1 + len - str.length >>> 0).join(chr)
+    return leftJustify ? str + padding : padding + str
+  }
+
+  var justify = function (value, prefix, leftJustify, minWidth, zeroPad, customPadChar) {
+    var diff = minWidth - value.length
+    if (diff > 0) {
+      if (leftJustify || !zeroPad) {
+        value = _pad(value, minWidth, customPadChar, leftJustify)
+      } else {
+        value = [
+          value.slice(0, prefix.length),
+          _pad('', diff, '0', true),
+          value.slice(prefix.length)
+        ].join('')
+      }
+    }
+    return value
+  }
+
+  var _formatBaseX = function (value, base, prefix, leftJustify, minWidth, precision, zeroPad) {
+    // Note: casts negative numbers to positive ones
+    var number = value >>> 0
+    prefix = (prefix && number && {
+      '2': '0b',
+      '8': '0',
+      '16': '0x'
+    }[base]) || ''
+    value = prefix + _pad(number.toString(base), precision || 0, '0', false)
+    return justify(value, prefix, leftJustify, minWidth, zeroPad)
+  }
+
+  // _formatString()
+  var _formatString = function (value, leftJustify, minWidth, precision, zeroPad, customPadChar) {
+    if (precision !== null && precision !== undefined) {
+      value = value.slice(0, precision)
+    }
+    return justify(value, '', leftJustify, minWidth, zeroPad, customPadChar)
+  }
+
+  // doFormat()
+  var doFormat = function (substring, valueIndex, flags, minWidth, precision, type) {
+    var number, prefix, method, textTransform, value
+
+    if (substring === '%%') {
+      return '%'
+    }
+
+    // parse flags
+    var leftJustify = false
+    var positivePrefix = ''
+    var zeroPad = false
+    var prefixBaseX = false
+    var customPadChar = ' '
+    var flagsl = flags.length
+    var j
+    for (j = 0; j < flagsl; j++) {
+      switch (flags.charAt(j)) {
+        case ' ':
+          positivePrefix = ' '
+          break
+        case '+':
+          positivePrefix = '+'
+          break
+        case '-':
+          leftJustify = true
+          break
+        case "'":
+          customPadChar = flags.charAt(j + 1)
+          break
+        case '0':
+          zeroPad = true
+          customPadChar = '0'
+          break
+        case '#':
+          prefixBaseX = true
+          break
+      }
+    }
+
+    // parameters may be null, undefined, empty-string or real valued
+    // we want to ignore null, undefined and empty-string values
+    if (!minWidth) {
+      minWidth = 0
+    } else if (minWidth === '*') {
+      minWidth = +a[i++]
+    } else if (minWidth.charAt(0) === '*') {
+      minWidth = +a[minWidth.slice(1, -1)]
+    } else {
+      minWidth = +minWidth
+    }
+
+    // Note: undocumented perl feature:
+    if (minWidth < 0) {
+      minWidth = -minWidth
+      leftJustify = true
+    }
+
+    if (!isFinite(minWidth)) {
+      throw new Error('sprintf: (minimum-)width must be finite')
+    }
+
+    if (!precision) {
+      precision = 'fFeE'.indexOf(type) > -1 ? 6 : (type === 'd') ? 0 : undefined
+    } else if (precision === '*') {
+      precision = +a[i++]
+    } else if (precision.charAt(0) === '*') {
+      precision = +a[precision.slice(1, -1)]
+    } else {
+      precision = +precision
+    }
+
+    // grab value using valueIndex if required?
+    value = valueIndex ? a[valueIndex.slice(0, -1)] : a[i++]
+
+    switch (type) {
+      case 's':
+        return _formatString(value + '', leftJustify, minWidth, precision, zeroPad, customPadChar)
+      case 'c':
+        return _formatString(String.fromCharCode(+value), leftJustify, minWidth, precision, zeroPad)
+      case 'b':
+        return _formatBaseX(value, 2, prefixBaseX, leftJustify, minWidth, precision, zeroPad)
+      case 'o':
+        return _formatBaseX(value, 8, prefixBaseX, leftJustify, minWidth, precision, zeroPad)
+      case 'x':
+        return _formatBaseX(value, 16, prefixBaseX, leftJustify, minWidth, precision, zeroPad)
+      case 'X':
+        return _formatBaseX(value, 16, prefixBaseX, leftJustify, minWidth, precision, zeroPad)
+        .toUpperCase()
+      case 'u':
+        return _formatBaseX(value, 10, prefixBaseX, leftJustify, minWidth, precision, zeroPad)
+      case 'i':
+      case 'd':
+        number = +value || 0
+        // Plain Math.round doesn't just truncate
+        number = Math.round(number - number % 1)
+        prefix = number < 0 ? '-' : positivePrefix
+        value = prefix + _pad(String(Math.abs(number)), precision, '0', false)
+        return justify(value, prefix, leftJustify, minWidth, zeroPad)
+      case 'e':
+      case 'E':
+      case 'f': // @todo: Should handle locales (as per setlocale)
+      case 'F':
+      case 'g':
+      case 'G':
+        number = +value
+        prefix = number < 0 ? '-' : positivePrefix
+        method = ['toExponential', 'toFixed', 'toPrecision']['efg'.indexOf(type.toLowerCase())]
+        textTransform = ['toString', 'toUpperCase']['eEfFgG'.indexOf(type) % 2]
+        value = prefix + Math.abs(number)[method](precision)
+        return justify(value, prefix, leftJustify, minWidth, zeroPad)[textTransform]()
+      default:
+        return substring
+    }
+  }
+
+  return format.replace(regex, doFormat)
+}
+// remove a value from object
+function removeValueFromObject(obj, v) {
+	var new_obj = {};
+	for (k in obj) {
+		if (obj[k] != v) {
+			new_obj[k] = obj[k];
+		}
+	}
+	return new_obj;
+}
+// remove a key from object
+function removeKeyFromObject(obj, v) {
+	var new_obj = {};
+	for (k in obj) {
+		if (k != v) {
+			new_obj[k] = obj[k];
+		}
+	}
+	return new_obj;
+}
+// return material icon for access type
+function getIconForAccess(access) {
+	switch(access) {
+		case "full": return '<i class="fas fa-check-circle"></i>';break;
+		case "limited": return '<i class="fas fa-exclamation-circle"></i>';break;
+		case "no": return '<i class="far fa-times-circle"></i>';break;
+	}
+}
+// return material icon color for access type
+function getIconColorForAccess(access) {
+	switch(access) {
+		case "full": return 'text-primary';break;
+		case "limited": return 'text-warning';break;
+		case "no": return 'text-gray';break;
+	}
+}
+function getIframeHeight(id) {
+	var db = document.getElementById(id).contentWindow.document;
+	var body = db.body, html = db.documentElement;
+	var height = Math.max( body.scrollHeight, body.offsetHeight,html.clientHeight, html.scrollHeight, html.offsetHeight );
+	return height;
+}
+function isChrome() {
+	return !!window.chrome && !!window.chrome.webstore;
+}
+function isFirefox() {
+	return typeof InstallTrigger !== 'undefined';
+}
+function isEdge() {
+	// Internet Explorer 6-11
+    var isIE = /*@cc_on!@*/false || !!document.documentMode;
+    // Edge 20+
+    return !isIE && !!window.StyleMedia;
+}
+function checkOpera() {
+	var isOpera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+	if (!isOpera) {
+		return false;
+	}
+	//var rgx = new RegExp('/OPR\/(\d+)\./', 'g');
+	var version = navigator.userAgent.match(/OPR\/(\d+)\./);
+	if (parseInt(version[1]) < 40) { // old browser
+		$(".alert-container").show();//{display: block !important;}
+		$(".alert-container div.alert-c-c").css("margin", "0px").css("background-color", "#28143d").css("color", "#fff").css("padding", "5px 10px");
+		$(".navbar").css("margin-bottom", "3px !important");
+	}
+	
+	//return !(navigator.userAgent.indexOf(rgx) >= 0);
+}
+function browserVersion() {
+	if (typeof minim === 'undefined') {
+		return false;
+	}
+	
+	
+	
+}
+/*	var isOpera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+
+    // Safari 3.0+ "[object HTMLElementConstructor]" 
+    var isSafari = /constructor/i.test(window.HTMLElement) || (function (p) { return p.toString() === "[object SafariRemoteNotification]"; })(!window['safari'] || safari.pushNotification);
+  
+    // Blink engine detection
+    var isBlink = (isChrome || isOpera) && !!window.CSS;
+*/
+function getNiceDate(date, short_month) { // dd/mm/yyyy
+	if (typeof short_month === 'undefined') {
+		short_month = true;
+	}
+	date = date.split("/");//console.log(date);
+	var n = parseInt(date[0])+" ";
+	date[1] = parseInt(date[1]);
+	var m = "";
+	switch(date[1]) {
+		case 1:
+			m = language.january;
+			break;
+		case 2:
+			m = language.february;
+			break;
+		case 3:
+			m = language.march;
+			break;
+		case 4:
+			m = language.april;
+			break;
+		case 5:
+			m = language.may;
+			break;
+		case 6:
+			m = language.june;
+			break;
+		case 7:
+			m = language.july;
+			break;
+		case 8:
+			m = language.august;
+			break;
+		case 9:
+			m = language.september;
+			break;
+		case 10:
+			m = language.october;
+			break;
+		case 11:
+			m = language.november;
+			break;
+		case 12:
+			m = language.december;
+			break;
+	}
+	if (short_month) {
+		m = m.substr(0, 3);
+	} 
+	n += m + " ";
+	n += date[2];
+	return n;
+}
+function getLocaleMonth(month) {
+	var m = "";
+	switch(month) {
+		case 0:
+			m = language.january;
+			break;
+		case 1:
+			m = language.february;
+			break;
+		case 2:
+			m = language.march;
+			break;
+		case 3:
+			m = language.april;
+			break;
+		case 4:
+			m = language.may;
+			break;
+		case 5:
+			m = language.june;
+			break;
+		case 6:
+			m = language.july;
+			break;
+		case 7:
+			m = language.august;
+			break;
+		case 8:
+			m = language.september;
+			break;
+		case 9:
+			m = language.october;
+			break;
+		case 10:
+			m = language.november;
+			break;
+		case 11:
+			m = language.december;
+			break;
+	}
+	return m;
+}
+function getStars(nr) {
+	var st = "";
+	for(i = 0; i<nr; i++) {
+		st += '<i class="fas fa-star"></i>';
+	}
+	return st;
+}
+function objToArray(obj) {
+	var arr = [];
+	for(k in obj) {
+		arr[k] = obj[k];
+	}
+	return arr;
+}
+function objToString(obj, keys) {
+	if (typeof keys === "undefined") {
+		keys = {"0": "percent", "1": "value", "2": "name", "3": "quantity", "4": "initv"};
+	}
+	var s = "", glue = "";
+	for(k in obj) { //console.log(obj);
+		s += glue+k;
+		for(i in keys) {
+			if (obj[k].hasOwnProperty([keys[i]])) {
+				s += "|"+obj[k][keys[i]];
+			}
+		}
+		glue = "~";
+	}
+	return s;
+}
+function duplicateArray(arr) {
+	var a = [];
+	for(k in arr) {
+		a[k] = arr[k];
+	}
+	return a;
+}
+function duplicateObject(obj) {
+	var o = {};
+	for(k in obj) {
+		o[k] = obj[k];
+	}
+	return o;
+}
+function nl2br (str, is_xhtml) {   
+    var breakTag = (is_xhtml || typeof is_xhtml === 'undefined') ? '<br>' : '<br>';
+	str = (str + '').replace(/\\r\\n/, breakTag);
+    return (str + '').replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1'+ breakTag +'$2');
+}
+function escapeHtml(text) {
+  return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+}
+function unEscapeHtml(text) {
+  return text
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'");
+}
+function dateIsBefore(d, c) { // d = date to compare to(date), c = date to compare(due_date)
+	if (!d || !c || d == "" || c == "") {
+		return false;
+	}
+	//console.log(d, c);
+	var d1 = d.split("/");//console.log(d1, parseInt(d1[1]));
+	var d1 = new Date(d1[2], parseInt(d1[1]) - 1, parseInt(d1[0]));
+	var c1 = c.split("/");//console.log(c1);
+	var c1 = new Date(c1[2], parseInt(c1[1]) - 1, parseInt(c1[0]));
+	//console.log(d1, c1);
+	//console.log(d1.getTime(),c1.getTime());
+	if (c1.getTime() < d1.getTime()) {
+		return true;
+	}
+	return false;
+}
+function isEmail(email) {
+  var regex = /^([a-zA-Z0-9_.+-])+\@(([a-zA-Z0-9-])+\.)+([a-zA-Z0-9]{2,4})+$/;
+  return regex.test(email);
+}
+function get_user_tag_by_type(type, source, ab_id, markd) {
+	var tag = '';
+	if (type == 1) { // lite
+		tag = '<span class="label bg-grey">operator</span>';
+	} else if (type == 2) { // free
+		tag = '<span class="label bg-orange">gratuit</span>';
+	} else if (type == 3) { // billing
+		tag = '<span class="label bg-green">Nelimitat</span>';
+	}
+	if (source) {
+		tag += ' &nbsp; <span class="label bg-blue">'+source+'</span>';
+	}
+	if (typeof ab_id === "undefined") {
+		ab_id = 0;
+	}
+	if (ab_id == "24") {
+		tag += ' &nbsp; <span class="label bg-turquoise">'+language.abmoca+'</span>';
+	}
+	if (typeof markd === "undefined") {
+		markd = 0;
+	}
+	if (markd == "1") {
+		tag += ' &nbsp; <span class="label" style="background-color: red;">De sters</span>';
+	}
+	return '<br>'+tag;
+}
+function get_object_values(obj) {
+	var values = Object.keys(obj).map(function(e) {
+		return obj[e];
+	});
+	return values;
+}
+function htmlEntities(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function htmlEntitiesDecode(str) {
+    return String(str).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+}
+function get_int(i) {
+	i = parseInt(i);
+	if (isNaN(i)) {
+		return 0;
+	}
+	return i;
+}
+function get_float(i) {
+	i = parseFloat(i);
+	if (isNaN(i)) {
+		return 0;
+	}
+	return i;
+}
+function html_decode(str) {
+	str = str.replace(/&lt;/g, "<");
+	str = str.replace(/&gt;/g, ">");
+	return str;
+}
+function niceSeriesText(text) {
+	text = text.toLowerCase();
+	text = $.trim(text);
+	text = text.replace(/\s/g, '');
+	return text;
+}
+function getValuesArray(arr, column, restrict_column, restrict_value) { /// extract document_name(COLUMN) from arr of arrs
+	if (typeof restrict_column === "undefined") {
+		restrict_column = "";
+	}
+	var vals = [];
+	if (!$.isEmptyObject(arr)) {
+		for(i in arr) {
+			if (restrict_column) {
+				if (arr[i][restrict_column] != restrict_value) {
+					continue;
+				}
+			}
+			vals.push(arr[i][column]);
+		}
+	}
+	return vals;
+}
+function isMobile() {
+	var w = $( window ).width();
+	if (w && w < 767) {
+		return true;
+	}
+	//if ($("#chartdiv").width() > 700) {
+	return false;
+}
+// url hash functions
+function buildHashParamsFromFilters(context) {
+    var filters = $('[data-filter]', context), params = {};
+    filters.each(function() {
+        var filter = $(this);
+        params[filter.data('filter')] = filter.val();
+    });
+    changeHashParams(params);
+}
+function getHashParams() {
+    var queryString = location.hash.replace(/^\#/, ''),
+        segments = queryString.split('&'), params = {};
+    for (var index in segments) {
+        var param = segments[index].split('=');
+        params[param[0]] = param[1];
+    }
+    return params;
+}
+function changeHashParam(param, value) {
+    var params = getHashParams();
+    params[param] = value;
+    changeHashParams(params);
+}
+function changeHashParams(params) {
+    var index = 0, query = [];
+    for (var key in params) {
+        if (!params[key]) {
+            continue;
+        }
+        query[index] = encodeURI(key + '=' + params[key]);
+        index++;
+    }
+    location.hash = '#' + query.join('&');
+}
+function changeFiltersByHash(context) {
+    var params = getHashParams();
+    for (var key in params) {
+        var filter = $('[data-filter="' + key + '"]', context);
+        if (filter.length) {
+            filter.val(params[key]);
+        }
+    }
+}
+function is_service(pr_type) {
+	return [1, 145, 146, 151, 149].indexOf(parseInt(pr_type)) > -1;
+}
+function nice_float(n, p) {
+    var sign = n < 0 ? -1 : 1;
+    p = get_int(p);
+	n = number_format(n + sign * 0.000001, p, ".", "", true);
+	return n;
+}
+function real_b(v) {
+	if (v == 0 || v == "0") {
+		return false;
+	}
+	return (v == "1" || v);
+}
+function get_emails_count(s) {
+	var c = s.split(/[;,\s]/);//console.log(c);
+	return c;
+}
+function safemul(a, b) {
+	var a = Decimal(a);
+	var b = Decimal(b);
+	var n = a.mul(b);
+	return n.toNumber();
+}
+function get_rum_page() {
+	var pageName = window.location.pathname;
+	pageName = pageName.substring(1);
+	var parts = pageName.split('/'); 
+	var rum_page = "";
+	var pl = parts.length;
+	if (pl >= 2) {
+		rum_page += parts[0]+"_"+parts[1];
+	} else if (pl == 1) {
+		rum_page += parts[0];
+	} else {
+		rum_page = "NOPAGE";
+	}
+	//console.log("pagename=",pageName, parts, rum_page);
+	//if (parts.length > 0) {
+	//	pageName = parts[1] 
+	//} console.log("parts: ",parts);
+	return rum_page;
+}
+function change_reviews_link(s) {
+	s = s.replace("REVIEWSLINK", '<a class="link-orange reviews-modal" href="javascript:;">Detalii&raquo;</a>');//console.log(s);
+	return s;
+}
+function open_notifications_menu(permission, message) {
+	if (permission) {
+		show_message(message);
+		//$("#dropdown-notifications-tooltip").attr("title", "test title")
+		//.tooltip('fixTitle')
+		//.tooltip("show");
+		return false;
+	}
+	$('html, body').animate({
+		scrollTop: 0
+	}, 1);
+	$("#notifications-button").dropdown("show");
+	
+	//$("#notifications-button").click();
+}
+class Eventable {
+	constructor() {
+		this.events = {};
+	}
+	event(name, ...params) {
+		if (name in this.events) {
+			for (let i in this.events[name]) {
+				if (typeof this.events[name][i] === 'function') {
+					if (this.events[name][i].call(this, ...params) === false) { // stop propagation
+						break;
+					}
+				}
+			}
+		}
+	}
+	on(name, callback) {
+		if (!(name in this.events)) {
+			this.events[name] = [];
+		}
+		this.events[name].push(callback);
+	}
+}
+var MobileFiltersidMobileForm = 0;
+class MobileFilters extends Eventable {
+	constructor(selector) {
+    	super();
+		this.selector = selector;
+		this.selectedElement = $(selector);
+		this.init();
+	}
+	init() {
+		this.initContainer();
+		this.initFilterBtn();
+		this.initApplyBtn();
+		this.buildResetBtn();
+		this.buildFilters();
+		this.addClearTextBtn();
+
+		MobileFiltersidMobileForm++;
+
+		setTimeout(() => this.event('init'));
+	}
+	initContainer() {
+		this.mobileContainer = $(`[data-target="${this.selector}"]`);
+		this.mobileContainer.closest('.dropdown').attr('id', `mobile-form-${MobileFiltersidMobileForm}`);
+		this.mobileContainer.closest('.dropdown-menu').removeClass('overflow-hidden');
+		this.mobileContainer.closest('.dropdown-menu').find('>.dropdown-item h6').attr('class', 'h4 py-2 px-0 font-bold');
+	}
+	initFilterBtn() {
+		this.filterBtn = this.mobileContainer.closest('.dropdown').find('[data-bs-toggle="dropdown"]');
+		this.filterBtn.attr('data-bs-display', 'static'); // force open down
+		this.filterBtn.on('click', () => {
+			$("html, body").animate({
+				scrollTop: this.filterBtn.offset().top - 68
+			});
+		});
+	}
+	initApplyBtn() {
+		this.applyBtn = this.mobileContainer.closest('.dropdown-menu').find('.apply-filters-mobile');
+		this.applyBtn.attr('class', 'text-base font-bold apply-filters-mobile btn btn-sm btn-warning px-2 py-1');
+		if (this.filterBtn.find(`.${this.applyBtn.data('ctobj')}-filters-count-b`).length === 0) {
+			this.filterBtn.append(`<span class="vr opacity-20 mx-3 ${this.applyBtn.data('ctobj')}-filters-count-b hidden"></span>`);
+			this.filterBtn.append(`<span class="text-xs text-warning ${this.applyBtn.data('ctobj')}-filters-count"></span>`);
+		}
+	}
+	buildResetBtn() {
+		this.resetBtn = $('<button/>');
+		this.resetBtn.attr('type', 'button');
+		this.resetBtn.attr('class', 'text-sm font-bold ms-auto btn btn-sm btn-link text-heading text-warning-hover text-underline px-2 py-1 me-1');
+		this.resetBtn.html(language.reset);
+		this.resetBtn.insertBefore(this.applyBtn);
+		this.resetBtn.on('click', () => {
+			let daterange = this.selectedElement.find('[data-filter="daterange-interval"]');
+			if (daterange.length > 0) {
+				daterange.data('initial-date', daterange.val());
+			}
+			this.event('reset');
+			this.selectedElement.trigger('reset');
+			if (daterange.length > 0) {
+				daterange.val(daterange.data('initial-date'));
+			}
+			this.applyBtn.trigger('click');
+		});
+	}
+	buildFilters() {
+		this.selectedElement.find('[data-has="mobile"]').each((index, item) => {
+			let th = $(item), clone = th.clone(), id = clone.attr('id') + '-mobile',
+				labelText = th.data('label-name') || th.closest('div').find(`label[for="${th.attr('id')}"]`).text(),
+				parentClass = th.data('parent-class') || '';
+			let template = `<div class="list-group-item list-group-item-action p-0 ${parentClass}">
+			  <div class="px-4 py-3 position-relative">
+				<a class="h5 font-semibold stretched-link collapsed" data-bs-toggle="collapse" href="#collapseFilter${index}-${MobileFiltersidMobileForm}" role="button" aria-expanded="false" aria-controls="collapseFilter${index}">
+				  <i class="fas fa-angle-down me-2 opacity-50"></i> ${labelText}
+				</a>
+			  </div>
+			  <div class="collapse bg-surface-secondary border-top px-4 py-3" id="collapseFilter${index}-${MobileFiltersidMobileForm}" data-bs-parent="#mobile-form-${MobileFiltersidMobileForm}">
+				<div id="container-${id}"></div>
+			  </div>
+			</div>`;
+			clone.attr('id', id);
+			clone.attr('data-is', 'mobile');
+			clone.attr('data-ac-append-to', `[data-target='${this.selector}']`); // for autocomplete
+			clone.removeAttr('data-has');
+			if (clone.hasClass('selectpicker')) {
+				clone.removeClass('selectpicker');
+				clone.addClass('form-control');
+				clone.addClass('form-control-sm');
+			}
+			this.mobileContainer.append(template);
+			this.mobileContainer.find(`#container-${id}`).append(clone);
+			if (clone.is('[type="checkbox"]')) {
+				this.mobileContainer.find(`#container-${id}`).append('<label class="form-check-label font-semibold ms-2">Afiseaza</label>');
+			}
+		});
+	}
+	addClearTextBtn() {
+		this.selectedElement.find('[type="text"][data-filter]').each((index, item) => {
+			let th = $(item), group = $('<div/>'), clear = $('<span/>'), parent = th.parent();
+			th.addClass('border-end-0');
+			th.addClass('pe-0');
+			group.attr('class', 'input-group input-group-sm position-relative');
+			group.append(th);
+			clear.attr('class', 'input-group-text bg-white ps-1 pe-1 border-start-0');
+			clear.html('<i class="far fa-times-circle cursor-pointer hidden"></i>');
+			clear.on('click', () => {
+				if (th.val() === '') {
+					return;
+				}
+				th.val('');
+				$('[data-filter="' + th.data('filter') + '"]').val('');
+				this.event('clear', th);
+				this.event('clear-' + th.data('filter'));
+				th.trigger('keydown');
+				th.trigger('blur');
+			});
+			th.on('autocomplete.select keydown', () => {
+				setTimeout(() => {
+					let hasChanged = th.data('last-value') !== undefined && th.data('last-value') !== th.val();
+					let isCleared = th.val() === '';
+					clear.find('i').toggleClass('hidden', isCleared);
+					th.data('last-value', th.val());
+					if (isCleared && hasChanged) {
+						this.event('clear', th);
+						this.event('clear-' + th.data('filter'));
+					}
+				}, 10);
+			});
+			group.append(clear);
+			parent.append(group);
+			th.trigger('autocomplete.select');
+		});
+	}
+}
