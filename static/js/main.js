@@ -377,6 +377,9 @@ async function handleVoucherFileUpload() {
  * Afișare rezultate voucher din upload Tab 1 (fără comenzi)
  */
 function displayVoucherResultsFromUpload(data) {
+    // Salvare date pentru automatizare
+    currentBonuriData = data.bonuri;
+
     // Afișare statistici
     document.getElementById('totalBonuri').textContent = data.total_bonuri;
     document.getElementById('totalBucati').textContent = data.total_bucati;
@@ -492,6 +495,70 @@ function displayVoucherResults(data) {
     // Afișare secțiune rezultate
     resultsSectionVoucher.style.display = 'block';
     resultsSectionVoucher.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Afișare buton automatizare
+    const startAutomationBtn = document.getElementById('startAutomationBtn');
+    if (startAutomationBtn) {
+        startAutomationBtn.style.display = 'inline-flex';
+    }
+}
+
+// ========== AUTOMATION FUNCTIONALITY ==========
+
+let currentBonuriData = null;
+
+/**
+ * Start automatizare Oblio
+ */
+async function startOblioAutomation() {
+    if (!currentBonuriData || currentBonuriData.length === 0) {
+        showVoucherError('Nu există bonuri de procesat!');
+        return;
+    }
+
+    const startAutomationBtn = document.getElementById('startAutomationBtn');
+    const originalHTML = startAutomationBtn.innerHTML;
+
+    try {
+        // Confirmă acțiunea
+        if (!confirm(`Vrei să pornești automatizarea pentru ${currentBonuriData.length} bonuri?\n\nBrowser-ul se va deschide automat și va completa bonurile în Oblio.`)) {
+            return;
+        }
+
+        // Afișare loading
+        startAutomationBtn.disabled = true;
+        startAutomationBtn.innerHTML = `
+            <div class="spinner" style="width: 20px; height: 20px; margin-right: 0.5rem;"></div>
+            Automatizare în curs...
+        `;
+
+        // Trimite cerere către backend
+        const response = await fetch('/start-automation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bonuri: currentBonuriData
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Eroare la pornire automatizare');
+        }
+
+        // Afișare mesaj de succes
+        alert(`✅ Automatizare pornită!\n\n${data.message}\n\nVerifică terminalul pentru progres.`);
+
+    } catch (error) {
+        showVoucherError('Eroare la pornire automatizare: ' + error.message);
+    } finally {
+        // Restaurează butonul
+        startAutomationBtn.disabled = false;
+        startAutomationBtn.innerHTML = originalHTML;
+    }
 }
 
 /**
@@ -584,4 +651,10 @@ document.addEventListener('DOMContentLoaded', () => {
             switchTab(tabId);
         });
     });
+
+    // Setup automation button
+    const startAutomationBtn = document.getElementById('startAutomationBtn');
+    if (startAutomationBtn) {
+        startAutomationBtn.addEventListener('click', startOblioAutomation);
+    }
 });

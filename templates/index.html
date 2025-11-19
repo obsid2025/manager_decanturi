@@ -267,13 +267,22 @@
                     <div class="table-card">
                         <div class="table-header">
                             <h3>📋 Bonuri de Producție (Agregate pe SKU)</h3>
-                            <button class="btn btn-export" id="copyAllBtn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                </svg>
-                                Copiază toate SKU-urile
-                            </button>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-export" id="copyAllBtn">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                    Copiază toate SKU-urile
+                                </button>
+                                <button class="btn btn-success" id="startAutomationBtn" style="display: none; background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                                    </svg>
+                                    🤖 START AUTOMATIZARE OBLIO
+                                </button>
+                            </div>
                         </div>
 
                         <div class="table-responsive">
