@@ -955,43 +955,111 @@ class OblioAutomation:
             save_button.click()
             time.sleep(4)
 
-            # PASUL 6: Verifică succesul
-            logger.info("🔍 Verificare confirmare salvare...")
-            time.sleep(2)
+            # PASUL 6: Verifică succesul REAL în baza de date Oblio
+            logger.info("🔍 Verificare dacă bonul a fost creat în baza de date Oblio...")
+            time.sleep(3)  # Așteptăm să se proceseze complet
 
-            # Caută mesaj de succes sau redirect
-            success_indicators = [
-                (By.CSS_SELECTOR, ".alert-success"),
-                (By.CSS_SELECTOR, ".success"),
-                (By.XPATH, "//*[contains(text(), 'succes')]"),
-                (By.XPATH, "//*[contains(text(), 'creat')]")
-            ]
+            current_url = self.driver.current_url
+            logger.info(f"📍 URL curent după submit: {current_url}")
 
             success = False
-            for by, selector in success_indicators:
-                try:
-                    element = self.driver.find_element(by, selector)
-                    if element.is_displayed():
-                        logger.info(f"✅ Mesaj succes găsit: {element.text[:100]}")
+            production_id = None
+
+            # Metodă 1: Verifică dacă am fost redirectat la preview_production (cel mai sigur indicator)
+            if "/stock/preview_production/" in current_url:
+                # Extragem ID-ul bonului din URL
+                import re
+                match = re.search(r'/preview_production/(\d+)', current_url)
+                if match:
+                    production_id = match.group(1)
+                    logger.info(f"✅ REDIRECT LA BON NOU! ID producție: {production_id}")
+
+                    # Verificăm că există badge de status pe pagină
+                    try:
+                        badge = WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, ".badge"))
+                        )
+                        badge_text = badge.text
+                        logger.info(f"✅ Status bon: {badge_text}")
                         success = True
-                        break
-                except:
-                    continue
+                    except:
+                        logger.warning("⚠️ Nu s-a găsit badge de status, dar URL-ul e corect")
+                        success = True  # URL-ul e indicator suficient
 
-            # Verifică URL-ul (dacă s-a redirectat, probabil e success)
-            current_url = self.driver.current_url
-            if "production" in current_url and "edit" not in current_url:
-                logger.info("✅ Pagina a fost refreshed - probabil success!")
-                success = True
+            # Metodă 2: Dacă nu am fost redirectat, verificăm în raportul de producție
+            if not success:
+                logger.info("🔍 Navigare la raportul de producție pentru verificare...")
+                self.driver.get("https://www.oblio.eu/report/production")
+                time.sleep(3)
 
+                # Căutăm un bon cu data de azi și SKU-ul nostru
+                from datetime import datetime
+                today = datetime.now().strftime("%d.%m.%Y")
+                logger.info(f"🔍 Căutare bon cu data {today} și SKU {sku}...")
+
+                try:
+                    # Căutăm în tabel un rând care conține data de azi
+                    rows = self.driver.find_elements(By.CSS_SELECTOR, "#content-table tbody tr.table_row")
+                    logger.info(f"📊 Găsite {len(rows)} bonuri în raport")
+
+                    for row in rows[:10]:  # Verificăm primele 10 bonuri (cele mai recente)
+                        try:
+                            # Verificăm data
+                            date_elem = row.find_element(By.CSS_SELECTOR, ".text-muted")
+                            date_text = date_elem.text.strip()
+
+                            if today in date_text:
+                                logger.info(f"🔍 Găsit bon cu data de azi: {date_text}")
+
+                                # Verificăm SKU-ul (există în text sau în link)
+                                row_text = row.text.lower()
+                                sku_lower = sku.lower()
+
+                                # Căutăm SKU-ul în textul rândului
+                                if sku_lower in row_text or sku.replace("-", " ").lower() in row_text:
+                                    # Extragem numărul bonului
+                                    bon_link = row.find_element(By.CSS_SELECTOR, "a.font-bold")
+                                    bon_number = bon_link.text.strip()
+
+                                    logger.info(f"✅ GĂSIT BON NOU! {bon_number} din {date_text}")
+                                    logger.info(f"✅ Conține SKU: {sku}")
+
+                                    # Extragem ID-ul din link
+                                    bon_href = bon_link.get_attribute('href')
+                                    match = re.search(r'/preview_production/(\d+)', bon_href)
+                                    if match:
+                                        production_id = match.group(1)
+                                        logger.info(f"✅ ID producție: {production_id}")
+
+                                    success = True
+                                    break
+                        except Exception as e:
+                            logger.debug(f"⏭️ Rând ignorat: {e}")
+                            continue
+
+                    if not success:
+                        logger.warning(f"⚠️ NU s-a găsit niciun bon nou cu data {today} și SKU {sku}")
+
+                except Exception as e:
+                    logger.error(f"❌ Eroare la verificarea raportului: {e}")
+
+            # Rezultat final
             if success:
-                self._log(f"🎉 BON CREAT CU SUCCES! SKU={sku}, Cantitate={quantity}", 'success')
+                msg = f"🎉 BON CREAT CU SUCCES! SKU={sku}, Cantitate={quantity}"
+                if production_id:
+                    msg += f", ID={production_id}"
+                self._log(msg, 'success')
                 self.stats['success'] += 1
                 return True
             else:
-                self._log(f"⚠️ Nu s-a detectat confirmare clară, dar probabil e OK", 'warning')
-                self.stats['success'] += 1
-                return True
+                self._log(f"❌ BONUL NU A FOST CREAT! SKU={sku} nu apare în raportul de producție", 'error')
+                self.stats['failed'] += 1
+                self.stats['errors'].append({
+                    'sku': sku,
+                    'quantity': quantity,
+                    'error': 'Bon nu a fost găsit în raportul de producție după submit'
+                })
+                return False
 
         except Exception as e:
             self._log(f"❌ EROARE la crearea bonului: {e}", 'error')
