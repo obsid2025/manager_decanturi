@@ -84,8 +84,9 @@ class OblioAutomation:
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--window-size=1920,1080')
 
-            # Chromium pe Ubuntu
-            chrome_options.binary_location = '/snap/bin/chromium'
+            # Chromium pe Ubuntu (snap)
+            # Nu setăm binary_location - Selenium va găsi automat chromium-browser
+            # chrome_options.binary_location = '/snap/bin/chromium'
 
             logger.info("👁️ Mod headless activat (server)")
 
