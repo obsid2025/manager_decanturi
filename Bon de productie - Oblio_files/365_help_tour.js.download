@@ -1,0 +1,48 @@
+class HelpTour extends Help {
+	constructor() {
+		super('-tour');
+		this.zIndex = '10000';
+	}
+	back() {
+		switch (this.getStep()) {
+			case 2: // current is 2, going to 1
+			case 12: // current is 12, going to 11
+				this.toggleSection('issue');
+				break;
+			case 5: // current is 5, going to 4
+				this.toggleSection('settings');
+				break;
+			case 18: // current is 18, going to 17
+				this.toggleSection('reports');
+				break;
+		}
+		super.back();
+	}
+	forward() {
+		switch (this.getStep()) {
+			case 1:
+				this.toggleSection('settings');
+				break;
+			case 4: // we move to 5
+			case 17: // we move to 18 , back where we started
+				this.toggleSection('issue');
+				break;
+			case 11: // we move to 12
+				this.toggleSection('reports');
+				break;
+		}
+		super.forward();
+	}
+	toggleSection(section) {
+		let sections = {
+			issue: ['show', 'hide', 'hide'],
+			reports: ['hide', 'show', 'hide'],
+			settings: ['hide', 'hide', 'show'],
+		}[section];
+		setTimeout(() => {
+			$('#navbarDropdownMenuEmitere').dropdown(sections[0]);
+			$('#navbarDropdownMenuReports').dropdown(sections[1]);
+			$('#navbarDropdownMenuSetari').dropdown(sections[2]);
+		});
+	}
+}

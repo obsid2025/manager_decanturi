@@ -1,0 +1,106 @@
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║     OBSID DECANT MANAGER - QUICK START                   ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+
+🚀 DEPLOYMENT IN 2 PASI SIMPLI:
+
+═══════════════════════════════════════════════════════════
+
+PASUL 1: RULEAZA SCRIPTUL AUTOMAT
+═══════════════════════════════════════════════════════════
+
+1. Deschide PowerShell ca Administrator
+
+2. Navighează la folder:
+   cd "C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi"
+
+3. Rulează:
+   .\setup-git-and-deploy.ps1
+
+   (Dacă apare eroare de execution policy, rulează mai întâi:)
+   Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+
+4. Urmează instrucțiunile scriptului:
+   - Va crea repository pe GitHub automat (dacă ai GitHub CLI)
+   - SAU te va ghida să îl creezi manual
+   - Va face push automat
+
+5. La final, se va deschide un fișier cu instrucțiuni pentru Coolify
+
+
+═══════════════════════════════════════════════════════════
+
+PASUL 2: CONFIGURARE IN COOLIFY
+═══════════════════════════════════════════════════════════
+
+1. Login la Coolify Dashboard
+
+2. New Resource → "Git Repository"
+
+3. Configurare:
+   - Repository URL: (vezi în COOLIFY_INSTRUCTIONS.txt)
+   - Branch: main
+   - Build Pack: Dockerfile
+   - Base Directory: /
+
+4. Settings:
+   - Name: OBSID Decant Manager
+   - Domain: decant.obsid.ro
+   - Port: 5000
+   - Enable HTTPS: ✅
+
+5. Persistent Storage:
+   → Add Volume Mount: /app/uploads
+   → Add Volume Mount: /app/exports
+
+6. Click "Deploy" 🚀
+
+7. Așteaptă 2-3 minute
+
+8. GATA! → https://decant.obsid.ro
+
+
+═══════════════════════════════════════════════════════════
+
+✅ VERIFICARE:
+═══════════════════════════════════════════════════════════
+
+Health Check: https://decant.obsid.ro/health
+Aplicație: https://decant.obsid.ro
+
+
+═══════════════════════════════════════════════════════════
+
+📞 LINK-URI UTILE:
+═══════════════════════════════════════════════════════════
+
+Site: https://www.obsid.ro
+Dashboard: https://www.obsid.ro/gomag
+
+
+═══════════════════════════════════════════════════════════
+
+🔄 UPDATE-URI IN VIITOR:
+═══════════════════════════════════════════════════════════
+
+Când vrei să schimbi ceva în aplicație:
+
+1. Faci modificări în fișiere
+2. cd "C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi"
+3. git add .
+4. git commit -m "Descriere modificare"
+5. git push
+6. În Coolify: click "Redeploy"
+
+
+═══════════════════════════════════════════════════════════
+
+🎉 GATA! SUCCES!
+═══════════════════════════════════════════════════════════
+
+Orice problemă, verifică:
+- COOLIFY_INSTRUCTIONS.txt - instrucțiuni detaliate
+- README.md - documentație completă
+

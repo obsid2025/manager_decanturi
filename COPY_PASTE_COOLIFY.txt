@@ -1,0 +1,185 @@
+========================================
+OBSID DECANT MANAGER - COOLIFY SETUP
+========================================
+
+📋 FIȘIERE GATA DE COPY-PASTE PENTRU COOLIFY:
+
+========================================
+1️⃣ DOCKERFILE
+========================================
+Locație: C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi\Dockerfile
+
+Conținut:
+---------
+FROM python:3.11-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+COPY templates ./templates/
+COPY static ./static/
+RUN mkdir -p uploads exports
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
+EXPOSE 5000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 CMD curl -f http://localhost:5000/health || exit 1
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "app:app"]
+
+
+========================================
+2️⃣ DOCKER-COMPOSE.YML
+========================================
+Locație: C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi\docker-compose.yml
+
+Conținut:
+---------
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: obsid-decant-manager
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports
+    environment:
+      - FLASK_ENV=production
+      - TZ=Europe/Bucharest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+========================================
+3️⃣ REQUIREMENTS.TXT
+========================================
+Locație: C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi\requirements.txt
+
+Conținut:
+---------
+Flask==3.0.0
+pandas==2.1.4
+openpyxl==3.1.2
+Werkzeug==3.0.1
+gunicorn==21.2.0
+
+
+========================================
+📁 STRUCTURA COMPLETĂ FIȘIERE
+========================================
+
+Toate fișierele sunt în:
+C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi\
+
+Fișiere necesare:
+✅ Dockerfile
+✅ docker-compose.yml
+✅ requirements.txt
+✅ app.py
+✅ .dockerignore
+✅ templates/index.html
+✅ static/css/style.css
+✅ static/js/main.js
+
+
+========================================
+🚀 PAȘI RAPIZI ÎN COOLIFY
+========================================
+
+OPȚIUNEA 1 - Docker Compose (CEL MAI SIMPLU):
+----------------------------------------------
+1. Login în Coolify
+2. New Project → "OBSID Decant"
+3. Add Resource → "Docker Compose"
+4. Upload/Paste: docker-compose.yml (conținutul de mai sus)
+5. Settings:
+   - Domain: decant.obsid.ro
+   - Enable HTTPS: ✅
+   - Port: 5000
+6. Deploy
+7. Așteaptă build (2-3 minute)
+8. Accesează: https://decant.obsid.ro
+
+
+OPȚIUNEA 2 - Din Repository Git:
+---------------------------------
+1. Push fișierele pe GitHub/GitLab
+2. În Coolify: New Resource → Public Repository
+3. URL: https://github.com/YOUR-REPO/obsid-decant
+4. Build Pack: Dockerfile
+5. Domain: decant.obsid.ro
+6. Deploy
+
+
+OPȚIUNEA 3 - Manual pe Server:
+-------------------------------
+# Pe Windows PowerShell:
+cd "C:\OBSID SRL\Script-uri Obsid\pregatire_decanturi"
+scp -r * ubuntu@130.61.223.102:/opt/obsid-decant/
+
+# Pe Server:
+ssh ubuntu@130.61.223.102
+cd /opt/obsid-decant
+sudo docker-compose up -d --build
+
+
+========================================
+🔧 CONFIGURARE DNS
+========================================
+
+Înainte de deploy, configurează DNS:
+
+Domeniu: decant.obsid.ro
+Tip: A Record
+Valoare: 130.61.223.102
+TTL: 300
+
+Verificare:
+nslookup decant.obsid.ro
+
+
+========================================
+✅ VERIFICARE DUPĂ DEPLOY
+========================================
+
+1. Health Check:
+   https://decant.obsid.ro/health
+
+   Răspuns așteptat:
+   {"status":"healthy","service":"OBSID Decant Manager"}
+
+2. Aplicație:
+   https://decant.obsid.ro
+
+3. Test funcționalitate:
+   - Upload 45.xlsx
+   - Verifică raport
+   - Export Excel
+
+
+========================================
+📞 LINK-URI
+========================================
+
+Aplicație: https://decant.obsid.ro
+Health: https://decant.obsid.ro/health
+Site: https://www.obsid.ro
+Dashboard: https://www.obsid.ro/gomag
+
+
+========================================
+🎯 GATA DE FOLOSIT!
+========================================
+
+Toate fișierele sunt pregătite în folder-ul curent.
+Copiază-le în Coolify sau rulează docker-compose direct.
+
+Succes! 🚀

@@ -93,24 +93,48 @@ def proceseazaComenzi(fisier_path):
     """
     Procesează fișierul cu comenzi și returnează raportul de producție
     Detectează automat coloanele necesare (ordinea nu mai contează)
+    Returnează și SKU-urile pentru fiecare produs
     """
     df = pd.read_excel(fisier_path)
 
     # Detectare automată coloane
     coloana_status, coloana_produse = detecteazaColoane(df)
 
+    # Verificare coloană atribute (pentru SKU)
+    coloana_atribute = None
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['atribute', 'atribut']):
+            coloana_atribute = col
+            break
+
     # Filtrare comenzi finalizate (flexibil - acceptă variante)
     df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata', case=False, na=False)]
 
-    raport = defaultdict(int)
+    # Raport agregat pe SKU (în loc de doar pe nume+cantitate)
+    raport = defaultdict(lambda: {'nume': '', 'cantitate_ml': 0, 'bucati': 0})
 
     for idx, row in df_finalizate.iterrows():
-        produse = str(row[coloana_produse]).split(' | ')
-        for produs in produse:
+        produse_text = str(row[coloana_produse])
+        atribute_text = str(row[coloana_atribute]) if coloana_atribute else ''
+
+        produse = produse_text.split(' | ')
+
+        # Extrage SKU-uri din atribute
+        sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text) if atribute_text else []
+
+        for i, produs in enumerate(produse):
             info = extrageInfoProdus(produs.strip())
             if info:
                 nume_parfum, cantitate_ml, numar_bucati = info
-                raport[(nume_parfum, cantitate_ml)] += numar_bucati
+
+                # Obține SKU pentru acest produs
+                sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+
+                # Agregare pe SKU
+                raport[sku]['nume'] = nume_parfum
+                raport[sku]['cantitate_ml'] = cantitate_ml
+                raport[sku]['bucati'] += numar_bucati
 
     return raport, len(df_finalizate), len(df)
 
@@ -118,35 +142,47 @@ def proceseazaComenzi(fisier_path):
 def genereazaTabelRaport(raport):
     """
     Generează datele pentru tabel în format optimizat
-    (parfumul apare o singură dată pe coloana A)
+    (parfumul apare o singură dată pe coloana A, cu SKU inclus)
     """
     # Grupare pe parfum
     parfumuri = {}
-    for (nume_parfum, cantitate_ml), bucati in raport.items():
+    for sku, info in raport.items():
+        nume_parfum = info['nume']
+        cantitate_ml = info['cantitate_ml']
+        bucati = info['bucati']
+
         if nume_parfum not in parfumuri:
             parfumuri[nume_parfum] = {}
-        parfumuri[nume_parfum][cantitate_ml] = bucati
+        if cantitate_ml not in parfumuri[nume_parfum]:
+            parfumuri[nume_parfum][cantitate_ml] = []
+
+        parfumuri[nume_parfum][cantitate_ml].append({
+            'sku': sku,
+            'bucati': bucati
+        })
 
     # Construire rânduri pentru tabel
     randuri = []
     for nume_parfum in sorted(parfumuri.keys()):
         cantitati = parfumuri[nume_parfum]
-        total_bucati = sum(cantitati.values())
+        total_bucati = sum(sum(item['bucati'] for item in items) for items in cantitati.values())
 
         # Sortare cantități
         cantitati_sortate = sorted(cantitati.items())
 
         # Primul rând - cu numele parfumului
         primul_rand = True
-        for ml, bucati in cantitati_sortate:
-            randuri.append({
-                'parfum': nume_parfum if primul_rand else '',
-                'cantitate_ml': ml,
-                'bucati': bucati,
-                'total': total_bucati if primul_rand else '',
-                'este_prim': primul_rand
-            })
-            primul_rand = False
+        for ml, items in cantitati_sortate:
+            for item in items:
+                randuri.append({
+                    'parfum': nume_parfum if primul_rand else '',
+                    'sku': item['sku'],
+                    'cantitate_ml': ml,
+                    'bucati': item['bucati'],
+                    'total': total_bucati if primul_rand else '',
+                    'este_prim': primul_rand
+                })
+                primul_rand = False
 
     return randuri
 
@@ -265,31 +301,47 @@ def upload_file():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], save_filename)
         file.save(filepath)
 
-        # Procesare comenzi
+        # Procesare comenzi (returnează raport cu SKU-uri)
         raport, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
 
-        # Generare tabel
+        # Generare tabel pentru Tab 1 (Raport Decanturi)
         randuri = genereazaTabelRaport(raport)
 
-        # Calcul sumar
+        # Calcul sumar pentru Tab 1
         sumar_cantitati = defaultdict(int)
-        for (nume_parfum, cantitate_ml), bucati in raport.items():
-            sumar_cantitati[cantitate_ml] += bucati
+        for sku, info in raport.items():
+            sumar_cantitati[info['cantitate_ml']] += info['bucati']
 
         total_decanturi = sum(sumar_cantitati.values())
 
-        # Pregătire răspuns
+        # Generare date pentru Tab 2 (Bonuri de Producție)
+        # Sortare după cantitate (descrescător)
+        bonuri_sortate = sorted(raport.items(), key=lambda x: x[1]['bucati'], reverse=True)
+        bonuri = []
+        for sku, info in bonuri_sortate:
+            bonuri.append({
+                'sku': sku,
+                'nume': f"Decant {info['cantitate_ml']}ml {info['nume']}",
+                'cantitate': info['bucati']
+            })
+
+        # Pregătire răspuns (include date pentru ambele taburi)
         return jsonify({
             'success': True,
             'filename': save_filename,
             'comenzi_finalizate': comenzi_finalizate,
             'total_comenzi': total_comenzi,
             'comenzi_anulate': total_comenzi - comenzi_finalizate,
+            # Date pentru Tab 1 (Raport Decanturi)
             'randuri': randuri,
             'sumar': {
                 'cantitati': dict(sorted(sumar_cantitati.items())),
                 'total': total_decanturi
-            }
+            },
+            # Date pentru Tab 2 (Bonuri de Producție)
+            'bonuri': bonuri,
+            'total_bonuri': len(bonuri),
+            'total_bucati': total_decanturi
         })
 
     except Exception as e:
@@ -350,16 +402,17 @@ def export_excel(filename):
         if not os.path.exists(filepath):
             return jsonify({'error': 'Fișierul nu există'}), 404
 
-        # Procesare comenzi
+        # Procesare comenzi (returnează raport cu SKU-uri)
         raport, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
 
-        # Pregătire date pentru Excel
+        # Pregătire date pentru Excel (include SKU)
         date_raport = []
-        for (nume_parfum, cantitate_ml), bucati in sorted(raport.items()):
+        for sku, info in sorted(raport.items(), key=lambda x: (x[1]['nume'], x[1]['cantitate_ml'])):
             date_raport.append({
-                'Parfum': nume_parfum,
-                'Cantitate (ml)': cantitate_ml,
-                'Bucăți': bucati
+                'SKU': sku,
+                'Parfum': info['nume'],
+                'Cantitate (ml)': info['cantitate_ml'],
+                'Bucăți': info['bucati']
             })
 
         df_raport = pd.DataFrame(date_raport)

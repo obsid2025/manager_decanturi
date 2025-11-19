@@ -1,0 +1,1720 @@
+function changeRowsPerPageSettings(response, fn) {
+	// chance user settings (rows_per_page
+	$('#change_settings').submit(function(e) {
+		e.preventDefault();
+		var rowsPerPage = $(this).find('#rows_per_page'),
+			data = {
+			rows_per_page: rowsPerPage.val()
+		}
+		var jqxhr = getjqxhr("/account/do_results_per_page/", data, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			switch (data.type) {
+				case 'err':
+					response.html('<div role="alert" class="alert alert-danger alert-dismissible fade in"> <button aria-label="Close" data-dismiss="alert" class="close" type="button"><span aria-hidden="true">&times;</span></button> <p>' + data.message + '</p> </div>');
+					dismissAlert();
+					break;
+				case 'ok':
+					response.html('<div role="alert" class="alert alert-success alert-dismissible fade in"> <button aria-label="Close" data-dismiss="alert" class="close" type="button"><span aria-hidden="true">&times;</span></button> <p>' + data.message + '</p> </div>');
+					fn();
+					dismissAlert();
+			}
+
+		}).fail(function() {
+			show_error_page();
+		});
+		return false;
+	});
+}
+function changeRowsPerPageSettingsAdmin(response, fn) {
+	// chance admin settings (rows_per_page)
+	$('#change_settings').submit(function(e) {
+		e.preventDefault();
+		var rowsPerPage = $(this).find('#rows_per_page'),
+			settingName = $(this).find('#setting_name'),
+			data = {
+				setting_value: rowsPerPage.val(),
+				setting: settingName.val()
+			}
+		var jqxhr = getjqxhr("/admin/do_change_setting/", data, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login_admin(data);
+			wait_cursor(false);
+			switch (data.type) {
+				case 'err':
+					response.html('<div role="alert" class="alert alert-danger alert-dismissible fade in"> <button aria-label="Close" data-dismiss="alert" class="close" type="button"><span aria-hidden="true">&times;</span></button> <p>' + data.message + '</p> </div>');
+					dismissAlert();
+					break;
+				case 'ok':
+					response.html('<div role="alert" class="alert alert-success alert-dismissible fade in"> <button aria-label="Close" data-dismiss="alert" class="close" type="button"><span aria-hidden="true">&times;</span></button> <p>' + data.message + '</p> </div>');
+					fn();
+					dismissAlert();
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+		return false;
+	});
+}
+function barcode(code) {
+	if (barcodeCheck(code)) {
+		return '<a href="javascript:barcodePrint(\'' + code + '\')" title="' + language.print_barcode_message + '" data-bs-toggle="tooltip" class="text-primary">\
+			<i class="fa fa-qrcode" style="vertical-align:middle;"></i> ' + code + '</a> ';
+	}
+	return code;
+}
+function barcodeCheck(code) {
+	return [12, 13].indexOf(code.length) !== -1 && code.match(/^[0-9]+$/);
+}
+function barcodePrint(code) {
+	var frameId = 'barcodePrintFrame',
+		frame = $('#' + frameId);
+	if (frame.length === 0) {
+		frame = $('<iframe/>')
+			.attr('id', frameId)
+			.css({height:100, width:'auto', border:0, position:'absolute', top:0, visibility:'hidden'});
+		$(document.body).append(frame);
+	}
+	frame.attr('src', '/utils/barcode?code=' + code);
+	frame.on('load', function() {
+		this.contentWindow.focus();
+		this.contentWindow.print();
+	});
+}
+function dismissAlert() {
+	$(".alert-dismissible").delay(5000).fadeTo(500, 0).slideUp(500, function(){
+		$(this).alert('close');
+	});
+}
+function getDates(daterange) {
+	return daterange.val().split(' - ');
+}
+function getDateObject(date) {
+	var exp = date.split('/');
+	return new Date(exp[2], niceDateChunk(exp[1] - 1), niceDateChunk(exp[0]));
+}
+function notice_has_draft_invoice(doc) {
+	if (doc.hasOwnProperty("invoiced_a") && !$.isEmptyObject(doc["invoiced_a"])) {
+		for(i in doc["invoiced_a"]) {
+			if (doc["invoiced_a"][i]["draft"] == "1") {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+// create action buttons
+function createActionButtons(doc, include_btn, in_frame, show_viewing, root_uri, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if(typeof root_uri === 'undefined'){
+    	root_uri = "docs";
+	};
+    if (typeof options === 'undefined') {
+        options = {};
+    }
+
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	var from_nt = false;
+	if (doc.from_nt == "1") {
+		from_nt = true;
+	}
+	var was_printed = false;
+	var bf_has_invoices = false;
+	if (doc.fk_doc_id == '6') {
+		if (options.hasOwnProperty("was_printed") && options.was_printed != "0") {
+			was_printed = true;
+		}
+		if (options.hasOwnProperty("invoices") && !$.isEmptyObject(options.invoices)) {
+			bf_has_invoices = true;
+		}
+	}
+	// doc actions
+	if (show_viewing) {
+		if (root_uri == "subscription") {
+			html += '<li><a class="dropdown-item" href="/'+root_uri+'/show/'+doc.doc+'/'+doc.id+'">'+language.viewing+'</a></li>';
+		} else if (doc.fk_doc_id == '6') {
+            html += '<li><a class="dropdown-item tax_receipt_item" href="javascript:;" data-id="'+doc.id+'">'+language.viewing+'</a></li>';
+        } else {
+			html += '<li><a class="dropdown-item preview_doc" href="/'+root_uri+'/preview/'+doc.doc+'/'+doc.id+'" data-is-preview="1">'+language.viewing+'</a></li>';
+		}
+	} //console.log(doc);
+	var option_can_edit = true;
+	if (('einvoice_sent' in doc && doc.einvoice_sent)) {
+		option_can_edit = false;
+	}
+	if (('einvoice_standby' in doc && doc.einvoice_standby)) {
+		option_can_edit = false;
+	}
+	if (doc.can_save == "1" && doc.fk_doc_id != '6' && !from_nt && option_can_edit) { // can save
+		html += '<li><a class="dropdown-item" href="/'+root_uri+'/edit/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.edit+'</a></li>';
+	} //console.log(doc);
+	if (doc.can_activate == "1") { // can activate subscription
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item activate-doc">'+language.activate+'</a></li>';
+	}
+	if (doc.can_deactivate == "1") { // can deactivate subscription
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item deactivate-doc">'+language.deactivate+'</a></li>';
+	}
+	if (doc.can_print_tax_receipt == "1") { // can print tax receipt
+		//html += '<li><a href="javascript:;" onclick="printTaxReceipt(\''+doc.id+'\', '+in_frame+', '+options.was_printed+')">'+(options.was_printed > 0 ? language.reprint_tax_receipt : language.print_tax_receipt)+'</a></li>';
+		html += '<li><a class="dropdown-item tax_receipt_item" href="javascript:;" data-id="'+doc.id+'">'+(options.was_printed > 0 ? language.reprint_tax_receipt : language.print_tax_receipt)+'</a></li>';
+	}
+    if (doc.hasOwnProperty('options')) {
+        switch (doc.fk_doc_id) {
+            case '6':
+                if (doc.options.hasOwnProperty('collectId') && doc.options.collectId > 0) {
+                    html += '<li><a href="#" class="dropdown-item discount-collect" data-id="' + doc.options.collectId + '">' + (language.deconteaza).ucfirst() + '</a></li>';
+                }
+                break;
+        }
+    }
+	if (doc.can_modify == "1" && !from_nt && option_can_edit) { // can modify
+        if (doc.fk_doc_id == '6') {
+            //html += '<li><a href="javascript:modifyTaxReceiptNumber(' + doc.id + ')">'+language.edit+'</a></li>'; 
+        } else {
+            html += '<li><a class="dropdown-item" href="/'+root_uri+'/edit/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.edit+'</a></li>';
+        }
+	}
+	if (doc.can_email == "1") { // can email
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item email-doc">'+language.send_to_email+'</a></li>';
+	}
+	if (root_uri != "subscription") {
+		if ([1, 2, 3, 4].indexOf(parseInt(doc.fk_doc_id)) > -1) { // can share
+			html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item share-doc">'+language.share+'</a></li>';
+		}
+	}
+	if (doc.can_collect == "1" && (!doc.frmi || (doc.frmi_collected || $.isEmptyObject(doc.collectedIds)) ) ) { // can collect
+		var bfs_text = "";
+		var bfs = getValuesArray(doc.invoiced_a, "text", "type", "6");
+		if (bfs.length > 0) {
+			bfs_text = cleanString(bfs.join(","));
+		}
+		html += '<li><a class="dropdown-item" href="javascript:;" onclick="collectDoc(\''+doc.id+'\', '+in_frame+', \''+bfs_text+'\', \''+doc.series_ao+'\')"';
+		if (doc.frmi) {
+			html += ' data-toggle="tooltip" title="'+language.frmi_collect+'" ';
+		}
+		html += '>'+language.collects+'</a></li>';
+		if (doc.has_credits ) {
+            var bfsStatus = getValuesArray(doc.invoiced_a, "annuled", "type", "6");
+            if (bfsStatus.length > 0) {
+                for (var i in bfsStatus) {
+                    if (bfsStatus[i] == '0') {
+                        bfs_text = "";
+                    }
+                }
+            }
+			html += '<li><a class="dropdown-item" href="javascript:;" onClick="showCreditsDoc('+doc.id+', '+in_frame+', \''+bfs_text+'\', \''+doc.series_ao+'\')">'+language.use_credits+'</a></li>';
+		}
+	}
+	if ((doc.marked == "1" && doc.annuled == "0") || ('stornoId' in doc && doc.stornoId > 0)) {
+		let docId = 'stornoId' in doc ? doc.stornoId : doc.id;
+		html += '<li><a class="dropdown-item" href="javascript:;" onclick="show_add_operation_storno_bf('+docId+');">'+language.return_payment+'</a></li>';
+	}
+	if (doc.can_storno == "1") { // can storno
+		//html += '<li><a href="/'+root_uri+'/storno/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.storno+'</a></li>';
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item storno-doc" data-multiple-tvas="'+doc.multiple_tvas+'"';
+		if (doc.partialy_collected == "1" || doc.fully_collected == "1") {
+			html += ' data-storno-message="1"';
+		} else {
+			html += ' data-storno-message="0"';
+		}
+		html += '>'+language.storno+'</a></li>';
+	} //if (doc.id == 2189610) console.log(doc, options, bf_has_invoices);
+	if (doc.fk_doc_id == '6' && doc.annuled == "0") {
+		if (was_printed && !bf_has_invoices && doc.bf_is_linked != "1") {
+			html += '<li><a class="dropdown-item" href="/'+root_uri+'/invoicing/'+doc.doc+'/'+doc.id+'"'+target+'>'+(doc.fk_doc_id == '6' ? language.issue_invoice : language.invoicing)+'</a></li>';
+		}
+		if ('canSetPrinted' in doc && doc.canSetPrinted) {
+			html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item doc-set-printed"'+target+'>' + language.set_printed + '</a></li>';
+		}
+	} else if ((doc.has_more_to_invoice == "1" || notice_has_draft_invoice(doc)) && !from_nt && doc.annuled == "0") {
+		html += '<li><a class="dropdown-item" href="/'+root_uri+'/invoicing/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.invoicing+'</a></li>';
+	} else if ((doc.can_invoice == "1" || notice_has_draft_invoice(doc)) && !from_nt && doc.annuled == "0") { // can create invoice
+		html += '<li><a class="dropdown-item" href="/'+root_uri+'/invoicing/'+doc.doc+'/'+doc.id+'"'+target+'>'+(doc.fk_doc_id == '6' ? language.issue_invoice : language.invoicing)+'</a></li>';
+	}
+	if (doc.can_notice == "1") { // can create notice
+		html += '<li><a class="dropdown-item" href="/'+root_uri+'/noticing/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.noticing+'</a></li>';
+	}
+	if (doc.can_subscriptioning == "1" && doc.annuled == "0") { // can transform in subscription
+		html += '<li><a class="dropdown-item" href="/subscription/fromsubsc/'+doc.doc+'/'+doc.id+'"'+target+'>';
+		if (doc.doc == "notice") { // should never happen :)
+			html += language.subscriptioning1;
+		} else {
+			html += language.subscriptioning;
+		}
+		html += '</a></li>';
+	} //if (doc.id == 262045 || doc.id == 262045) console.log(doc);
+	if (doc.fk_doc_id == '6' && !was_printed) { // unprinted tax_receipt can not be annuled
+		doc.can_cancel = "0";
+	} 
+	if (('einvoice_sent' in doc && doc.einvoice_sent)) {
+		doc.can_cancel = "0";
+		doc.can_delete = false;
+	}
+	if (('einvoice_standby' in doc && doc.einvoice_standby)) {
+		doc.can_cancel = "0";
+		doc.can_delete = false;
+	}
+	if (doc.can_cancel == "1" && !from_nt) { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item annul-doc"';
+		if (doc.stornoed == "1") {
+			html += ' data-is-stornoed="1"';
+		} else {
+			html += ' data-is-stornoed="0"';
+		}
+		if (doc.partialy_collected == "1" || doc.fully_collected_tag == "1") {
+			html += ' data-has-collected="1"';
+		} else {
+			html += ' data-has-collected="0"';
+		}
+        if (doc.fk_doc_id == '6') {
+            html += ' data-is-tax-receipt="1"';
+        }
+		//if (doc.from_invoiced == "0" || !doc.from_invoiced) {
+		//	html += ' data-';
+		//}
+		if (doc.fk_doc_id == "4" && doc.invoiced == "1") { // notice invoiced
+			html += ' data-has-invoiced="1" data-notice-name="'+doc.series_ao+'"';
+			var invoices = getValuesArray(doc.invoiced_a,"text", "type", "1");//console.log(invoices);
+			if (invoices.length > 1) {
+				html += ' data-multiple-invoices="1"';
+			}
+			html += ' data-invoices="'+cleanString(invoices.join(", "))+'"';
+		}
+		//if (notice_has_draft_invoice(doc)) {
+		//	html += ' data-draft-invoice="1"';
+		//}
+		html += '>'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1" && !from_nt &&
+		((!doc.from_invoiced || doc.from_invoiced == "0") || (doc.from_invoiced_type == 1 || doc.from_invoiced_type == 3 )) ) { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item restore-doc">'+language.restore+'</a></li>';
+	}
+	if (doc.can_copy == "1" && !from_nt) { // can copy
+		html += '<li><a class="dropdown-item" href="/'+root_uri+'/copy/'+doc.doc+'/'+doc.id+'"'+target+'>'+language.copying+'</a></li>'; // not if it's storno
+	}
+	if ([1, 2, 3, 4].indexOf(parseInt(doc.fk_doc_id)) > -1) {
+		if (doc.subscription != "1" && doc.draft != "1") {
+			if (typeof mobile_printer_alert === "undefined") {
+				mobile_printer_alert = 0;
+			}
+			html += '<li><a class="dropdown-item print-link" href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`})">' + language.print + '</a></li>';
+			if (parseInt(doc.fk_doc_id) == 3) { // proforma
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {as_offer:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.as_offer+'</a></li>';
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {as_deviz:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.as_deviz+'</a></li>';
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {as_bonc:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.as_bonc+'</a></li>';
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {as_pv:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.as_pv+'</a></li>';
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {as_cmdr:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.as_cmdr+'</a></li>';
+			}
+			if (parseInt(doc.fk_doc_id) == 4) { // notice
+				html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {no_prices:1})" class="dropdown-item d-lg-none d-md-none print-link">' + language.print + ' '+language.no_prices+'</a></li>';
+			}
+			html += '<li><a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {mobile:1})" class="mobile-printer-link dropdown-item d-lg-none export-link">'+language.mobile_printer+'</a></li>';
+			if (parseInt(doc.fk_doc_id) == 4) { // notice
+				html += '<a href="#" onclick="return doPrint({id:' + doc.id + ',doc:`' + doc.doc + '`}, {mobile:1,no_prices:1})" target="_blank" class="mobile-printer-link dropdown-item d-lg-none export-link">' + language.mobile_printer + ' '+language.no_prices+'</a></li>';
+			}
+			html += `<li${show_viewing ? '' : ' class="d-lg-none"'}><a class="dropdown-item export-link" href="/docs/download/${doc.doc}/${doc.id}" target="_blank">${language.export}</a></li>`;
+		}
+    }
+
+	if (
+		[1].indexOf(parseInt(doc.fk_doc_id)) > -1 &&
+		parseInt(doc.subscription) === 0 &&
+		parseInt(doc.draft) === 0 && parseInt(doc.annuled) === 0 && 
+		!('einvoice_sent' in doc && doc.einvoice_sent) && 
+		!('einvoice_standby' in doc && doc.einvoice_standby)
+		) {
+		html += '<li><a class="dropdown-item d-lg-none" href="javascript:;" onclick="send_to_efactura(' + doc.id + ')">' + language.send_einvoice + '</a></li>';
+	} 
+	if (
+		[1,4].indexOf(parseInt(doc.fk_doc_id)) > -1 &&
+		parseInt(doc.draft) === 0 && parseInt(doc.annuled) === 0 &&  
+		doc.etr_show_send 
+		) {
+		html += '<li><a class="dropdown-item send-einvoice d-lg-none" href="javascript:;" onclick="send_to_etransport(' + doc.id + ', true, 1)">' + language.send_etransport_mobile + '</a></li>';
+	}
+	
+	if (doc.fk_doc_id == '6' && !was_printed && options.hasOwnProperty("was_printed")) { // unprinted tax_receipt can be deleted
+		doc.can_delete = "1";
+	} 
+	if (doc.can_delete && !from_nt) { // can delete
+		if (doc.fk_doc_id == "4" && doc.invoiced == "1") { // notice and invoiced cannot be deleted
+		} else {
+            var docType = doc.doc;//console.log(doc);
+			var docType2 = doc.doc;
+            if (doc.subscription == "1") {
+                docType2 = 'subscription';
+            }
+			html += '<li><a href="javascript:;" data-id="'+doc.id+'" data-type="'+docType+'" data-type-2="'+docType2+'" class="dropdown-item delete-doc"';
+			if (doc.partialy_collected == "1" || doc.fully_collected_tag == "1" || (doc.draft == "0" && doc.fk_doc_id == '2')) {
+				html += ' data-has-collected="1"';
+			} else {
+				html += ' data-has-collected="0"';
+			}
+			html += '>'+(language.delete).ucfirst()+'</a></li>';
+		}
+	}
+	//if (parseInt(doc.subscription) === 1) {
+	//html += '<li><a class="dropdown-item" href="javascript:void(0);" onclick="export_excel(\'' + doc.doc + '\', \'' + doc.id + '\')">' + language.export + '</a></li>';
+	//}
+	//console.log(['subscription', doc, parseInt(doc.subscription), html, language.export])
+	if (doc.can_unload_stock == "1") { // can unload stock
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item unload-stock-doc">'+language.unload_stock_short+'</a></li>';
+	} //console.log(doc);
+    if (doc.frmi && $.isEmptyObject(doc.collectedIds)) { //console.log("doc: ",doc);
+		if (doc.frmi_collected) {
+			html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item frmi-mark-uncollected">'+language.frmi_mark_uncollected+'</a></li>';
+		} else {
+			html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item frmi-mark-collected" data-toggle="tooltip" title="'+language.frmi_mark_collect+'">'+language.frmi_mark_collected+'</a></li>';
+		}
+	}
+	
+	/*
+	if ((doc.fk_doc_id == "1" || doc.fk_doc_id == "4") && doc.hasOwnProperty("has_etransport") && doc.has_etransport) {
+		if (doc.etr_is_modified) {
+			html += '<li><a class="dropdown-item preview_doc" href="/'+root_uri+'/show/'+doc.doc+'/'+doc.id+'">'+language.resend_etransport+'</a></li>';
+		} else if (doc.etr_show_confirm) {
+			html += '<li><a class="dropdown-item preview_doc" href="/'+root_uri+'/show/'+doc.doc+'/'+doc.id+'">'+language.confirm_etransport+'</a></li>';
+		} else if (doc.etr_show_send) {
+			html += '<li><a class="dropdown-item preview_doc" href="/'+root_uri+'/show/'+doc.doc+'/'+doc.id+'">'+language.send_etransport+'</a></li>';
+		}
+	}
+	*/
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+
+	return html;
+}
+function doPrint(sendData, params = {}) {
+	function canShare() {
+		const isMobile = window.innerWidth < 980;
+		return navigator.userAgent.match(/SamsungBrowser/i) === null &&
+			navigator.userAgent.match(/Windows/i) === null &&
+			isMobile && navigator.canShare && navigator.share;
+	}
+	const printdoc = async () => {
+		if (canShare()) {
+			try {
+				wait_cursor(true);
+				let response = await fetch(`/docs/download/${sendData.doc}/${sendData.id}?${$.param(params)}&preload=1`);
+				let blob = await response.blob();
+				const matches = response.headers.get('content-disposition').match(/filename=(.*)/i);
+				const name = matches.length > 1 ? matches[1].replaceAll('"', '') : `Factura.pdf`;
+				let files = [
+					new File([blob], name, { type: 'application/pdf' })
+				];
+				wait_cursor(false);
+				if (navigator.canShare({ files })) {
+					navigator.share({
+						title: name,
+						files: files
+					}).catch(e => console.log(e));
+					return;
+				}
+			} catch (e) {
+				wait_cursor(false);
+			}
+		}
+		
+		let url = `/docs/doPrint/${sendData.doc}/?ids=${sendData.id}&${$.param(params)}`;
+		open(url, '_blank');
+	}
+
+	if ('mobile' in params && params.mobile && typeof showMobilePrinterAlert === 'function') {
+		showMobilePrinterAlert(printdoc);
+		return false;
+	}
+
+	printdoc();
+	return false;
+}
+// create action buttons
+function createActionButtonsUnload(doc, include_btn, in_frame, show_viewing, root_uri) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if(typeof root_uri === 'undefined'){
+    	root_uri = "docs";
+	};
+
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	if (doc.can_unload_stock == "1") { // can unload stock
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item unload-stock-doc">'+language.unload_stock_short+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+function isMinimalUI() {
+	if (typeof window.matchMedia !== 'function') {
+		return false;
+	}
+	const isMinimalUI = window.matchMedia("(display-mode: minimal-ui)").matches;
+	const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+	return isMinimalUI || isStandalone;
+}
+function createActionButtonsWallet(doc, include_btn, in_frame) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	if (doc.wtype == "cw") {
+		html += '<li><a href="'+doc.uri_show+'" target="_blank" class="dropdown-item">'+language.viewing+' '+language.document+'</a></li>';
+		html += '<li><a href="'+baseurl+'expenses/addxml/?indxi='+doc.index_incarcare+'"' + (isMinimalUI() ? '' : ' target="_blank"') + ' class="dropdown-item">'+language.add+' '+language.supplier_doc+'</a></li>';
+		html += '<li><a href="javascript:;" class="dropdown-item wallet-send-message" data-id="'+doc.index_incarcare+'">'+language.send_message+' la '+language.supplier+'</a></li>';
+		if (doc.deleted == "1") {
+			html += '<li><a href="javascript:;" data-id="'+doc.index_incarcare+'" class="dropdown-item delete-from-wallet" data-type="undelete">Marcheaza ca Vizibil</a></li>';
+		} else {
+			html += '<li><a href="javascript:;" data-id="'+doc.index_incarcare+'" class="dropdown-item delete-from-wallet" data-type="delete">Marcheaza ca Ascuns</a></li>';
+		}
+	} else if (doc.wtype == "iw") {
+		html += '<li><a href="'+doc.uri_show+'" target="_blank" class="dropdown-item">'+language.viewing+' '+language.document+'</a></li>';
+		html += '<li><a href="'+baseurl+'expenses/add_id_doc/?intid='+doc.id+'" class="dropdown-item">'+language.add+' '+language.supplier_doc+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons
+var expense_message = "";
+function createActionButtonsExpenses(doc, include_btn, in_frame, show_viewing, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if (typeof options === 'undefined') {
+        options = {};
+    }
+	if (!options.hasOwnProperty("root_uri")) {
+		options["root_uri"] = "expenses";
+	}
+	if (!options.hasOwnProperty("show_export")) {
+		options["show_export"] = true;
+	}
+	if (!options.hasOwnProperty("show_print")) {
+		options["show_print"] = true;
+	}
+	if (!options.hasOwnProperty("show_view_nir")) {
+		options["show_view_nir"] = true;
+	}
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	} //if (doc.id == '129982') console.log(doc);
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	// doc actions
+	//console.log(parseInt(options["vat_payer"]), parseInt(doc.issuer_platitor_tva));
+	if (doc.can_modify == "1") { // can modify
+		html += '<li><a ';
+		if (options.hasOwnProperty("vat_payer") && 
+			(options["vat_payer"] != parseInt(doc.issuer_platitor_tva))
+		) {
+			var param1 = "ne", param2 = "";
+			if (options["vat_payer"] == 1) {
+				param1 = "";
+				param2 = "ne";
+			} 
+			expense_message = sprintf(language.expense_diff_vat_payer, param1, param2);
+			html += 'href="javascript:;" onclick="show_message(expense_message);" ';
+			
+		} else {
+			html += 'href="/'+options["root_uri"]+'/edit/'+doc.id+'"'+target;
+		}
+		html += ' class="dropdown-item">'+language.edit+'</a></li>';
+	}
+	if (doc.can_email == "1") { // can email
+		html += '<li><a href="javascript:;" class="dropdown-item">'+language.send_to_email+'</a></li>';
+	}
+	if (doc.has_nir == "1") { // has nir
+		if (options["show_view_nir"]) {
+			html += '<li><a class="preview_doc dropdown-item" href="/'+options["root_uri"]+'/preview/'+doc.id+'" data-is-preview="1">'+language.viewing+' '+language.nir+'</a></li>';
+		}
+		if (options["show_export"]) { 
+			html += '<li><a href="/'+options["root_uri"]+'/download/'+doc.id+'"'+target+' class="dropdown-item">'+language.export+'</a></li>';
+		}
+		if (options["show_print"]) { 
+			html += '<li><a href="/'+options["root_uri"]+'/doPrint/?ids='+doc.id+'" target="_blank" class="dropdown-item">'+language.print+'</a></li>';
+		}
+	}
+	if (doc.can_pay == "1" && (doc.document_type == "1" || doc.document_type == "6")) { // can pay and is invoice
+		html += '<li><a href="javascript:;" onclick="payExpences(\''+doc.id+'\', '+in_frame+')" class="dropdown-item">'+language.pay+'</a></li>';//collectDoc(\''+doc.id+'\', '+in_frame+')
+		if (doc.has_credits) {
+			html += '<li><a href="javascript:;" onClick="showCreditsExpense('+doc.id+', '+in_frame+')" class="dropdown-item">'+language.pay_with_credits+'</a></li>';
+		}
+	}
+	if (doc.has_more_to_invoice == "1" && doc.annuled == "0") { // has more to invoice
+		html += '<li><a href="/'+options["root_uri"]+'/notice/?ids='+doc.id+'"'+target+' class="dropdown-item">'+language.invoicing+'</a></li>';
+	}
+	if (doc.can_cancel == "1" && doc.noticed == "0") { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="annul-expense dropdown-item"';
+		if (doc.has_nir == "1") {
+			html += ' data-has-doc="1"';
+		} else {
+			html += ' data-has-doc="0"';
+		}
+		if (doc.document_type == "7" && doc.invoicedf != "2") { // invoiced notice
+			html += ' data-has-invoice="1"';
+			var invoices = getValuesArray(doc.invoices,"document_number");//console.log(invoices);
+			if (invoices.length > 1) {
+				html += ' data-multiple-invoices="1"';
+			}
+			html += ' data-invoices="'+cleanString(invoices.join(", "))+'"';
+		} 
+		html += '>'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1" && doc.noticed == "0") { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="restore-expense dropdown-item">'+language.restore+'</a></li>';
+	}
+	if (doc.can_delete == "1") { // can delete
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="delete-expense dropdown-item">'+(language.delete).ucfirst()+'</a></li>';
+	}
+	if (doc.etr_show_send) {
+		html += '<li><a class="dropdown-item send-einvoice d-lg-none" href="javascript:;" onclick="send_to_etransport(' + doc.id + ', true, 2)">' + language.send_einvoice + '</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons
+function createActionButtonsProduct(doc, include_btn, in_frame, show_viewing, root_uri, anotv) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if(typeof root_uri === 'undefined'){
+    	root_uri = "docs";
+	};
+	if(typeof anotv === 'undefined'){
+    	anotv = false;
+	};
+
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	html += '<li><a href="javascript:;" data-produs-id="'+doc.produs_id+'" data-gestiune-id="'+doc.gestiune_id+'" data-anotv="'+(anotv ? "1" : "0")+'" class="edit-product-gestiune dropdown-item">';
+		if (anotv) {
+			html += language.edit+" "+language.stock_minim;
+		} else {
+			html += language.edit_price+'/'+language.stock_minim;
+		}
+	html += '</a></li>';
+	/*if (doc.active == "0") { // is inactive
+		html += '<li><a href="javascript:;" data-produs-id="'+doc.produs_id+'" data-gestiune-id="'+doc.gestiune_id+'" class="activate-product">'+language.activate+'</a></li>';
+	}
+	if (doc.active == "1") { // is active
+		html += '<li><a href="javascript:;" data-produs-id="'+doc.produs_id+'" data-gestiune-id="'+doc.gestiune_id+'" class="deactivate-product">'+language.deactivate+'</a></li>';
+	}*/
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons
+function createActionButtonsRecipe(doc) {
+	include_btn = true;
+	var target = "";
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	html += '<li><a href="javascript:;" data-recipe-id="'+doc.recipe_prod_id+'" class="edit-recipe dropdown-item">'+language.edit+'</a></li>';
+	html += '<li><a href="javascript:;" data-recipe-id="'+doc.recipe_prod_id+'" class="delete-recipe dropdown-item">'+(language.delete).ucfirst()+'</a></li>';
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons consumption
+function createActionButtonsConsumption(doc, include_btn, in_frame, show_viewing, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if (typeof options === 'undefined') {
+        options = {};
+    }
+	if (!options.hasOwnProperty("root_uri")) {
+		options["root_uri"] = "stock";
+	}
+	if (!options.hasOwnProperty("show_export")) {
+		options["show_export"] = true;
+	}
+	if (!options.hasOwnProperty("show_print")) {
+		options["show_print"] = true;
+	}
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	// doc actions
+	if (doc.can_modify == "1") { // can modify
+		html += '<li><a href="';
+		if (doc.fk_pr_id == "0") { // no pr
+			html += '/'+options["root_uri"]+'/consumption_edit/'+doc.id+'"'+target;
+		} else {
+			html += 'javascript:;" onclick="show_edit_consumption_message(\''+doc["fk_pr_doc"]+'\');"';
+		}
+		html += ' class="dropdown-item">'+language.edit+'</a></li>';
+	}
+	if (options["show_export"] && doc.draft == "0") { 
+		html += '<li><a href="/'+options["root_uri"]+'/download_consumption/'+doc.id+'"'+target+' class="dropdown-item">'+language.export+'</a></li>';
+	}
+	if (options["show_print"] && doc.draft == "0") { 
+		html += '<li><a href="/'+options["root_uri"]+'/print_consumption/'+doc.id+'" target="_blank" class="dropdown-item">'+language.print+'</a></li>';
+	}
+	if (doc.can_cancel == "1") { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="annul-consumption dropdown-item"'+((doc.fk_pr_id != "0") ? ' data-pr-linked="1" data-pr-doc="'+doc["fk_pr_doc"]+'"' : '')+'>'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1") { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="restore-consumption dropdown-item"'+((doc.fk_pr_id != "0") ? ' data-pr-linked="1" data-pr-doc="'+doc["fk_pr_doc"]+'"' : '')+'>'+language.restore+'</a></li>';
+	}
+	if (doc.can_delete == "1") { // can delete
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="delete-consumption dropdown-item"'+((doc.fk_pr_id != "0") ? ' data-pr-linked="1" data-pr-doc="'+doc["fk_pr_doc"]+'"' : '')+'>'+(language.delete).ucfirst()+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+function show_edit_consumption_message(pr_doc) {
+	show_message("info|"+sprintf(language.edit_consumption_pr, pr_doc), false);
+}
+// create action buttons inventory
+function createActionButtonsInventory(doc, include_btn, in_frame, show_viewing, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if (typeof options === 'undefined') {
+        options = {};
+    }
+	if (!options.hasOwnProperty("root_uri")) {
+		options["root_uri"] = "stock";
+	}
+	if (!options.hasOwnProperty("show_export")) {
+		options["show_export"] = true;
+	}
+	if (!options.hasOwnProperty("show_print")) {
+		options["show_print"] = true;
+	}
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	// doc actions
+	if (doc.can_modify == "1") { // can modify
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/inventory_edit/'+doc.id+'"'+target+'>'+language.edit+'</a></li>';
+	}
+	if (options["show_export"] && doc.draft == "0") { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/download_inventory/'+doc.id+'"'+target+'>'+language.export+'</a></li>';
+	}
+	if (options["show_print"] && doc.draft == "0") { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/print_inventory/'+doc.id+'" target="_blank">'+language.print+'</a></li>';
+	}
+	if (isMobile()) {
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/print_inventory/'+doc.id+'/?list" target="_blank">'+language.print+' '+language.inventory_list+'</a></li>';
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/print_inventory/'+doc.id+'/?pv" target="_blank">'+language.print+' '+language.pv_differences+'</a></li>';
+	}
+	if (doc.can_cancel == "1") { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="annul-inventory dropdown-item">'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1") { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="restore-inventory dropdown-item">'+language.restore+'</a></li>';
+	}
+	if (doc.can_delete == "1") { // can delete
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="delete-inventory dropdown-item">'+(language.delete).ucfirst()+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons
+function createActionButtonsTransfer(doc, include_btn, in_frame, show_viewing, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if (typeof options === 'undefined') {
+        options = {};
+    }
+	if (!options.hasOwnProperty("root_uri")) {
+		options["root_uri"] = "stock";
+	}
+	if (!options.hasOwnProperty("show_export")) {
+		options["show_export"] = true;
+	}
+	if (!options.hasOwnProperty("show_print")) {
+		options["show_print"] = true;
+	}
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	// doc actions
+	if (doc.can_modify == "1") { // can modify
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/transfer_edit/'+doc.id+'"'+target+'>'+language.edit+'</a></li>';
+	}
+	if (options["show_export"]) { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/download_transfer/'+doc.id+'"'+target+'>'+language.export+'</a></li>';
+	}
+	if (options["show_print"]) { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/print_transfer/'+doc.id+'" target="_blank">'+language.print+'</a></li>';
+	}
+	if (doc.can_cancel == "1") { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="annul-transfer dropdown-item"';
+		if (doc.has_doc == "1") {
+			html += ' data-has-doc="1"';
+		} else {
+			html += ' data-has-doc="0"';
+		}
+		html += '>'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1") { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="restore-transfer dropdown-item">'+language.restore+'</a></li>';
+	}
+	if (doc.can_delete == "1") { // can delete
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="delete-transfer dropdown-item"';
+		if (doc.has_doc == "1") {
+			html += ' data-has-doc="1"';
+		} else {
+			html += ' data-has-doc="0"';
+		}
+		html += '>'+(language.delete).ucfirst()+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+// create action buttons
+function createActionButtonsProduction(doc, include_btn, in_frame, show_viewing, options) {
+	if(typeof include_btn === 'undefined'){
+    	include_btn = true;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof show_viewing === 'undefined'){
+    	show_viewing = true;
+	};
+	if (typeof options === 'undefined') {
+        options = {};
+    }
+	if (!options.hasOwnProperty("root_uri")) {
+		options["root_uri"] = "stock";
+	}
+	if (!options.hasOwnProperty("show_export")) {
+		options["show_export"] = true;
+	}
+	if (!options.hasOwnProperty("show_print")) {
+		options["show_print"] = true;
+	}
+	if (!options.hasOwnProperty("show_finalize")) {
+		options["show_finalize"] = true;
+	}
+	var target = "";
+	if (in_frame) {
+		target = " target=\"_parent\"";
+	}
+	var html = '';
+	if (include_btn) {
+		html += '<div class="dropdown position-static">'+
+				'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+					'<i class="far fa-caret-square-down"></i>'+
+				'</a>'+
+				'<ul class="dropdown-menu dropdown-menu-end">';
+	}
+	// doc actions
+	//console.log(doc);
+	if (doc.can_modify == "1") { // can modify
+		html += '<li><a class="dropdown-item" href="';
+		//if (doc.progress == "2") {
+		//	html += 'javascript:;" onclick="show_message_on_edit_pr_2(\''+doc.name+'\');" ';
+		//} else {
+			html +='/'+options["root_uri"]+'/production_edit/'+doc.id+'"'+target;
+		//}
+		html += '>'+language.edit+'</a></li>';
+	}
+	if (doc.draft == "0" && doc.annuled == "0" && doc.progress == "2") {  // return to execution
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="dropdown-item execution-production">'+language.execution_production+'</a></li>';
+	}
+	if (options["show_finalize"] && doc.draft == "0" && doc.annuled == "0" && doc.progress == "1") { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/preview_production/'+doc.id+'"'+target+'>'+language.complete_production+'</a></li>';
+	}
+	if (options["show_export"]) { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/download_production/'+doc.id+'"'+target+'>'+language.export+'</a></li>';
+	}
+	if (options["show_print"]) { 
+		html += '<li><a class="dropdown-item" href="/'+options["root_uri"]+'/print_production/'+doc.id+'" target="_blank">'+language.print+'</a></li>';
+	}
+	if (doc.can_cancel == "1") { // can cancel
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="annul-production dropdown-item">'+language.cancel+'</a></li>';
+	}
+	if (doc.can_restore == "1") { // can restore
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="restore-production dropdown-item">'+language.restore+'</a></li>';
+	}
+	if (doc.can_delete == "1") { // can delete
+		html += '<li><a href="javascript:;" data-id="'+doc.id+'" class="delete-production dropdown-item">'+(language.delete).ucfirst()+'</a></li>';
+	}
+	if (include_btn) {
+		html += '</ul>'+
+			'</div>';
+	}
+	return html;
+}
+function show_message_on_edit_pr_2(pname) {
+	show_message(sprintf(language.pr_edit_finalized, pname), false);
+}
+// create action buttons
+function createActionButtonsAdmin(buttons, id) {
+	var html = '';
+		html += '<div class="btn-group">'+
+					'<button type="button" class="btn btn-default btn-xs dropdown-toggle btn-options" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+						'<span class="caret"></span>'+
+					'</button>'+
+					'<ul class="dropdown-menu pull-right">';
+	$(buttons).each(function(index, value) {
+		for(k in value) {
+			var vv = value[k];
+			var actions = vv.actions;
+			html += '<li><a';
+			for(var key in actions) {
+				html += ' '+key+'="'+actions[key]+'"';
+			}
+			if(typeof id !== 'undefined') { // add id
+				html += ' data-id='+id;
+			}
+			html += '>'+vv.text+'</a></li>';
+		}
+	});
+	html +=	'</ul></div>';
+	return html;
+}
+function export_excel(doc, subscription_id, custom_filters) {
+	if (typeof subscription_id == 'undefined') {
+		subscription_id = "0";
+	}
+	var href = "/report/exportxls/?doc="+doc+"&subscription_id="+subscription_id+"&";
+	if (typeof custom_filters !== 'undefined') {
+		href += $.param({filters: custom_filters});
+	} else if (window.hasOwnProperty("ctab1")) {
+		href += $.param({filters: ctab1.sendData.filters});
+		if (ctab1.sendData.hasOwnProperty("sortBy")) {
+			href += '&sortBy='+ctab1.sendData.sortBy;
+		}
+		if (ctab1.sendData.hasOwnProperty("sortDir")) {
+			href += '&sortDir='+ctab1.sendData.sortDir;
+		}
+	} else if (window.hasOwnProperty("ctab_history")) {
+		href += $.param({filters: ctab_history.sendData.filters});
+	} 
+	location.href = href;
+}
+function export_pdf(doc, subscription_id, custom_filters) {
+	if (typeof subscription_id == 'undefined') {
+		subscription_id = "0";
+	}
+	var href = "/report/exportpdf/?doc="+doc+"&subscription_id="+subscription_id+"&";
+	if (typeof custom_filters !== 'undefined') {
+		href += $.param({filters: custom_filters});
+	} else if (window.hasOwnProperty("ctab1")) {
+		href += $.param({filters: ctab1.sendData.filters});
+		if (ctab1.sendData.hasOwnProperty("sortBy")) {
+			href += '&sortBy='+ctab1.sendData.sortBy;
+		}
+		if (ctab1.sendData.hasOwnProperty("sortDir")) {
+			href += '&sortDir='+ctab1.sendData.sortDir;
+		}
+	} else if (window.hasOwnProperty("ctab_history")) {
+		href += $.param({filters: ctab_history.sendData.filters});
+	} //console.log(href);
+	location.href = href;
+}
+function export_acc(acc, custom_filters, options) {
+	var href = "/report/exportacc/?acc="+acc;
+	if (typeof custom_filters !== 'undefined') {
+		href += '&' + $.param({filters: custom_filters});
+	}
+    if (typeof options !== 'object') {
+        options = {};
+    }
+	for (let field in options) {
+		href += '&' + field + '=' + (options[field] ? 1 : 0);
+	}
+	location.href = href;
+}
+function set_print_frame(pre_id, strip_user_id, type) { //console.log(pre_id);
+	//console.log(sendData);
+	if (typeof strip_user_id === 'undefined') {
+		strip_user_id = true;
+	}
+	if (typeof type === 'undefined') {
+		type = "invoice";
+	}
+	var selectedDocs = $('input[name^='+pre_id+']:checked'),
+		ids = [];//console.log(selectedDocs);
+	pre_id = pre_id.replace("_", "\_");
+	if (strip_user_id) { // strip user_id also check_c_1_506  | 1=user_id
+		pre_id += "\_[0-9]+";
+	} 
+	var pr_id = new RegExp(pre_id, "g");
+	selectedDocs.each(function(index) {
+		var th = $(this); //console.log(th.attr('id'));
+		var th_id = th.attr('id');
+		th_id = th_id.replace(pr_id, '');
+		th_id = th_id.replace(/\_/, '');
+		if (th_id != "") { //console.log(th_id);
+			ids.push(th_id);
+		}
+	});//console.log(ids);
+	if (ids.length == 0) {
+		wait_cursor(false);
+		show_message("info|"+language.select_docs_for_printing);
+		return false;
+	}
+	//
+	var all_printing = false;
+	if ($("#check-all-checkbox").prop("checked")) { // all is checked
+		all_printing = true;
+		var link = '/docs/get_bulk_print/'+type + '/?'+$.param({filters: ctab1.sendData.filters});
+		if (type == "expenses") {
+			link = '/expenses/get_bulk_print/?'+$.param({filters: ctab1.sendData.filters});
+		} //console.log(link);
+		var jqxhr = getjqxhr(link, sendData, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);console.log(data);
+			data.ids = objToArray(data.ids);
+			if (data.type == "ok") { //console.log(objToArray(data.ids));
+				actual_print_frame(data.ids, type);
+			} else if (data.type == "err1") {
+				show_message(data);
+			} else { // show message and get to printing on message hide
+				//$("#to-do-after-close").val("max_print_show_message");
+				//$("#to-do-after-close").data("params", {"ids": data.ids, "type": type});
+				//show_message(data);
+				location.reload();
+			}
+			wait_cursor(false);
+		}).fail(function() {
+			show_error_page();
+		});
+	} else { // actual printing
+		actual_print_frame(ids, type);
+	}
+}
+function actual_print_frame(ids, type) {
+	var link = '/docs/doPrint/'+type+'/?ids[]='+ids.join('&ids[]='); 
+	if (type == "expenses") {
+		link = '/expenses/doPrint/?ids[]='+ids.join('&ids[]=');
+	} else {
+		if (ctab1.sendData.hasOwnProperty("sortBy")) {
+			link += '&sortBy='+ctab1.sendData.sortBy;
+		}
+		if (ctab1.sendData.hasOwnProperty("sortDir")) {
+			link += '&sortDir='+ctab1.sendData.sortDir;
+		}
+	}//console.log(link);//return;
+	var is_firefox = isFirefox();
+	if (is_firefox) {
+		link += '&is_firefox=1';
+		window.open(link, "_blank");
+		return;
+	}
+	//console.log($('#print_document').length);
+	//console.log(link);return;
+	if ($('#print_document').length < 1) {
+		$('body').append($('<iframe/>').attr('id', 'print_document').attr('style', 'height:0;width:0;border:0;'));
+		$('#print_document').on("load", function(e) {
+			e.preventDefault();
+			wait_cursor(false); //console.log(this);
+			//if (!is_firefox) {
+				this.contentWindow.focus();
+				this.contentWindow.print();
+			//}
+		});
+	}
+    $('#print_document').attr('src', link);
+	
+}
+function max_print_show_message(params) {
+	actual_print_frame(params.ids, params.type);
+}
+$(document).ready(function() {
+	// preview invoice
+	$(document).on("click", ".preview_doc", function(e) {
+		e.preventDefault();
+		wait_cursor(true);
+		var link = this.href;
+		var is_preview = $(this).data("is-preview");
+		if (is_preview) {
+			var jqxhr = getjqxhr(this.href.replace("preview","can_view"), {}, "POST", "json");
+		} else {
+			var jqxhr = getjqxhr(this.href.replace("show","can_view"), {}, "POST", "json");
+		}
+        $("#preview-doc-header").html('<div style="width:60px;margin:50px auto 70px;text-align:center;"><div class="fa fa-pulse fa-spinner fa-3x purple"></div></div>');
+        $("#show_document_iframe").css('visibility', 'hidden');
+		jqxhr.done(function(data) { //console.log(data);
+			check_login(data); 
+			//wait_cursor(false);
+			if (data.type == "err") {
+				show_message(data);
+			} else if (data.type == "ok") {
+				if ($( window ).width() > 700 && !from_admin) { //68) {
+					if (is_preview) {
+						location.href = link;
+					} else {
+						location.href = link.replace("show","preview");
+					}
+				} else {
+					if (link.search("docs") != -1) {
+						if ($(".navbar-opend").is(":visible")) {
+							$(".my-navbar-toggle").click();// hide mobile menu
+						}
+						if (from_admin) {
+							$("#preview-doc-header").html(createTopButtonsDocument(data.message));
+						}
+						$("#show_document_iframe").attr("src", link).css({height:1}).on('load', function() {
+							$(this).css({height:'', paddingTop:0});
+							wait_cursor(false);
+							resizeIframe("show_document_iframe", 100);
+                            if (!from_admin) { $("#preview-doc-header").html('');}
+                            $("#show_document_iframe").contents()
+                                //.find('body').css('margin-top', 15)
+                                .find('#main_header').addClass('hidden');
+                            $("#show_document_iframe").css('visibility', 'visible');
+						});
+						$("#modal_document_viewer").modal('show');
+					} else {
+						location.href = link;
+					}
+				}
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+	});
+	// image viewer
+	$(document).on("click", ".preview_image", function(e) {
+		e.preventDefault();
+		wait_cursor(true);
+		var jqxhr = getjqxhr(this.href, {}, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);//console.log(data);
+				if (data.type == "err") {
+					show_message(data);
+				} else {
+					$("#modal-image-viewer-body").html(data);
+					$("#modal_image_viewer").modal('toggle');
+				}
+				wait_cursor(false);
+			}).fail(function() {
+				show_error_page();
+			});
+		
+	});
+	// BF set printed
+	$(document).on("click", ".doc-set-printed", function(e) {
+		e.preventDefault();
+
+		$('.ok-confirm-modal')
+			.data('params', {id: $(this).data('id')})
+			.data('funct_to_exe', function(params) {
+			var jqxhr = getjqxhr('/utils/set_printed/', params, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);
+				wait_cursor(false);
+				show_message(data);
+				if ('ctab1' in window) {
+					ctab1.applyFilters();
+				}
+			}).fail(function() {
+				show_error_page();
+			});
+		});
+		show_confirm(language.warning_tax_receipt_set_printend);
+	});
+});
+function get_accounting_status_tag(doc) {
+	if (doc.markedAccount) {
+		clearTimeout(window.dynamicTooltip);
+		window.dynamicTooltip = setTimeout(function() { 
+			$('.dynamic-tooltip').tooltip({
+				html: true,
+				template:'<div class="tooltip" role="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner" style="min-width:100px !important;"></div></div>'
+			});
+		}, 300);
+		return ' <i class="fa fa-cloud-upload blue-dark dynamic-tooltip" title="Document trimis in Saga"></i>';
+	}
+	return '';
+}
+function get_doc_tag(doc) {
+	var tag = "";//console.log(doc);
+	if (!doc.hasOwnProperty("fk_doc_id")) {
+		doc.fk_doc_id = 1;
+	}
+	doc.fk_doc_id = parseInt(doc.fk_doc_id);
+	if (!doc.hasOwnProperty("frmi")) {
+		doc.frmi = false;
+	}
+	if (doc.frmi) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-tertiary">'+language.imported+'</span>';
+	} else if (doc.draft == "1") { // draft
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-grey">';
+		if (doc.fk_doc_id == 4) {
+			tag += language.draft1; // nefinalizat
+		} else {
+			tag += language.draft; // nefinalizata
+		}
+		tag += '</span>';
+	} else if (doc.annuled == "1") { // anulat
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">';
+		if (doc.fk_doc_id == 4) {
+			tag += language.annuled1;
+		} else {
+			tag += language.annuled;
+		}
+		tag += '</span>';
+	} else if (doc.storno == "1") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.storno_tag+'</span>';
+	} else if (doc.stornoed == "1") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.stornoed_tag+'</span>';
+	} else if (doc.fully_collected == "1" && doc.fk_doc_id != 4 && doc.fk_doc_id != 3) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+language.fully_collected+'</span>';
+	} else if (doc.partialy_collected == "1" && doc.fk_doc_id != 4 && doc.fk_doc_id != 3) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-info">'+language.partialy_collected+'</span>';
+	} else if (doc.invoiced == "1" && doc.fk_doc_id == 3) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.invoiced;
+		if (doc.has_more_to_invoice == "1") {
+			tag += ' '+language.partial;
+		}
+		tag += '</span>';
+	} else if (doc.term_passed == "1" && doc.fk_doc_id != 4) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.term_passed+'</span>';
+	} else if (doc.uncollected == "1" && doc.fk_doc_id != 4 && doc.fk_doc_id != 3) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.uncollected+'</span>';
+	} else if (doc.invoiced == "1" && doc.fk_doc_id == 4) {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.invoiced1;
+		if (doc.has_more_to_invoice == "1") {
+			tag += ' '+language.partial;
+		}
+		tag += '</span>';
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_doc_tag_notice(doc) { //invoice tag linked with notice
+	var tag = "";//console.log(doc);
+	if (!doc.hasOwnProperty("fk_doc_id")) {
+		doc.fk_doc_id = 1;
+	}
+	doc.fk_doc_id = parseInt(doc.fk_doc_id);
+	if (doc.draft == "1") { // draft
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-grey">'+language.draft+'</span>';
+	} else if (doc.annuled == "1") { // anulat
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.annuled+'</span>';
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_doc_tag_wallet(doc) { //wallet tag: e-factura / oblio
+	var tag = "";//console.log(doc);
+	
+	if (doc.deleted == "1") { // ascuns
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">ascuns</span>';
+	} else if (doc.added_as_doc_supplier == "1") { // added as doc supplier
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">inregistrat</span>';
+	}
+	/*if (doc.wtype == "cw") { // spv
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-info">'+language.einvoice+'</span>';
+	} else if (doc.wtype == "iw") { // oblio
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">Oblio</span>';
+	}*/
+	if (tag != "") {
+		tag = ""+tag;
+	}
+	return tag;
+}
+function get_expense_tag(doc) {
+	var tag = "";//console.log(doc);
+	if (doc.annuled == "1") { // anulat
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.annuled1+'</span>';
+	} else {
+		if (doc.document_type == "1") {//console.log(doc);
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.invoice+'</span>';
+		} else if (doc.document_type == "7") {
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.notice+'</span>';
+		} else if (doc.document_type == "3") {
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.tax_receipt+'</span>';
+		} else if (doc.document_type == "6") {
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.the_other+'</span>';
+		}
+	}
+	/*
+	if (doc.document_type == 7) {//console.log(doc);
+		if (doc.invoicedf == "1") {
+			tag = '<span class="label bg-green">'+language.invoiced1+'</span>';
+		} else if(doc.invoicedf == "3") {
+			tag = '<span class="label bg-blue">'+language.partialy_invoiced+'</span>';
+		} else {
+			tag = '<span class="label bg-orange">'+language.uninvoced1+'</span>';
+		}
+	} else {
+		if (doc.fully_paid == "1") {
+			tag = '<span class="label bg-green">'+language.paid+'</span>';
+		} else if (doc.partialy_paid == "1") {
+			tag = '<span class="label bg-blue">'+language.partialy_paid+'</span>';
+		} else if (doc.unpaid == "1" && doc.partialy_paid == "0") {
+			tag = '<span class="label bg-orange">'+language.unpaid+'</span>';
+		}
+		if (doc.term_passed == "1") {
+			tag = '<span class="label bg-orange">'+language.term_passed+'</span>';
+		}
+	}*/
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_expense_notice_tag(doc) {
+	var tag = "";//console.log(doc);
+	if (doc.invoices && typeof doc.invoices === 'object') {
+		for(ki in doc.invoices) {
+			tag += doc.invoices[ki].document_number+"<br>";
+		}
+	}
+	if (doc.invoicedf == "1") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+language.invoiced1+'</span>';
+	} else if(doc.invoicedf == "3") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-info">'+language.partialy_invoiced+'</span>';
+	} else {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.uninvoced1+'</span>';
+	}
+	return tag;
+}
+function get_expense_nir_tag(doc) {
+	var tag = "";//console.log(doc);
+	if (doc.has_nir == "1") {
+		if (doc.annuled == "1") { // anulat
+			tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.annuled1+'</span>';
+		}
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_product_tag(doc) {
+	var tag = "";//console.log(doc);
+	if (doc.active) { // is set
+		if (doc.active == "1") {
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+language.active+'</span>';
+		} else if (doc.active == "0") {
+			tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.inactive+'</span>';
+		}
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_product_recipe_tag(doc, just_text, alt, from_pr) {
+	if (typeof just_text === 'undefined') {
+		just_text = false;
+	}
+	if (typeof alt === "undefined") {
+		alt = "";
+	}
+	if (typeof from_pr === "undefined") {
+		from_pr = false;
+	}
+	if (alt == "_alt") {
+		doc.pr_type = doc.pr_type_alt;
+	}
+	var tag = "";//console.log(doc);
+	if (doc.pr_type == "74") { // is set
+		tag = (!just_text ? '<span class="badge badge-xs text-uppercase d-inline-block bg-success">' : '')+language.tag_materii_prime+(!just_text ? '</span>' : '');
+	} else if (doc.pr_type == "86") {
+		tag = (!just_text ? '<span class="badge badge-xs text-uppercase d-inline-blockl bg-warning">' : '')+language.tag_materiale_consumabile+(!just_text ? '</span>' : '');
+	} else if (doc.pr_type == "92") {
+		tag = (!just_text ? '<span class="badge badge-xs text-uppercase d-inline-block bg-info">' : '')+language.tag_semifabricate+(!just_text ? '</span>' : '');
+	} else if (doc.pr_type == "94") {
+		tag = (!just_text ? '<span class="badge badge-xs text-uppercase d-inline-block bg-primary">' : '')+language.tag_produs_rezidual+(!just_text ? '</span>' : '');
+	}
+    if (from_pr) {
+        return tag;
+    }
+	if (tag != "") {
+		tag = "<br>"+tag; 
+	}
+	return tag;
+}
+function get_stock_inventory_tag(item) {
+	var tag = "";//console.log(doc);
+	if (item.stock_type == "1") {// expense
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "5" || (item.stock_type == "2" && item.from_nt == "1")) { // transfer
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-info">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "2") { // doc
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "3") { // mp
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "6") { // consumption
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-primary">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "7" || item.stock_type == "9") { // production
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-dark">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "8") { // inventory
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-primary">'+item.document_type_text+'</span>';
+	} else if (item.stock_type == "30") {
+		tag = '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+item.document_type_text+'</span>';
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_inventory_tag(doc) { //production tag
+	var tag = "";//console.log(doc);
+	if (doc.draft == "1") { // draft
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-grey">'+language.draft1+'</span>';
+	} else if (doc.annuled == "1") { // anulat
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.annuled1+'</span>';
+	} 
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function get_production_tag(doc) { //production tag
+	var tag = "";//console.log(doc);
+	if (doc.draft == "1") { // draft
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-grey">'+language.draft1+'</span>';
+	} else if (doc.annuled == "1") { // anulat
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-danger">'+language.annuled1+'</span>';
+	} else if (doc.progress == "1") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-warning">'+language.in_progress+'</span>';
+	} else if (doc.progress == "2") {
+		tag += '<span class="badge badge-xs text-uppercase d-inline-block bg-success">'+language.completed+'</span>';
+	}
+	if (tag != "") {
+		tag = "<br>"+tag;
+	}
+	return tag;
+}
+function download_client_data(client_id, interval) {
+	window.location.assign("/nomenclator/export_client_sheet?id="+client_id+"&daterange="+interval);
+}
+function download_supplier_data(supplier_id, interval) {
+	window.location.assign("/nomenclator/export_supplier_sheet?id="+supplier_id+"&daterange="+interval);
+}
+function download_sales_log(id, interval) {
+	window.location.assign("/account/export_sales_log?daterange="+interval);
+}
+function download_buys_log(id, interval) {
+	window.location.assign("/account/export_buys_log?daterange="+interval);
+}
+function download_clients_sold(client_id, interval) { //console.log(client_id, interval);
+	window.location.assign("/report/exportXLS/?doc=sold_clients&daterange="+interval);
+}
+function download_suppliers_sold(supplier_id, interval) { //console.log(client_id, interval);
+	window.location.assign("/report/exportXLS/?doc=sold_suppliers&daterange="+interval);
+}
+function createTopButtonsDocument(doc) { //console.log(doc);
+	var html = '<header class="clearfix invoice-preview-options">';
+		html += '<div class="left">';
+		if (!from_admin) {
+			html += '<div class="page-options pull-left" style="position:relative;">'+
+						'<a href="#" data-toggle="dropdown" class="btn orange dropdown" aria-expanded="false" style="padding-left: 0px;padding-right: 0px;"><span class="material-icons">&#xE8B8;</span> '+language.options+" "+language[doc.doc]+'</a>'+
+						'<ul class="dropdown-menu dropdown-menu-left">';
+					html += createActionButtons(doc, false, false, false);
+					html += '<li><a href="'+baseurl+'docs/doPrint/'+doc.doc+'/?ids='+doc.id+'" target="_blank">'+language.print+'</a></li>';
+				html += '</ul>'+
+				'</div>';
+		} else {
+			html += '<a href="javascript:;" data-id="'+doc.id+'" class="link-orange modify-trez-account">Modifica in Cont Trezorerie</a>';
+		}
+		/*
+		if (doc.draft) {
+			html += '<a href="'+baseurl+'docs/edit/'+doc.doc+'/'+doc.id+'" class="link-orange"><span class="material-icons">&#xE254;</span> '+language.edit+'</a>';
+		} else { // not draft
+			if (doc.fk_doc_id == 1) { // invoice
+				if (doc.can_collect) {
+					html += '<a href="javascript:;" onclick="collectDoc(\''+doc.id+'\', false)" class="link-orange"><span class="material-icons">&#xE263;</span> '+language.collects+'</a>';
+				}
+			} else if (doc.fk_doc_id == 3 || doc.fk_doc_id == 4) { // proforma or notice
+				if (doc.invoiced) { // not invoiced
+					html += '<a href="'+baseurl+'docs/invoicing/'+doc.doc+'/'+doc.id+'" class="link-orange"><span class="material-icons">&#xE8B0;</span> '+language.invoicing+'</a>';
+				}
+			}
+		}*/
+		html += '</div>';
+		html += '<div class="right">';
+		if (doc.has_receipts) { /*
+			html += '<div class="dropdown hidden-xs dropdown-select" data-callback="change_doc_format">'+
+						'<a href="#" data-toggle="dropdown" class="btn btn-ghost" aria-expanded="false"> <span class="dropdown-selected-value"></span> <span class="caret"></span> </a>'+
+						'<ul class="dropdown-menu dropdown-menu-right">'+
+							'<li><a href="#" data-value="1"' + (doc.format == '1' ? ' data-default="true"' : '') + '>'+language.invoice+' + '+language.receipt+'</a></li>'+
+							'<li><a href="#" data-value="2"' + (doc.format == '2' ? ' data-default="true"' : '') + '>'+language.invoice+'</a></li>'+
+						'</ul>'+
+					'</div>';*/
+		}
+		if (doc.draft == "1") {
+			html += '<a class="btn btn-primary" href="'+baseurl+'docs/save/'+doc.doc+'/'+doc.id+'"><span class="material-icons">&#xE5CA;</span> '+language.issue+' '+language[doc.doc]+'</a>';
+		} else {
+			/*html += '<a href="'+baseurl+'docs/download/'+doc.doc+'/'+doc.id+'" class="btn orange hidden-xs"><span class="material-icons">&#xE2C6;</span> '+language.export+'</a>';
+			html += '<span class="dropdown">'+
+					'<a href="javascript:;" data-toggle="dropdown" class="btn orange"><span class="material-icons">&#xE8AD;</span> '+language.print+'</a>'+
+						'<ul class="dropdown-menu" aria-labelledby="dLabel">'+
+							'<li><a href="'+baseurl+'docs/doPrint/'+doc.doc+'/?ids='+doc.id+'" class="btn orange" style="text-align: left;padding-left:10px;" target="_blank"><span class="material-icons">&#xE8AD;</span> '+language.print+' '+language[doc.doc]+'</a></li>'+
+							'<li><a href="'+baseurl+'nomenclator/print_client_envelope/?id='+doc.client_id+'" style="text-align: left;padding-left:10px;" class="btn orange"><span class="material-icons">&#xE8AD;</span> '+language.print+' '+language.envelope+'</a></li>'+
+						'</ul>'+
+				'</span>';
+			*/
+			if (from_admin) {
+				html += '<a href="'+baseurl+'docs/download/'+doc.doc+'/'+doc.id+'" target="_blank" class="link-orange" style="margin-right: 20px;">'+language.export+'</a>';
+				html += '<a href="'+baseurl+'docs/doPrint/'+doc.doc+'/?ids='+doc.id+'" target="_blank" class="link-orange" style="margin-right: 20px;">'+language.print+'</a>';
+			}
+			html += '<a class="btn btn-primary email-doc" href="javascript:;" data-id="'+doc.id+'"><span class="material-icons">&#xE0E1;</span> '+language.send+' '+language[doc.doc]+'</a>';
+		}
+		html += '</div>';
+		
+	html += '</header>';
+	return html;
+}
+function set_sort_header(table_header_id, sd, ctab) {
+	$(".sort-header").click(function(e) {
+		var sort_column = $(this).data("sort"),
+			sort_direction = $(this).data("sort-direction");
+		// erase all others
+		$("#"+table_header_id+"desktop .material-icons").parent().data("sort-direction", ""); // remove other sorts directions
+		$("#"+table_header_id+"desktop .material-icons").remove(); // remove other sorts
+		// mobile also
+		$("#"+table_header_id+"mobile .material-icons").parent().data("sort-direction", ""); // remove other sorts directions
+		$("#"+table_header_id+"mobile .material-icons").remove(); // remove other sorts
+		// move to this one
+		if (!sort_direction) { // sort is on another column
+			sort_direction = "desc";
+			$(this).data("sort-direction", "desc");
+			$(this).append('<i class="material-icons">&#xE313;</i>');
+		} else {
+			if (sort_direction == "asc") {
+				sort_direction = "desc";
+				$(this).append('<i class="material-icons">&#xE313;</i>');
+			} else if (sort_direction == "desc") { 
+				sort_direction = "asc";
+				$(this).append('<i class="material-icons">&#xE316;</i>');
+			}
+			$(this).data("sort-direction", sort_direction);
+		}
+		sd.sortBy = sort_column;
+		sd.sortDir = sort_direction;
+		ctab.applyFilters();
+	});
+}
+function setSortHeader(table_header_selector, sendData, ctab) {
+	let table = $(table_header_selector);
+	renderDirectionArrow(table.find('.sort-header[data-sort-direction]'));
+
+	$(".sort-header").click(function(e) {
+		var th = $(this),
+			sort_column = th.data("sort"),
+			sort_direction = th.data("sort-direction");
+
+		sort_direction = sort_direction == "desc" ? "asc" : "desc";
+		th.data("sort-direction", sort_direction);
+		sendData.sortBy = sort_column;
+		sendData.sortDir = sort_direction;
+		ctab.applyFilters();
+		renderDirectionArrow(th);
+	});
+
+	function renderDirectionArrow(th) {
+		let	sort_direction = th.data("sort-direction");
+		table.find(".sort-direction").remove();
+		th.append(`<i class="far fa-angle-${sort_direction == "desc" ? "down" : "up"} ms-2 sort-direction"></i>`);
+	}
+}
+function invoice_notices(pre_id) { //console.log(pre_id);
+	var selectedDocs = $('input[name^='+pre_id+']:checked'),
+		ids = [];
+	pre_id = pre_id.replace("_", "\_");
+	var pr_id = new RegExp(pre_id, "g");
+	selectedDocs.each(function(index) {
+		var th = $(this); //console.log(th.attr('id'));
+		var th_id = th.attr('id');
+		th_id = th_id.replace(pr_id, '');
+		th_id = th_id.replace(/\_/, '');
+		if (th_id != "") { //console.log(th_id);
+			if (th.data("document-type") == "7" && th.data("has-more-to-invoice") == "1") {
+				ids.push(th_id);
+			}
+		}
+	}); 
+	if (ids.length == 0) {
+		wait_cursor(false);
+		show_message("info|"+language.select_notices_for_invoicing);
+		return false;
+	}
+	location.href = '/expenses/notice/?ids='+ids.join(",");
+}
+function verify_invoice_notices(pre_id, ch) {
+	var selectedDocs = $('input[name^='+pre_id+']:checked'),
+		a_id = 0, to_submit = true, total_notices = 0;
+	selectedDocs.each(function(index) {
+		var s_id = $(this).data("supplier-id"),
+			dt = $(this).data("document-type"),
+			hmti = $(this).data("has-more-to-invoice");
+		if (a_id != 0 && a_id != s_id) {
+			show_message(language.different_suppliers);
+			to_submit = false;
+			//ch.prop("checked", false);
+		}
+		a_id = s_id;
+		if (dt == "7" && hmti == "1") {
+			total_notices++;
+		}
+	});
+	if (total_notices == 0) {
+		show_message(language.message_choose_notices);
+		to_submit = false;
+	}
+	if (to_submit) {
+		invoice_notices(pre_id);
+	}
+}

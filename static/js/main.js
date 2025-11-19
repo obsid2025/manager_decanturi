@@ -104,7 +104,7 @@ async function handleFileUpload() {
 }
 
 /**
- * Afișare rezultate
+ * Afișare rezultate pentru Tab 1 (Raport Decanturi)
  */
 function displayResults(data) {
     // Afișare statistici
@@ -112,7 +112,7 @@ function displayResults(data) {
     document.getElementById('comenziAnulate').textContent = data.comenzi_anulate;
     document.getElementById('totalComenzi').textContent = data.total_comenzi;
 
-    // Construire tabel
+    // Construire tabel (cu coloana SKU)
     const tableBody = document.getElementById('tableBody');
     tableBody.innerHTML = '';
 
@@ -131,6 +131,14 @@ function displayResults(data) {
             tdParfum.classList.add('parfum-name');
         }
         tr.appendChild(tdParfum);
+
+        // Coloana SKU (nouă!)
+        const tdSku = document.createElement('td');
+        tdSku.textContent = rand.sku;
+        tdSku.style.fontFamily = "'Courier New', monospace";
+        tdSku.style.fontSize = '0.9rem';
+        tdSku.style.color = 'var(--text-secondary)';
+        tr.appendChild(tdSku);
 
         // Coloana cantitate
         const tdCantitate = document.createElement('td');
@@ -169,8 +177,13 @@ function displayResults(data) {
 
     document.getElementById('totalGeneral').textContent = data.sumar.total;
 
-    // Afișare secțiune rezultate
+    // Afișare secțiune rezultate Tab 1
     resultsSection.style.display = 'block';
+
+    // Populare automată Tab 2 (Bonuri de Producție) cu aceleași date
+    if (data.bonuri && data.bonuri.length > 0) {
+        displayVoucherResultsFromUpload(data);
+    }
 
     // Scroll la rezultate
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -361,7 +374,66 @@ async function handleVoucherFileUpload() {
 }
 
 /**
- * Afișare rezultate voucher
+ * Afișare rezultate voucher din upload Tab 1 (fără comenzi)
+ */
+function displayVoucherResultsFromUpload(data) {
+    // Afișare statistici
+    document.getElementById('totalBonuri').textContent = data.total_bonuri;
+    document.getElementById('totalBucati').textContent = data.total_bucati;
+
+    // Construire tabel
+    const tableBody = document.getElementById('voucherTableBody');
+    tableBody.innerHTML = '';
+
+    data.bonuri.forEach((bon, index) => {
+        const tr = document.createElement('tr');
+
+        // SKU
+        const tdSku = document.createElement('td');
+        tdSku.textContent = bon.sku;
+        tr.appendChild(tdSku);
+
+        // Nume
+        const tdNume = document.createElement('td');
+        tdNume.textContent = bon.nume;
+        tr.appendChild(tdNume);
+
+        // Cantitate
+        const tdCantitate = document.createElement('td');
+        tdCantitate.innerHTML = `<strong style="font-size: 1.2rem; color: var(--success-color);">${bon.cantitate}</strong>`;
+        tr.appendChild(tdCantitate);
+
+        // Comenzi (gol pentru upload din Tab 1)
+        const tdComenzi = document.createElement('td');
+        tdComenzi.textContent = '-';
+        tdComenzi.style.fontSize = '0.85rem';
+        tdComenzi.style.color = 'var(--text-secondary)';
+        tr.appendChild(tdComenzi);
+
+        // Acțiuni
+        const tdActiuni = document.createElement('td');
+        const btnCopy = document.createElement('button');
+        btnCopy.className = 'btn-copy-sku';
+        btnCopy.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copiază SKU
+        `;
+        btnCopy.addEventListener('click', () => copySKU(bon.sku, btnCopy));
+        tdActiuni.appendChild(btnCopy);
+        tr.appendChild(tdActiuni);
+
+        tableBody.appendChild(tr);
+    });
+
+    // Afișare secțiune rezultate
+    resultsSectionVoucher.style.display = 'block';
+}
+
+/**
+ * Afișare rezultate voucher din upload Tab 2 (cu comenzi)
  */
 function displayVoucherResults(data) {
     // Afișare statistici
@@ -392,7 +464,7 @@ function displayVoucherResults(data) {
 
         // Comenzi
         const tdComenzi = document.createElement('td');
-        const comenziText = bon.comenzi.join(', ');
+        const comenziText = bon.comenzi ? bon.comenzi.join(', ') : '-';
         const suffix = bon.total_comenzi > 5 ? '...' : '';
         tdComenzi.textContent = comenziText + suffix;
         tdComenzi.style.fontSize = '0.85rem';

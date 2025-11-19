@@ -1,0 +1,9 @@
+function DummyObj() { // dummy, used to do nothing
+	
+}
+DummyObj.prototype = {
+    constructor: DummyObj,
+	applyFilters:function() {
+		
+	}
+}

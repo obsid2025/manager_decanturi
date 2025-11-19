@@ -1,0 +1,621 @@
+function account_delete_picture(picture_type) {
+	var dataf = {
+        "picture_type": picture_type
+		};
+	var jqxhr = getjqxhr("/account/do_delete_pictures/", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		$("#user_"+picture_type).remove();
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function modify_bank_account(id, code) {
+	var dataf = {
+		id: id,
+        used: $("#ba_is_used_" + id).prop('checked') ? 1 : 0,
+		code: code
+	};
+	var jqxhr = getjqxhr("/account/do_modify_bank_account/", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "err") {
+			$("#ba_is_used_" + id).prop('checked', false);
+		}
+		if (data.requiresVerification) {
+			displayTfaModal({
+				text: data.verificationText,
+				fn: async function(sentCode) {
+					$("#ba_is_used_" + id).prop('checked', true);
+					modify_bank_account(id, sentCode);
+				}
+			});
+			return;
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function modify_bank_account_einvoice(id) {
+	if ($("#ba_einvoice_" + id).prop('checked') && !$("#ba_is_used_" + id).prop('checked')) {
+		show_message(language.bank_account_einvoice_unused);
+		$("#ba_einvoice_" + id).prop('checked', false);
+		return false;
+	}
+	var dataf = {
+		"id": id,
+        "chk": $("#ba_einvoice_" + id).prop('checked') ? 1 : 0,
+		"einvoice": 1
+		};
+	var jqxhr = getjqxhr("/account/do_modify_bank_account/", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "err") {
+			$("#ba_einvoice_" + id).prop('checked', false);
+		} else {
+			$(".bnk-einvoice").prop("checked", false);
+			if (dataf["chk"]) {
+				$("#ba_einvoice_" + id).prop('checked', true);
+			}
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function account_modify_user_series(id, type, config) {
+	config = config || 0;
+	if (!$("#us_is_implicit_" + id).prop('checked')) {
+		$("#us_is_implicit_" + id).prop('checked', true);
+		return;
+	}
+	var jqxhr = getjqxhr("/account/do_modify_user_series/", {"id": id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "err") {
+			$("#us_is_implicit_" + id).prop('checked', false);
+		} else {
+			var s_class = "series_" + config + "_"+type;
+			$("."+s_class).prop('checked', false);
+			$("."+s_class).removeClass(s_class);
+			$("#us_is_implicit_" + id).addClass(s_class);
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function account_modify_cote_tva(id) {
+	if (!$("#ct_is_implicit_" + id).prop('checked')) {
+		$("#ct_is_implicit_" + id).prop('checked', true);
+		return;
+	}
+	var jqxhr = getjqxhr("/account/do_modify_cote_tva/", {"id": id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "err") {
+			$("#ct_is_implicit_" + id).prop('checked', false);
+		} else {
+			$(".ctva").prop('checked', false);
+			$("#ct_is_implicit_" + id).prop('checked', true);
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function change_exchange_rate() {
+	if ($("#use_internet_exchange_rate").prop('checked')) {
+		$("#internet_exchange_holder").removeClass('hidden');
+	} else {
+		$("#internet_exchange_holder").addClass('hidden');
+	}
+}
+function change_new_product() {
+	if ($("#save_new_product_ask").prop('checked')) {
+		$("#new_product_holder").removeClass('hidden');
+	} else {
+		$("#new_product_holder").addClass('hidden');
+	}
+}
+function change_art_152() {
+	if ($("#text_art_152").prop('checked')) {
+		$("#text_art_152_txt").prop('readonly', false);
+		$("#text_art_152_txt").focus();
+	} else {
+		$("#text_art_152_txt").prop('readonly', true);
+	}
+}
+function change_payment_deadline() {
+	if ($("#payment_deadline_1").prop('checked')) {
+		$("#payment_default").prop('readonly', false);
+		$("#payment_default").focus();
+	} else if($("#payment_deadline_2").prop('checked')) {
+		$("#payment_default").prop('readonly', true);
+	}
+}
+function change_use_code_product() {
+	if ($("#use_code_product").prop('checked')) {
+		$("#show_code_product").prop('disabled', false);
+	} else {
+		$("#show_code_product").prop('disabled', true);
+		$("#show_code_product").prop('checked', false);
+	}
+}
+function show_dialog_new_alert(id) {
+	var jqxhr = getjqxhr("/account/get_alert_values/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data); //console.log(data);
+			for (var key in data) {
+				if (data.hasOwnProperty(key)) {
+					if (key == "message") {
+						data[key] = data[key].replace(/\\r?\\n/g, '\n');
+					}
+					if (key == "request_confirmation") {
+						$("#" + key).prop("checked", data[key]);
+					} else {
+						$("#" + key).val(data[key]);
+					}
+				}
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+	$("#alert_preview").slideUp();
+	if(typeof id === 'undefined'){
+		$("#aid").val('');
+    	show_dialog("modal_dialog", language.create_alert, 1000, "auto", false, true, false,'','','', true);
+	} else {
+		$("#aid").val(id);
+		show_dialog("modal_dialog", language.modify_alert, 1000, "auto", false, true, false,'','','', true);
+	}
+	$('.allow_placeholders').blur(function(){
+        c_control = this;
+        c_position = getCaretPosition(this);
+    });
+}
+function save_alert() {
+	var message = "";
+	if (!$.isNumeric($("#days").val())) {
+		message += language.fill_days_valid+"<br>";
+	} else if ($("#days").val() < 0) {
+		message += language.fill_days_positive+"<br>";
+	}
+	if ($.trim($("#subject").val()) == "") {
+		message += language.fill_alert_subject+"<br>";
+	}
+	if ($.trim($("#message").val()) == "") {
+		message += language.fill_alert_message+"<br>";
+	}
+	if (message != "") {
+		show_message("err|"+message);
+		return false;
+	}
+	return true;
+}
+function insert_placeholder(pkey, fn) {//console.log(pkey, c_control);
+	if(c_control) {
+        var offsetInput = $('#offset-month-number_' + $(c_control).attr('id'));
+        if (offsetInput.length > 0 && pkey == 'offset') {
+            pkey += offsetInput.val();
+        }
+        insertAtCursor(c_control, " #"+pkey+"#");
+		if (typeof fn !== 'undefined') {
+			fn();
+		}
+    }
+	return false;
+}
+function account_delete_alert(id) {
+	var message = language.delete_alert+"?";
+	if (confirm(message)) {
+		var jqxhr = getjqxhr("/account/do_delete_alert/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			$("#line_"+id).remove();
+			show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+function account_use_own_mail_server() {
+	if ($("#use_own_mail_server").prop('checked')) {
+		$("#own_email_settings").show();
+	} else {
+		$("#own_email_settings").hide();
+		var jqxhr = getjqxhr("/account/do_modify_own_mail_server/", {"active": $("#use_own_mail_server").prop('checked') ? 1 : 0}, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);
+				if (data.type == "err") {
+					$("#use_own_mail_server").prop('checked', false);
+				}
+				show_message(data);
+			}).fail(function() {
+				show_error_page();
+			});
+	}
+}
+function changeActiveCompany(comp_id) {
+	var jqxhr = getjqxhr("/account/do_modify_active_company/", {"active": comp_id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);//console.log(data);
+			if (data.type == 'err') {
+				show_message(data, false);
+			} else {
+				location.href = "/account";//.reload(true);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function changeActiveCompanyLeft(id) {
+	changeActiveCompany(id);
+}
+
+function show_dialog_user(id) {
+	var jqxhr = getjqxhr("/account/get_user_values/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {//console.log(id);console.log(data);alert(data);
+			check_login(data);
+			for (var key in data) {
+				if (data.hasOwnProperty(key)) {
+					if (key == "access_rights") {
+						for (key1 in data[key]) {
+							if (data[key].hasOwnProperty(key1)) {
+								$("#" + key1).prop("checked", data[key][key1]);
+							}
+						}
+					} else if (key == "send_email"){
+						$("#" + key).prop("checked", data[key]);
+					} else if(key == "view_type") {
+						change_access_mode(data[key]);
+					} else {
+						$("#" + key).val(data[key]);
+					}
+				}
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+	if(typeof id === 'undefined'){
+		$("#uid").val('');
+		$("#email").prop("disabled", "");
+		$("#name").prop("disabled", "");
+		$("#pass_holder").show();
+		$("#send_email_holder").show();
+		show_dialog("modal_dialog", language.add_user, 1000, "auto", false, true, false,'','','', true);
+	} else {
+		$("#uid").val(id);
+		$("#email").prop("disabled", "disabled");
+		$("#name").prop("disabled", "disabled");
+		$("#pass_holder").hide();
+		$("#send_email_holder").hide();
+		show_dialog("modal_dialog", language.modify_user, 1000, "auto", false, true, false,'','','', true);//, "Salveaza alerta", "Anuleaza", function(){save_alert()});
+	}
+}
+function delete_user_account(id) {
+	var message = language.delete_user+"?";
+	if (confirm(message)) {
+		var jqxhr = getjqxhr("/account/do_delete_user/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			if (data.type == 'ok') {
+				$('#line_' + id).remove();
+			}
+			show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+
+function change_access_mode(mod) {
+	$("#access_mode").val(mod);
+	if (mod == "simple") {
+		$("#holder_simple").removeClass("hidden");
+		$(".holder_advanced").addClass("hidden");
+		$("#simple_mode").addClass("hidden");
+		$("#advanced_mode").removeClass("hidden");
+	} else if (mod == "advanced") {
+		$("#holder_simple").addClass("hidden");
+		$(".holder_advanced").removeClass("hidden");
+		$("#advanced_mode").addClass("hidden");
+		$("#simple_mode").removeClass("hidden");
+	}
+}
+function addUserToCompany(email) {
+	var jqxhr = getjqxhr("/account/add_user_to_company/", {"email": comp_id});
+		jqxhr.done(function(data) {
+			//check_login(data);
+			location.reload(true);
+		}).fail(function() {
+			show_error_page();
+		});
+}
+
+function show_dialog_admin(id) {
+	var jqxhr = getjqxhr("/admin/get_admin_values/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login_admin(data);
+			for (var key in data) {
+				if (data.hasOwnProperty(key)) {
+					$("#" + key).val(data[key]);
+				}
+			}
+		}).fail(function( ) { //jqXHR, textStatus, errorThrown) {
+			show_error_page();
+			//console.log(jqXHR, textStatus, errorThrown);
+		});
+	if(typeof id === 'undefined'){
+		$("#aid").val('');
+		show_dialog("modal_dialog", "Adauga admin", 600, "auto", false, true, false,'','','', true);
+	} else {
+		$("#aid").val(id);
+		$("#password").val("");
+		show_dialog("modal_dialog", "Modifica admin", 600, "auto", false, true, false,'','','', true);
+	}
+}
+function delete_admin_account(id) {
+	var message = "Sigur doresti sa stergi acest utilizator?";
+	if (confirm(message)) {
+		var jqxhr = getjqxhr("/admin/do_delete_admin/", {"id": id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login_admin(data);
+			if (data.type == 'ok') {
+				$('#line_' + id).remove();
+			}
+			show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+function modify_admin(id) {
+	var dataf = {
+		"id": id,
+        "active": $("#admin_active_" + id).prop('checked') ? 1 : 0
+		};
+	var jqxhr = getjqxhr("/admin/do_modify_admin/", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login_admin(data);
+		if (data.type == "err") {
+			$("#admin_active_" + id).prop('checked', false);
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function delete_admin_translation(key) {
+	var message = "Sigur doresti sa stergi aceasta cheie+traduceri?";
+	if (confirm(message)) {
+		var jqxhr = getjqxhr("/admin/do_delete_translation/", {"key": key}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login_admin(data);
+			if (data.type == 'ok') {
+				$('#line_' + key).remove();
+			}
+			show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+function check_series_items(serie, all) {
+	if (typeof all !== "undefined") { // if _all is clicked
+		if ($("#"+serie+"_all").prop("checked")) {
+			$("."+serie).prop("checked", true);
+		} else {//console.log("uncheck all");
+			$("."+serie).prop("checked", false);
+		}
+	}
+	var labels = [], uncheck_all = false;
+	$($("."+serie)).each(function(item, value) {
+		var label = $(this).data("label"),
+			checked = $(this).prop("checked");
+			if (checked) {
+				labels.push(label);
+			} else {
+				uncheck_all = true;
+			}
+	});
+	if (uncheck_all) {
+		$("#"+serie+"_all").prop("checked", false);
+	}
+	$("#a"+serie).html(labels.join(", "));//console.log(serie, labels);
+	if (labels.length == 0) {
+		$("#"+serie+"_all").prop("checked", false);
+		$("#a"+serie).html(language.no_series);
+	}
+}
+function check_gestiuni_items(gestiune, all) {
+	if (typeof all !== "undefined") { // if _all is clicked
+		if ($("#"+gestiune+"_all").prop("checked")) {
+			$("."+gestiune).prop("checked", true);
+		} else {//console.log("uncheck all");
+			$("."+gestiune).prop("checked", false);
+		}
+	}
+	var labels = [], uncheck_all = false;
+	$($("."+gestiune)).each(function(item, value) {
+		var label = $(this).data("label"),
+			checked = $(this).prop("checked");
+			if (checked) {
+				labels.push(label);
+			} else {
+				uncheck_all = true;
+			}
+	});
+	if (uncheck_all) {
+		$("#"+gestiune+"_all").prop("checked", false);
+		$("#"+gestiune+"_all").data("label", labels.join(", "));
+	} else { // check all
+		$("#"+gestiune+"_all").prop("checked", true);
+		$("#"+gestiune+"_all").data("label", $("#"+gestiune+"_all").data("init-label"));
+	}
+	
+	if (labels.length == 0) {
+		$("#"+gestiune+"_all").prop("checked", false);
+		$("#"+gestiune+"_all").data("label", "");
+	}
+	// grab all labels from puncte de lucru
+	var lla = [];
+	$($(".all-gestiuni")).each(function(item, value) {
+		var ll = $(this).data("label");
+		if (ll) {
+			lla.push(ll);
+		}
+	});
+	if (lla.length == 0) {
+		$("#apdl").html(language.no_gestiuni);
+	} else {
+		$("#apdl").html(lla.join(", "));
+	}
+}
+function check_graph_items(graph, all) {
+	if (typeof all !== "undefined") { // if _all is clicked
+		if ($("#"+graph+"_all").prop("checked")) {
+			$("."+graph).prop("checked", true);
+		} else {//console.log("uncheck all");
+			$("."+graph).prop("checked", false);
+		}
+	}
+	var labels = [], uncheck_all = false;
+	$($("."+graph)).each(function(item, value) {
+		var label = $(this).data("label"),
+			checked = $(this).prop("checked");
+			if (checked) {
+				labels.push(label);
+			} else {
+				uncheck_all = true;
+			}
+	});
+	if (uncheck_all) {
+		$("#"+graph+"_all").prop("checked", false);
+	} else {
+		$("#"+graph+"_all").prop("checked", true);
+	}
+	$("#a"+graph).html(labels.join(", "));
+	if (labels.length == 0) {
+		$("#"+graph+"_all").prop("checked", false);
+		$("#a"+graph).html("-");
+	}
+}
+// search
+function search(query, searchDropdown) {
+	let searchResultsContainer = searchDropdown.find('.search-results');
+	searchResultsContainer.html('');
+	if (query.length < 2) {
+		searchResultsContainer.append('<div class="dropdown-item text-black text-wrap px-3">'+nl2br(unEscapeHtml(language.search_expl).replaceAll('<b>', '<b class="font-semibold">'))+'</div>')
+		return;
+	}
+
+	var jqxhr = getjqxhr("/account/search", {q: query}, "POST", "json");
+	jqxhr.done(function(data) {
+		let results = data.message.results;
+		check_login(data);
+		wait_cursor(false);
+		if (data.type == "err") {
+			show_message(data);
+			return;
+		}
+		searchDropdown.dropdown('show');
+		if ($.isEmptyObject(results)) {
+			searchResultsContainer.append('<div class="dropdown-item text-black text-wrap px-3">'+language.no_results+'</div>');
+			return;
+		}
+		searchResultsContainer.append(`<div class="dropdown-item text-black">
+			<span class="font-bold font-italic">${language.filter_results}</span>:<br>
+			${data.message.totals}
+		</div>`);
+		for (let i in results) {
+			let result = results[i];
+			searchResultsContainer.append(`<div class="dropdown-divider my-0 s_results_all s_results_${result.rtype}"></div>
+			<div class="dropdown-item text-black px-3 s_results_all s_results_${result.rtype}">
+				<div class="">
+					<span class="text-heading text-xs text-uppercase font-bold text-wrap">${result.client}</span>
+				</div>
+				<div class="d-flex align-items-center">
+					<div>
+						<span class="text-warning text-sm font-bold">${renderText(result)}</span>
+					</div>
+					<div class="ms-auto">
+						<span class="text-sm font-semibold total_search">${result.total}</span>
+					</div>
+				</div>
+				<div class="d-flex mt-1">
+					${get_search_tag(result)}
+					<span class="text-xs text-muted ms-auto">${result.date}</span>
+				</div>
+			</div>`);
+		}
+		function renderText(result) {
+			let text = result.text;
+			if (result.link) {
+				text = `<a href="${result.link}" class="${result.class}" data-is-preview="1">${text}</a>`;
+			}
+			return `<span class="text-warning text-sm font-bold text-wrap">${text}</span>`;
+		}
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function get_search_tag(result) {
+	var tag = '<span class="badge ', other = false;
+	if (result.tag == "invoice") {
+		tag += 'bg-info';
+	} else if (result.tag == "proforma") {
+		tag += 'bg-warning';
+	} else if (result.tag == "notice") {
+		tag += 'bg-dark';
+	} else if (result.tag == "receipt") {
+		tag += 'bg-success';
+	} else {
+		tag += 'bg-danger';
+		other = true;
+	}
+	tag += '">';
+	if (other) {
+		tag += result.tag;
+	} else {
+		tag += language[result.tag];
+	}
+	tag += '</span>';
+	return tag;
+}
+function nm_modify_gestiune(id) {
+	if (!$("#g_is_implicit_" + id).prop('checked')) {
+		$("#g_is_implicit_" + id).prop('checked', true);
+		return;
+	}
+	var jqxhr = getjqxhr("/nomenclator/set_gestiune_implicit/", {"id": id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "err") {
+			$("#g_is_implicit_" + id).prop('checked', false);
+		} else {
+			var s_class = "gestiune_implicit";
+			$("."+s_class).prop('checked', false);
+			$("."+s_class).removeClass(s_class);
+			$("#g_is_implicit_" + id).addClass(s_class);
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+$(document).ready(function() {
+	// filter invoices
+	$(document).on("click", ".s_filter_link", function(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var rtype = $(this).data("type");
+		$(".s_results_all").addClass("hidden");
+		$(".s_results_"+rtype).removeClass("hidden");
+	});
+	// check opera
+	checkOpera();
+	$('[data-toggle="tooltip"]').tooltip({html: true}); 
+});

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: obsid-decant-manager
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads-volume:/app/uploads
+      - exports-volume:/app/exports
+    environment:
+      - FLASK_ENV=production
+      - TZ=Europe/Bucharest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  uploads-volume:
+  exports-volume:

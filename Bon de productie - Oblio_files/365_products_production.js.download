@@ -1,0 +1,641 @@
+function ProductsProduction () { // extends Products to manipulate products from a production sheet
+	Products.call(this);
+	this.row_gestiune = {};
+	this.cost_price = 0;
+	this.sale_price = 0;
+	this.edit1 = false; // edit a not draft BP -> column consumption
+	this.finalized = false; // finalized production progress=2
+	this.percents = {};
+}
+ProductsProduction.prototype = Object.create(Products.prototype);
+ProductsProduction.prototype.constructor = ProductsProduction;
+
+// add products recipe on doc
+ProductsProduction.prototype.addFromRecipe = function(items, remove_old) {
+	if (typeof remove_old === "undefined") {
+		remove_old = true;
+	} //console.log(items);
+	if (remove_old) {
+		this.reset();
+		nr_crt_prod = 1;
+	}
+	if (!$.isEmptyObject(items)) {
+		for(i in items) {
+			var item = items[i];
+			//console.log(item);
+			this.addProduct(nr_crt_prod, item);//this.createProductRow(count, item));
+			if (item.hasOwnProperty("orig_quantity")) {
+				$("#ap_"+nr_crt_prod+"_quantity2").val(item["orig_quantity"]);
+			}
+			this.createEvents(nr_crt_prod);
+			nr_crt_prod++;
+		}
+	}
+	this.showSumar();
+}
+ProductsProduction.prototype.checkCostSalePrice = function(fn) {
+	var sp = parseFloat(this.sale_price);
+	if ($("#pp_tva_inclus_2").val() == "1") { // substract vat
+		var cota = $("#pp_cota_tva_2 option:selected").text();
+			cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+			var sp  = number_format(sp/(1 + cota/100), 4, ".", "", true);
+			//console.log(cota, sp);
+	}
+	if ($("#pp_currency_2").val() != "99") {
+		sp *= parseFloat($("#curs").val());
+	}
+	if (parseFloat(this.cost_price) > sp) {
+		show_confirm_custom(language.pr_cost_price_warning, 1);
+		$('.ok-confirm-modal1').data('funct_to_exe', fn);
+	} else {
+		fn();
+	}
+	//console.log(this.cost_price, this.sale_price);
+}
+ProductsProduction.prototype.checkDates = function() {
+	var pr_date = moment($("#pp_date").val(),"DD/MM/YYYY");
+	//var momentB = moment("07.11.2018","DD/MM/YYYY");
+	console.log(pr_date);
+	var p = this.prods;
+	for(var key in p) {
+		var item = p[key];
+		if (this.edit1) {
+			if (item["fk_pr_doc_id"]) {
+				var item_date = moment(item["fk_pr_doc_date_front"],"DD/MM/YYYY");
+				if (item_date < pr_date) { // has consumptions before new production date
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+ProductsProduction.prototype.checkInsufficientStock = function(fn) {
+	if (typeof fn === "undefined") {
+		fn = function(){};
+	}
+	var p = this.prods;
+	var total = 0;
+	for(var key in p) {
+		var item = p[key];//console.log(item);
+		if (item["pr_type"] == "94") {
+			continue;
+		}
+		if (item["insufficient_stock"]) {
+			var msg = '';
+			msg += sprintf(language.pr_insufficient_stock, item["name"], item["name"], $("#pp_gestiune").find(":selected").text());
+			var use_alternative = false;
+			if (item["has_alternative"] && !item["insufficient_stock_alt"]) {
+				msg += '<br><br>'+sprintf(language.pr_insufficient_stock_alt, item["name_alt"]);//<div style="height:20px;"></div>
+				use_alternative = true;
+			}
+			$(".ok-confirm-modal").html(language.remember);
+			$('.ok-confirm-modal').data('funct_to_exe', 'pr_insufficient_stock_ok');
+			if (use_alternative) {
+				$(".cancel-confirm-modal").html(language.use_alt_product);
+				$('.cancel-confirm-modal').data('funct_to_exe', 'pr_insufficient_stock_use_alt');
+				$('.cancel-confirm-modal').data('params', {"item": item});
+				//$('.cancel-confirm-modal').data('funct_to_exe_on_hide', 'product_changes_hide');
+				$(".cancel-confirm-modal").removeClass("hidden");
+			} else {
+				$(".cancel-confirm-modal").addClass("hidden");
+			}
+			$(".cancel-confirm-modal").data('funcExecuted', true);
+			show_confirm(msg);//, false);
+			$("#invoice_preview_btn").removeClass("disabled");
+			//console.log(item);
+			return;
+		}
+	}
+	$(".cancel-confirm-modal").removeClass("hidden");
+	fn();
+}
+ProductsProduction.prototype.checkOnlyRezidual = function() {
+	var p = this.prods;
+	for(var key in p) {
+		var item = p[key];//console.log(item);
+		if (item["pr_type"] != "94") {
+			return false;
+		}
+	}
+	return true;
+}
+// check if a selected product already exists in products .. and show alert 
+ProductsProduction.prototype.checkSelected = function(id) {
+	/*
+	var chk = this.checkSelectedIn(id, undefined, undefined, true);console.log(chk);
+	if (typeof chk === 'object') {
+		var mess_type = language.consumption;
+		if (chk.pr_type == "94") {
+			mess_type = (language.recipe).toLowerCase();
+		}
+		show_message("err|"+sprintf(language.product_already_used_in_production, chk.name, mess_type), false);
+		this.modifyRow(this.getEntries(id));
+		return false;
+	} */
+	return true;
+}
+// check if the product already exists in products
+ProductsProduction.prototype.checkSelectedIn = function(id, selected_prod_id, selected_gestiune_id, prd_name) {
+	/*
+	if (typeof selected_prod_id === "undefined") {
+		selected_prod_id = $("#ap_"+id+"_name_id").val();
+	}
+	if (typeof selected_gestiune_id === "undefined") {
+		selected_gestiune_id = $("#ap_"+id+"_gestiune").val();
+	}
+	var p = this.prods; //console.log(id);
+	var total = 0;
+	for(var key in p) { /// CHECK fk_gestiune_id also ... produs din gestiune
+		var item = p[key];//console.log(item);
+		if (item["id"] == id) { // dont compare with self
+			continue;
+		}
+		if (item["fk_prod_id"] == selected_prod_id) {// &&
+			//item["fk_gestiune_id"] == selected_gestiune_id) {
+			if (prd_name) {
+				return {"name": item["name"], "pr_type": item["pr_type"]};	
+			} else {
+				return false;
+			}
+		}
+	}*/
+	return true;
+}
+
+Products.prototype._createProductButton = Products.prototype.createProductButton;
+Products.prototype.createProductButton = function(id, type) {
+	var button = Products.prototype._createProductButton.call(this, id, type);
+	return button.replace("delete_product", "delete_product_pr");
+}
+Products.prototype._createProduct2Add = Products.prototype.createProduct2Add;
+Products.prototype.createProduct2Add = function(id) {
+	var old_entries = this.getItemEntries($("#entry_id").val());//console.log("old entries=", old_entries);
+	var product = Products.prototype._createProduct2Add.call(this, id);//console.log(product);
+	product["quantity"] /= parseFloat($("#pp_quantity").val());
+	//product["quantity"] = number_format(product["quantity"], get_precision(product["quantity"]), ".", "", true);
+	//console.log("prd=",product); ///
+	//if (product["quantity"]*parseFloat($("#pp_quantity").val()) > product["stoc"]) {
+		product["cost"] = $("#"+id+"_name_id").data("cost");
+	//} else {
+	//	product["cost"] = $("#"+id+"_name_id").data("cost") / parseFloat($("#pp_quantity").val());
+	//}
+	product["fk_prod_id"] = product["ref_id"];
+	product["cost_recipe"] = get_float($("#"+id+"_costrecipe").val());//console.log("prdct=",product);
+	this.row_gestiune[id] = product["fk_gestiune_id"];// save for init and events
+	return product;
+}
+
+Products.prototype._createProductRow = Products.prototype.createProductRow;
+Products.prototype.createProductRow = function(id, pr, fields) {
+	if (!pr) {
+		return false;
+	}
+	if (typeof fields === 'undefined') {
+		fields = false;
+	} //console.log("pr: ",pr);
+	var quantity = parseFloat($("#pp_quantity").val());//console.log("q=", quantity);
+	var q_consumed = parseFloat(pr["quantity"])*quantity;//console.log("q_consumed=", q_consumed);
+	if (pr.hasOwnProperty("orig_quantity")) {
+		q_consumed = pr["orig_quantity"];
+	}
+	q_consumed = number_format(q_consumed, get_precision(q_consumed), ".", "", true);
+	//console.log(pr);
+	pr["stoc"] = parseFloat(pr["stoc"]);
+	pr["stoc_alt"] = parseFloat(pr["stoc_alt"]);
+	var insufficient_stock = false, insufficient_stock_alt = false;
+	if (q_consumed > pr["stoc"]) {
+		insufficient_stock = true;
+	}
+	if (pr["has_alternative"]) { // has alt product
+		var q_consumed_alt = parseFloat(pr["quantity_alt"])*quantity;
+		q_consumed_alt = number_format(q_consumed_alt, get_precision(q_consumed_alt), ".", "", true);
+		if (q_consumed_alt > pr["stoc_alt"]) {
+			insufficient_stock_alt = true;
+		}
+	}
+	
+	var new_line = '<div class="d-flex gap-2 w-full text-sm">'+
+						'<div class="col-10 col-lg-7 d-flex flex-none flex-lg-wrap gap-2">';
+		// nr crt
+		new_line += '<div class="col-lg-1 w-40 ps-3 py-3"><span class="text nr_crt_prod">'+id+'</span></div>';
+		// product
+		new_line += '<div class="col-lg-8 ps-0 py-3">'+
+						'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_name" name="ap_'+id+'_name" placeholder="'+language.product_name+'..." value="'+pr["name"]+'" '+(this.finalized ? " readonly" : "")+' >';
+					if (pr["pr_type"] != "94") {
+						new_line += '<span id="ap_'+id+'_name_note" class="prod-description small'+((insufficient_stock) ? ' text-danger' : '')+'">'+language.stock_simple+": "+pr["stoc"]+" "+pr["um"]+'</span>';
+					}			
+			new_line += '<input type="hidden" id="ap_'+id+'_name_id" value="'+pr["fk_prod_id"]+'" data-stoc="'+pr["stoc"]+'" />'+
+						'<input type="hidden" id="ap_'+id+'_product_type_id" value="'+pr["pr_type"]+'" />';
+			new_line += "<span class='prod-description-"+id+" d-block hidden-sm hidden-xs'>"+get_product_recipe_tag(pr, undefined, undefined, true)+'</span>';
+			//new_line += '<div class="ps-0 py-0 d-lg-none font-bold">'+(pr.hasOwnProperty("quantity") ? pr["quantity"] : '')+' '+(pr.hasOwnProperty("um") ? pr["um"] : '')+'</div>';
+			new_line += '<div class="ps-0 py-0 d-lg-none"><span class="font-bold">'+language.q_consumed+': </span> '+q_consumed+' '+(pr.hasOwnProperty("um") ? pr["um"] : '')+'</div>';
+			
+			/*if (this.edit1 && pr["fk_pr_doc_id"]) {
+				new_line += '<div class="d-lg-none mt-3">';
+				new_line += '<span class="text"><a href="javascript:;" class="text-warning font-bold change-consumption" data-id="'+pr["fk_pr_doc_id"]+'" data-js-id="'+id+'" data-name="'+pr["fk_pr_doc"]+'" data-date="'+pr["fk_pr_doc_date_front"]+'" data-finalized="'+(this.finalized ? "1" : "0")+'">'+
+						pr["fk_pr_doc"]+' <i class="fas fa-pen text-xs"></i></a><br/><span class="text-muted small">'+pr["fk_pr_doc_date"]+'</span></span>';
+				new_line += '</div>';
+			}*/
+			
+		new_line += '</div>';
+		// gestiune
+		new_line += '<div class="col ps-0 py-3 cel_gestiune hidden-sm hidden-xs">'+
+						'<select class="form-select form-select-sm select-gestiune select-gestiune-recipe gestiune_area'+id+'" id="ap_'+id+'_gestiune" disabled>'+this.gestiuni_options+'</select>'+
+					'</div>';
+		this.row_gestiune[id] = pr["fk_gestiune_id"];	
+		new_line += '</div>'; // end col7 left	
+		
+		// right col
+		new_line += '<div class="col-2 col-lg-5">'+
+						'<div class="row ms-0 me-0">'+
+							'<div class="col col-lg-4 ps-2 ps-lg-0 py-3 d-none d-lg-block ">'+
+								'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_quantity2" name="ap_'+id+'_quantity2" value="'+q_consumed+'" placeholder="'+language.quantity+'" '+(this.finalized ? " readonly" : "")+' >'+
+								'<input type="hidden" id="ap_'+id+'_quantity" value="'+pr["quantity"]+'" />'+
+							'</div>'+
+							'<div class="col col-lg-2 ps-2 pe-0 ps-lg-0 py-3 d-none d-lg-block ">'+ // pt-5
+								'<span class="text">'+pr["um"]+'</span>'+
+								'<input type="hidden" id="ap_'+id+'_um" value="'+pr["um"]+'" />'+
+							'</div>'+
+							'<div class="col col-lg-2 ps-2 pe-0 ps-lg-0 py-3 d-none d-lg-block ">';
+						if (pr["pr_type"] == "94") { // rezidual -> show percent field
+							new_line += '<input type="hidden" id="ap_'+id+'_costrecipe" id="ap_'+id+'_costrecipe" name="ap_'+id+'_costrecipe" value="'+((pr["cost_recipe"]) ? pr["cost_recipe"] : '0')+'"  data-toggle="tooltip" title="'+language.cost_rezidual+'" />';
+							new_line += '<span class="text" id="rezidual-plh-'+id+'"></span>';
+						} else {
+							new_line += '<span class="text">'+pr["cost"]+'</span>';
+						}
+						new_line += '</div>';
+						if (this.edit1) {
+							new_line += '<div class="col col-lg-2 ps-2 pe-0 ps-lg-0 py-3 d-none d-lg-block cel_bc">'; // d-none d-lg-block
+							if (pr["fk_pr_doc_id"]) {
+								new_line += '<span class="text"><a href="javascript:;" class="text-warning font-bold change-consumption" data-id="'+pr["fk_pr_doc_id"]+'" data-js-id="'+id+'" data-name="'+pr["fk_pr_doc"]+'" data-date="'+pr["fk_pr_doc_date_front"]+'" data-finalized="'+(this.finalized ? "1" : "0")+'">'+
+									pr["fk_pr_doc"]+' <i class="fas fa-pen text-xs"></i></a><br/><span class="text-muted small">'+pr["fk_pr_doc_date"]+'</span></span>';
+							} 
+							new_line += '</div>';
+						}
+							
+							
+				//new_line += '</div>';
+					if (this.display_options && !this.finalized) { 
+						new_line += '<div class="py-1 text-end col">';
+						new_line += '<div class="dropdown">'+
+										'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+											'<i class="far fa-caret-square-down"></i>'+
+										'</a>'+
+										'<ul class="dropdown-menu dropdown-menu-end">'+
+											//this.createProductButton(id, "edit")+
+											this.createProductButton(id, "delete")+
+										'</ul>'+
+									'</div>'+
+								'</div>';
+					}		
+			new_line +=	'</div>'+
+					'</div>';
+	new_line += '</div>';
+	
+		// autocomplete product - end
+		//if (pr.hasOwnProperty("insufficient_stock")) {
+		//	insufficient_stock = pr["insufficient_stock"];
+		//}
+		pr["insufficient_stock"] = insufficient_stock;
+		pr["insufficient_stock_alt"] = insufficient_stock_alt;
+		pr["quantity2"] = q_consumed;
+		//products.replaceItem(pr); 
+		//console.log(this.prods);
+	// hidden
+	new_line += this.createHiddens(id, pr);
+	return new_line;
+}
+ProductsProduction.prototype.createEvents = function(id) {
+	//console.log("create events", id);
+	// autocomplete product
+	if (!this.finalized) {
+		set_autocomplete_produs("ap_"+id+"_name", "/nomenclator/get_products_values/?from_recipe=1", undefined, function(e){
+			if (products.checkSelected(id)) {
+				get_product_cost($("#ap_"+id+"_name_id").val(), $("#ap_"+id+"_gestiune").val(),
+										 $("#ap_"+id+"_quantity").val(), "ap_"+id+"_name", function(){products.updateRow(id);});
+			}
+		}, undefined, {0: "ap_"+id+"_gestiune"});
+		$("#ap_"+id+"_name").click(function(){show_autocomplete(this.id);});// show autocomplete
+		$("#ap_"+id+"_name").keydown(function(e) {
+			if (e.keyCode != 13) {
+				$("#"+this.id+"_id").val("");// reset id
+			}
+		});
+		$("#ap_"+id+"_name").blur(function(){
+			var txt = $.trim($(this).val());
+			if (txt == '') {
+				$("#"+this.id+"_id").val("");
+			}
+			if (!$("#"+this.id+"_id").val()) { // reset product name also
+				//products.delete_autocomplete(id);
+				var base_id = (this.id).substring(3, (this.id).lastIndexOf("_")); 
+				products.modifyRow(products.getEntries(base_id));
+			}
+		});
+	}
+	// select product gestiune
+	$("#ap_"+id+"_gestiune").val($("#pp_gestiune").val());//this.row_gestiune[i]);
+	/*if (!$.isEmptyObject(this.row_gestiune)) {
+		for(i in this.row_gestiune) {
+			$("#ap_"+i+"_gestiune").val(this.row_gestiune[i]);
+		}
+		this.row_gestiune.length = 0;
+	}*/
+	$(document).on("change", "#ap_"+id+"_gestiune", function(e) {
+		if (products.checkSelected(id)) { // allow to change
+			var base_id = (this.id).substring(3, (this.id).lastIndexOf("_")); //console.log(base_id);
+			var ap_name_id = $("#ap_"+base_id+"_name_id").val();
+			if (ap_name_id && ap_name_id != "0") { // has already selected product
+				update_product_stock(ap_name_id, $(this).val(), "ap_"+base_id+"_name", true, function() {
+					get_product_cost(ap_name_id, $("#ap_"+base_id+"_gestiune").val(),
+									 $("#ap_"+base_id+"_quantity").val(), "ap_"+base_id+"_name", function(){products.updateRow(base_id);});
+				});
+			}
+		}
+	});
+	if (!this.finalized) {
+		$("#ap_"+id+"_quantity2").blur(function(e) {
+			var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+			//var this_q = $(this).val();
+			var entries = products.getEntries(base_id);
+			check_and_parse_price("ap_"+base_id+"_quantity2", function() {
+						if (parseFloat($("#ap_"+base_id+"_quantity2").val()) <= 0) { // if invalid => revert to previous
+							$("#ap_"+base_id+"_quantity2").val(entries["quantity2"]);
+						}
+						get_product_cost($("#ap_"+base_id+"_name_id").val(), $("#ap_"+base_id+"_gestiune").val(),
+										 $("#ap_"+base_id+"_quantity2").val(), "ap_"+base_id+"_name", function(){
+											products.updateRow(base_id);
+											if (entries["fk_pr_doc"]) { // not issue or edit draft
+												show_message(sprintf(language.consumption_edit_product, entries["fk_pr_doc"]), false);
+											}
+											}, false);
+			}, undefined, false, false, entries["quantity2"]);
+		});
+		/*
+		$("#ap_"+id+"_costrecipe").blur(function(e) {
+			var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+			var entries = products.getEntries(base_id);
+			check_and_parse_price("ap_"+base_id+"_costrecipe", function() {
+				if (parseFloat($("#ap_"+base_id+"_costrecipe").val()) < 0 || parseFloat($("#ap_"+base_id+"_costrecipe").val()) > 100) { // if invalid => revert to previous
+					$("#ap_"+base_id+"_costrecipe").val(entries["cost_recipe"]);
+				}
+				products.updateRow(base_id);
+			});
+		});*/
+	}
+}
+Products.prototype.getTotalWithoutRezidual = function() {
+	var p = this.prods;
+	var total = 0;
+	//var percents = [];
+	//this.percents.length = 0;
+	for (var member in this.percents) delete this.percents[member];
+	for(var key in p) {//console.log(p[key]);
+		var item = p[key];
+		if (item["pr_type"] == "94") { // skip rezidual
+			this.percents[item["id"]] = item["cost_recipe"];
+			continue;
+		}
+		if (item["use_alt"]) {
+			total += parseFloat(item["cost_alt"]);
+		} else {
+			total += parseFloat(item["cost"]);
+		}
+	}
+	return total;
+}
+ProductsProduction.prototype.modifyRow = function(product) {
+	//var product = products.setIdToProduct(entry_id, product);
+	var entry_id = product["id"];
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product); 
+	this.createEvents(entry_id);
+	products.recalcTotals();
+}
+Products.prototype._recalcTotals = Products.prototype.recalcTotals;
+Products.prototype.recalcTotals = function() {
+	Products.prototype._recalcTotals.call(this);
+	this.showSumar();
+}
+ProductsProduction.prototype.updateDatePrAll = function(cid, new_date) {
+	var p = this.prods;
+	for(var key in p) {//console.log(p[key]);
+		var item = p[key];
+		if (item["fk_pr_doc_id"] == cid) {
+			this.updateDatePr(item["id"], new_date);
+		}
+	}
+}
+ProductsProduction.prototype.updateDatePr = function(id, new_date) {
+	var product = this.getEntries(id);
+	var entry_id = product["id"];
+	product["fk_pr_doc_date_front"] = $("#consumption_date").val();
+	product["fk_pr_doc_date"] = new_date;
+	//console.log(product, $("#consumption_date").val(), new_date);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	this.replaceItem(product); 
+	this.createEvents(entry_id);
+	products.recalcTotals();
+	products.showSumar();
+}
+ProductsProduction.prototype.updateRow = function(id) {
+	var product = this.getEntries(id);
+	var entry_id = product["id"];
+	product["ref_id"] = $("#ap_"+id+"_name_id").val();
+	product["fk_prod_id"] = product["ref_id"];
+	product["name"] = cleanString($("#ap_"+id+"_name").val());
+	product["um"] = cleanString($("#ap_"+id+"_um").val());
+	product["stoc"] = get_float($("#ap_"+id+"_name_id").data("stoc"));
+	product["cost"] = $("#ap_"+id+"_name_id").data("cost");
+	product["pr_type"] = $("#ap_"+id+"_product_type_id").val();
+	product["fk_gestiune_id"] = $("#pp_gestiune").val();//$("#ap_"+id+"_gestiune").val();
+	//this.row_gestiune[id] = product["fk_gestiune_id"];// save for init and events
+	product["orig_quantity"] = parseFloat($("#ap_"+id+"_quantity2").val());
+	product["quantity"] = product["orig_quantity"] / parseFloat($("#pp_quantity").val());
+	//product["quantity"] = number_format(product["quantity"], get_precision(product["quantity"]), ".", "", true);
+	product["cost_recipe"] = get_float($("#ap_"+id+"_costrecipe").val());
+	//console.log($("#ap_"+id+"_quantity_2").val());
+	//console.log(product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	this.replaceItem(product); 
+	this.createEvents(entry_id);
+	products.recalcTotals();
+	products.showSumar();
+	//console.log("update row=",id);
+}
+ProductsProduction.prototype.setEdit1 = function(et1) {
+	if (typeof et1 === "undefined") {
+		et1 = true;
+	}
+	this.edit1 = et1;
+}
+ProductsProduction.prototype.setFinalized = function(ff) {
+	if (typeof ff === "undefined") {
+		ff = true;
+	}
+	this.finalized = ff;
+}
+Products.prototype.showSumar = function(id, pr, fields) {
+	var total = this.getTotalWithoutRezidual();
+	//console.log(this.percents);
+	/*var p = this.prods;
+	var total = 0;
+	var percents = [];
+	for(var key in p) {//console.log(p[key]);
+		var item = p[key];
+		if (item["pr_type"] == "94") { // skip rezidual
+			percents.push(item["cost_recipe"]);
+			continue;
+		}
+		if (item["use_alt"]) {
+			total += parseFloat(item["cost_alt"]);
+		} else {
+			total += parseFloat(item["cost"]);
+		}
+	}*/
+	var tt = total; //console.log(this.percents.length);
+	//if (this.percents.length > 0) {
+	if (!$.isEmptyObject(this.percents)) {
+		for(i in this.percents) { //console.log("i=", i);
+			var a = (this.percents[i]/100)*total;
+			$("#rezidual-plh-"+i).html("-"+format_with_precision(a));
+			tt -= a;
+		}
+		total = tt;
+	}
+	//console.log(percents, tt);
+	var cost_per_product = total/parseFloat($("#pp_quantity").val());//console.log("cost_per_product=", cost_per_product);
+	this.cost_price = cost_per_product;
+	$("#cost_holder").html(format_with_precision(cost_per_product)+" RON");
+	$("#totals").removeClass("hidden");
+	// sale sumar
+	var sale_price = $("#pp_price").val();
+	this.sale_price = sale_price;
+	if (sale_price) {
+		var sumar_sale = parseFloat(sale_price);///parseFloat($("#pp_quantity").val());
+		$("#price_holder").html(sumar_sale+" "+this.getCurrencyText());
+	} else {
+		$("#price_holder").html("");
+	}
+	$("#total_holder").html(format_with_precision(total)+" RON");
+	if (!this.hasProducts()) {
+		$("#totals").addClass("hidden");
+	}
+	custom_show_exchange_rate();
+	//console.log(total, cost_per_product);
+}
+ProductsProduction.prototype.getCurrencyText = function() {
+	var cid = $("#pp_currency_2").val();
+	if (!cid || cid == "" || cid == "0") {
+		cid = 99;
+	}
+	return this.currency_values[cid];
+}
+ProductsProduction.prototype.refreshForGestiune = function(gid) { // refresh products from table for new gestiune
+	var q = $("#pp_quantity").val();
+	if (this.hasProducts()) {
+		this.refreshForQuantity(q, gid);
+	}
+}
+ProductsProduction.prototype.refreshForQuantity = function(q, gid) { // refresh products from table for new quantity
+	if (typeof gid === "undefined") {
+		gid = 0; // used to get stock for every product in prods on gestiune change
+	}
+	if (this.hasProducts() && q > 0) {
+		//this.addFromRecipe(Array.prototype.slice.call(this.prods));
+		$("#invoice_preview_btn").addClass("disabled");
+		$(".btn-add-product-on-doc").addClass("disable-add-product");
+		var dd = {"items": this.prods, "quantity": q, "date": $("#pp_date").val(), "gid": gid};
+		var jqxhr = getjqxhr("/stock/get_costs/", dd, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);//console.log("new prods", data);
+				if (!$.isEmptyObject(data)) {
+					for(i in data) {
+						var product = data[i];//console.log(product);
+						var new_line = products.createProductRow(product["id"], product);
+						$("#entry_item_"+product["id"]).html(new_line);
+						products.replaceItem(product); 
+						products.createEvents(product["id"]);
+						products.recalcTotals();
+					}
+					products.showSumar();
+				}
+				wait_cursor(false);
+				$("#invoice_preview_btn").removeClass("disabled");
+				$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			}).fail(function() {
+				show_error_page();
+			});
+	}
+}
+ProductsProduction.prototype.log = function() {
+	console.log("log products Production");
+}
+ProductsProduction.prototype.delete_autocomplete = function(id) {
+	delete_autocomplete_basic('ap_'+id+'_name');
+	$(".prod-description-"+id).addClass("hidden");
+	$("#ap_"+id+"_product_type_id").val("");
+}
+ProductsProduction.prototype.useAlternative = function(params) {
+	var item = params.item;
+	item = pr_switch_to_alt(item);//console.log(item);
+	//item["use_alt"] = true;
+	//item["insufficient_stock"] = false;
+	var id = item["id"];
+	this.row_gestiune[id] = item["fk_gestiune_id"];// save for init and events
+	var new_line = this.createProductRow(id, item);//console.log(new_line);
+	$("#entry_item_"+id).html(new_line);
+	this.replaceItem(item);
+	this.createEvents(id);
+	this.recalcTotals();
+	this.showSumar();
+	$('#modal-confirm').modal('hide');
+	show_message("info|"+language.alt_product_added);
+}
+
+function pr_insufficient_stock_ok() {
+	$('#modal-confirm').modal('hide');
+}
+function pr_insufficient_stock_use_alt(params) {
+	products.useAlternative(params);
+	//console.log("use alternate", params);
+}
+function pr_switch_to_alt(item) { // move init product data in _init attributes(for future use), and _alt to base attributes
+	var columns = ["cod_produs", "cost", "fk_gestiune_id", "fk_prod_id", "gestiune_name", "name", "pr_type", "quantity", "stoc", "um"];
+	var column;
+	for(i in columns) {
+		column = columns[i];
+		item[column+"_init"] = item[column];
+		item[column] = item[column+"_alt"];
+		//console.log(columns[i]);
+	}
+	item["has_alternative"] = false;
+	return item;
+}
+function delete_product_pr(id) {
+	var product = products.getEntries(id);//console.log(product);return;
+	if (product["fk_pr_doc"]) {
+		//$(".ok-confirm-modal").html(language.remember);
+		$('.ok-confirm-modal').data('funct_to_exe', 'delete_product_pr_actual');
+		$('.ok-confirm-modal').data('params', {"id": id});
+		//$(".cancel-confirm-modal").html(language.use_alt_product);
+		$('.cancel-confirm-modal').data('funct_to_exe', 'delete_product_pr_actual_no');
+		$('.cancel-confirm-modal').data('params', {"id": id});
+		$(".cancel-confirm-modal").data('funcExecuted', true);
+		show_confirm(sprintf(language.consumption_delete_product, product["fk_pr_doc"]));
+	} else { // issue or edit draft
+		delete_product(id);
+		products.recalcTotals();
+	}
+}
+function delete_product_pr_actual(params) {//console.log(params);
+	delete_product(params.id);
+	products.recalcTotals();
+}
+function delete_product_pr_actual_no() {
+	$('#modal-confirm').modal('hide');
+}

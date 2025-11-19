@@ -1,0 +1,4883 @@
+function Products () { // contains and manipulate all items in table
+	this.ENTRY_PRELUDE = "entry_item_";
+	this.prods = [];
+	this.platitor_tva = true;
+	this.platitor_tva_issuer = true;
+	this.display_options = true;
+	this.stornoDoc = false;
+	this.expense = false;
+	this.interDocMode = false;
+	this.eFactura = false;
+	this.xls = false;
+	this.cats_options = "";
+	this.cats2;
+	this.use_stock = false; 
+	this.use_code = false;
+	this.gestiuni_options = "";
+	this.currency_options = "";
+	this.currency_values = {};
+	this.multiple_pl = false;
+	this.stock_types = [];
+	this.correction = 0;
+	this.aq_prices;
+	this.hide_inter_doc = false;
+	this.inter_docs_discount = {};
+	this.total_storno = 0;
+	this.mobile = false; // used on inventory, for now
+	this.mode = 2;// default mode is productByproduct; mode=1 is list
+	this.pr_type_values = {};
+	this.show_pr_type_name = false;
+	this.supplier_doc = false;
+	this.storno_by_stock = false;
+	this.doc_from_facturare = false;
+	this.reducere_tip = 0;
+	this.show_is_etransport = false;
+	this.efactura_discount_cid = "";
+	this.efactura_precision = false;
+	this.show_sgr = false;
+	this.sgrTo = null;
+	this.sgrRefTo = null;
+	this.sgrDeletedList = new Set();
+	this.taxTo = null;
+	this.taxRefTo = null;
+	this.isBf = false;
+	this.show_cod_nc = false;
+	this.init();
+}
+Products.prototype = {
+    constructor: Products,
+	init:function() {},
+	addSgr:function(quantity, parentId = null) {
+		let accountTypeId = this.isExpense() ? '141' : '142';
+		let self = this;
+		let sgrItem = {
+			id: nr_crt_prod,
+			parentId: parentId,
+			name: language.has_sgr,
+			description: '',
+			cod_produs: '',
+			tva_inclus: true,
+			um: 'buc',
+			is_stoc: false,
+			pr_type: accountTypeId,
+			fk_cat_id: accountTypeId,
+			precision: 2,
+			price: '0',
+			pret_fara_tva: '0.50',
+			tva_unitar: 0,
+			valoare: number_format(quantity * 0.5, 2, '.', '', true),
+			user_price: '0.50',
+			init_total: number_format(quantity * 0.5, 2, '.', '', false),
+			exchange_rate: '0.00',
+			cota_tva: '0',
+			cota_tva_option: 'd3',
+			currency: '99',
+			quantity: quantity
+		};
+		this.addProduct(sgrItem.id, sgrItem, true);
+		nr_crt_prod++;
+		if (this.interDocMode && !self.sgrDeletedList.has(parentId)) {
+			$('.expense-init-product-w-code').each(function() {
+				let th = $(this), keywords = th.text().split(' ').map(item => item.trim().toLowerCase());
+				if (keywords.indexOf('sgr') !== -1) {
+					let row = th.closest('.table_row_add_product');
+					if (row.find('.ap_cota_tva').val().replace('%', '') === '0') {
+						row.remove();
+						self.sgrDeletedList.add(parentId);
+						return false;
+					}
+				}
+				return true;
+			});
+		}
+	},
+	// @return bool - was updated
+	addOrUpdateSgr:function(item) {
+		for (var i in this.prods) {
+			var row = this.prods[i];
+			if (this.isSgr(row.id)) {// && (item.id === row.parentId || !row.parentId)) {
+				var sgr_base_id = (row.id).replace("s", "");
+				if (parseInt(sgr_base_id) === parseInt(item.id) ) { // && !row.tax_updated
+					//row.tax_updated = true;
+					var new_sgr_product = this.getSgrCustomValues(item);//console.log("new_tax_product: ", new_tax_product, item);
+					var line = this.createProductRow(new_sgr_product.id, new_sgr_product, undefined, item.nr_crt+1);
+					$("#entry_item_" + new_sgr_product.id).html(line); //console.log("replace tax line:", row);
+					this.replaceItem(new_sgr_product);
+					return true;
+				}
+				/*row.parentId = item.id;
+				if (parseInt(row.quantity) === parseInt(item.quantity)) {
+					return false;
+				}
+
+				row.quantity = item.quantity;
+				row.valoare  	= number_format(row.quantity * row.pret_fara_tva, 2, '.', '', false);
+				row.init_total 	= number_format(row.quantity * row.user_price, 2, '.', '', false);
+				let line = this.createProductRow(row.id, row);
+				$("#entry_item_" + row.id).html(line);
+				this.replaceItem(row);
+				return true;
+				*/
+			}
+		}
+		this.addSgrCustom(item);//
+		return true;
+	},
+	hasSgr:function(values) {
+		if (values.hasOwnProperty("sgr") && parseInt(values.sgr) === 1) {
+			return true;
+		}
+		return false;
+		/*
+		let canHave = [76, 93].indexOf(parseInt(this.isExpense() ? values.fk_cat_id : values.pr_type)) !== -1;
+		if (!canHave) {
+			return false;
+		}
+		if (this.isDiscount(values.id)) {
+			return false;
+		}
+		return 'sgr' in values && parseInt(values.sgr) === 1;
+		*/
+	},
+	hasSgrCustomById:function(id) {
+		var p = this.prods;
+		for(var key in p) {
+			if (p[key]["id"] == id+"s") {
+				return true;
+			}
+		}
+		return false;
+	},
+	isSgr:function(id) {
+		var s = id.toString();
+		if (s.match(/s$/g)) {
+			return true;
+		}
+		return false;
+		//return this.isExpense() ? values.fk_cat_id === '141' : values.pr_type === '142';
+	},
+	isSgrItemDeleted:function(item) {
+		/*if (!this.isSgr(item)) {
+			return false;
+		}
+		for (let i in this.prods) {
+			let row = this.prods[i];
+			if (parseInt(item.parentId) === parseInt(row.id) && this.hasSgr(row)) {
+				return false;
+			}
+		}
+		return true;*/
+	},
+	checkSgr:function() {
+		let doUpdate = false;
+		for (let i in this.prods) {
+			let item = this.prods[i];//console.log("item: ", item);
+			/*if (this.isSgrItemDeleted(item)) {
+				this.deleteProduct(item.id);
+				doUpdate = true;
+			}*/
+			if (this.hasSgr(item)) {
+				if (this.addOrUpdateSgr(item)) {
+					doUpdate = true;
+				}
+			}
+		}
+		if (doUpdate) {
+			clearTimeout(this.sgrRefTo);
+			this.sgrRefTo = setTimeout(() => this.recalcTotals(false), 25);
+		}
+	},
+	checkTaxCustom:function() { //console.log("check tax custom function");
+		var doUpdate = false;
+		for (let i in this.prods) {
+			var item = this.prods[i];//console.log("item: ", item);
+			/*if (this.isSgrItemDeleted(item)) {
+				this.deleteProduct(item.id);
+				doUpdate = true;
+			}*/
+			if (this.hasTaxCustom(item)) { //console.log("has-tax: ", item);
+				if (this.addOrUpdateTaxCustom(item)) {
+					doUpdate = true;
+				}
+			}
+		}
+		if (doUpdate) { //console.log("checkTaxCustom doUpdate: "+doUpdate);
+			clearTimeout(this.taxRefTo);
+			this.taxRefTo = setTimeout(() => this.recalcTotals(false), 25);
+		}
+	},
+	// @return bool - was updated
+	addOrUpdateTaxCustom:function(item) {
+		for (var i in this.prods) {
+			var row = this.prods[i];
+			//if (i >= 2) return true;
+			if (this.isTaxCustom(row.id)) {
+				var tax_base_id = (row.id).replace("t", "");
+				if (parseInt(tax_base_id) === parseInt(item.id) ) { // && !row.tax_updated
+					//row.tax_updated = true;
+					var new_tax_product = this.getTaxCustomValues(item);//console.log("new_tax_product: ", new_tax_product, item);
+					var line = this.createProductRow(new_tax_product.id, new_tax_product, undefined, item.nr_crt+1);
+					$("#entry_item_" + new_tax_product.id).html(line); //console.log("replace tax line:", row);
+					this.replaceItem(new_tax_product);
+					return true;
+				}
+			}
+		}
+		this.addTaxCustom(item);
+		return true;
+	},
+	getSgrCustomValues:function(item) { //console.log("add tax line: ", item);
+		let self = this;
+		var user_price = 0.5, 
+			prec = get_user_precision()
+		vval = number_format(0.5 * item.quantity, prec, '.', '', false);
+		let accountTypeId = this.isExpense() ? '141' : '142';
+		let sgrItem = {
+			id: item.id+"s",
+			full_id: this.ENTRY_PRELUDE+item.id+"s",
+			name: language.has_sgr,
+			description: '',
+			cod_produs: '',
+			tva_inclus: true,
+			um: 'buc',
+			is_stoc: false,
+			pr_type: accountTypeId,
+			fk_cat_id: accountTypeId,
+			precision: prec,
+			price: '',
+			pret_fara_tva: 0.5,
+			tva_unitar: 0,
+			valoare: vval,
+			user_price: user_price,
+			init_total: 0,
+			exchange_rate: '0.00',
+			cota_tva: 0,
+			cota_tva_option: 'd3',
+			currency: 99,
+			quantity: item.quantity
+		}; 
+		if (item.hasOwnProperty("punct_lucru")) {
+			sgrItem["punct_lucru"] = item.punct_lucru;
+			if (!item.hasOwnProperty("pl_name")) {
+				item.pl_name = "";
+			}	
+			sgrItem["pl_name"] = item.pl_name;
+		}
+		return sgrItem;
+	}, 
+	addSgrCustom:function(item) {
+		let sgrItem = this.getSgrCustomValues(item);
+		//console.log("added taxItem: ", taxItem);
+		if (this.isBf) {
+			this.addProduct(sgrItem.id, sgrItem, true);
+			nr_crt_prod++;
+		} else {
+			var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+item.id+"s\">"+
+				this.createProductRow(item.id+"s", this.setIdToProduct(item.id+"s", sgrItem))+"</div>";//, undefined, nr_crt_prod
+			$("#entry_item_"+item.id).after(new_line); 
+			this.prods.splice(this.getKeyForId(item.id)+1, 0, sgrItem);
+		}
+	},
+	getTaxCustomValues:function(item) { //console.log("add tax line: ", item);
+		let self = this;
+		var pret_ftva = 0, tva_u = 0, vval = 0, user_price = 0, 
+			prec = get_user_precision(),
+			cota_percent = parseFloat(item.tax_cota_percent);
+		if (item.tax_tva_inclus == "0") {
+			item.tax_tva_inclus = false;
+		}
+		if (item.tax_type == "1") { // percent
+			pret_ftva = (parseFloat(item.tax_value)/100)*parseFloat(item.pret_fara_tva);
+			if (cota_percent > 0 && item.tax_tva_inclus) {
+				pret_ftva /= (1+cota_percent/100);
+			}
+		} else if(item.tax_type == "2") { // fix
+			pret_ftva = parseFloat(item.tax_value);
+			if (cota_percent > 0 && item.tax_tva_inclus) {
+				pret_ftva /= (1+cota_percent/100);
+			} //console.log("pret_ftva: ", pret_ftva);
+		} 
+		pret_ftva = number_format(pret_ftva, 4, '.', '', false);
+		vval = number_format(pret_ftva * item.quantity, prec, '.', '', false);
+		if (cota_percent > 0) {
+			tva_u = parseFloat(cota_percent/100)*vval;
+		}
+		tva_u = number_format(tva_u, prec, '.', '', false);
+		if (this.isBf) {
+			user_price = number_format((parseFloat(vval) + parseFloat(tva_u)) / parseFloat(item.quantity), prec, '.', '', false);
+		} else {
+			user_price = pret_ftva;
+		}
+		let taxItem = {
+			id: item.id+"t",
+			full_id: this.ENTRY_PRELUDE+item.id+"t",
+			name: item.tax_name,
+			description: '',
+			cod_produs: '',
+			tva_inclus: this.isBf ? true : item.tax_tva_inclus,
+			um: 'buc',
+			is_stoc: false,
+			pr_type: 1,
+			precision: prec,
+			price: '',
+			pret_fara_tva: pret_ftva,
+			tva_unitar: tva_u,
+			valoare: vval,
+			user_price: user_price,
+			init_total: 0,
+			exchange_rate: '0.00',
+			cota_tva: cota_percent,
+			cota_tva_option: item.tax_cota,
+			currency: item.currency,
+			quantity: item.quantity
+		}; 
+		if (item.hasOwnProperty("punct_lucru")) {
+			taxItem["punct_lucru"] = item.punct_lucru;
+			taxItem["pl_name"] = item.pl_name;
+		}
+		/*if (item.hasOwnProperty("doc_currency")) {
+			taxItem["doc_currency"] = item.doc_currency;
+		}
+		if (item.hasOwnProperty("has_pr_exchange")) {
+			taxItem["has_pr_exchange"] = item.has_pr_exchange;
+		}
+		if (item.hasOwnProperty("has_pr_exchange")) {
+			taxItem["has_pr_exchange"] = item.has_pr_exchange;
+		}*/
+		return taxItem;
+	}, 
+	addTaxCustom:function(item) {
+		let taxItem = this.getTaxCustomValues(item);
+		//console.log("added taxItem: ", taxItem);
+		if (this.isBf) {
+			this.addProduct(taxItem.id, taxItem, true);
+			nr_crt_prod++;
+		} else {
+			var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+item.id+"t\">"+
+				this.createProductRow(item.id+"t", this.setIdToProduct(item.id+"t", taxItem))+"</div>";//, undefined, nr_crt_prod
+			$("#entry_item_"+item.id).after(new_line); 
+			this.prods.splice(this.getKeyForId(item.id)+1, 0, taxItem);
+		}
+	},
+	hasTaxCustom:function(values) { //console.log("check has-tax: ", values);
+		if (values.hasOwnProperty("has_tax") && parseInt(values.has_tax) === 1) {
+			return true;
+		}
+		return false;
+	},
+	hasTaxCustomById:function(id) {
+		var p = this.prods;
+		for(var key in p) {
+			if (p[key]["id"] == id+"t") {
+				return true;
+			}
+		}
+		return false;
+	},
+	isTaxCustom:function(id) { //console.log("is tax custom: ", id);
+		var s = id.toString();
+		if (s.match(/t$/g)) {
+			return true;
+		}
+		return false;
+	},
+	add_product_discount:function(id) {
+		if ($("#add_product_ap_"+id).prevAll(".table_row_add_product").length > 0) {
+			show_message("err|"+language.add_in_order_intdoc);
+		} else {
+			var item = this.inter_docs_discount[id];
+			if (item["single_discount"]) { // update product name
+				var entries = this.getEntries(parseInt(item["id_item"]));
+				item["name"] = language.discount+" ";
+				if (item["procentual"] == 1) {
+					item["name"] += parseFloat(item["discount"])+"% ";
+				}
+				item["name"] += entries["name"];
+				if (this.eFactura) {
+					show_dialog_produs_discount(parseInt(item["id_item"]));
+					if (item["procentual"] == 1) {
+						$("#discount_valoare").val(parseFloat(item["discount"]));
+					} else {
+						$("#discount_fix").prop("checked", true);
+						change_discount_mode();
+						$("#discount_valoare").val((Math.abs(item["pret_fara_tva"]) + Math.abs(item["tva_unitar"])).toFixed(2));
+					}
+					this.efactura_discount_cid = id;
+					return false;
+				}
+			} else if (this.eFactura) { // total
+				 show_dialog_discount_total();
+				if (item["procentual"] == 1) {
+					$("#discount_valoare").val(parseFloat(item["discount"]));
+				} else {
+					$("#discount_fix").prop("checked", true);
+					change_discount_mode();
+					var valoare = (Math.abs(item["pret_fara_tva"]) + Math.abs(item["tva_unitar"])).toFixed(2);
+					$("#discount_valoare").val(valoare);
+				}
+				this.efactura_discount_cid = id;
+				return false;
+			}
+			this.addProduct(id, item);
+			$("#add_product_ap_"+id).remove();
+			//if (this.efactura) {
+			//	delete this.inter_docs_discount[id];
+			//}
+		}
+	},
+	add_product_int_doc:function(id) {
+		if ($("#add_product_ap_"+id).prevAll(".table_row_add_product").length > 0) {
+			show_message("err|"+language.add_in_order_intdoc);
+		} else {
+			add_product(id);
+		}
+	},
+	addCorrection:function() {
+		if (this.correction != 0) { //console.log("1", this.correction);
+			if (!this.hasCorrection()) { //console.log("1", this.correction);
+				var prod_to_add = {};
+					prod_to_add["name"] = language.doc_correction+': '+this.correction+' '+($("#currency option:selected").text()).substr(0, 3);
+					prod_to_add["is_correction"] = true;
+					prod_to_add["dif"] = this.correction;
+					this.correction = 0;
+				this.addProduct(nr_crt_prod, prod_to_add, false);//console.log(prod_to_add);//return;
+				nr_crt_prod++;
+				return true;
+			} 
+		} 
+		return false;
+	},
+	addProduct:function(id, prod_to_add, check_correction) {
+		prod_to_add = this.setIdToProduct(id, prod_to_add);
+		var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+id+"\">"+this.createProductRow(id, prod_to_add)+"</div>";//console.log(new_line);
+		if (!this.hasProducts()) { // insert after header
+			if (!this.isInventoryPR()) {
+				$(".header_invoice").after(new_line);
+			} else {
+				$("#collapse_products_list").append(new_line);
+			}
+		} else { // insert after last table_row --- last in table
+			$(".invoice_row:last").after(new_line);
+		}
+		var npr = this.getItemEntries(id);//console.log("npr: ",npr);
+		npr["aq_prices"] = this.aq_prices;
+		this.prods.push(npr);
+		this.recalcTotals();
+		if (typeof check_correction === 'undefined') {
+			check_correction = true;
+		}
+		if (check_correction) {
+			this.checkCorrection();
+		}
+	},
+	addProductButton:function(id, type, after) {
+		if (id instanceof Array) {
+			for(var key in id) {
+				this.addProductButton(id[key], type, after);
+			}
+		} else { //this.addProductButton(this.getDiscountGroupIds(id), , "edit");
+			//console.log(id, type, after);
+			if ($("#entry_item_"+id+" .product_percent_percent").length == 0) {
+				$("#entry_item_"+id+" .product_percent_"+after).after(this.createProductButton(id, type));
+			}
+		}
+	},
+	applyDiscount:function() {
+		var id = $("#discount_entry_id").val();//console.log(id);
+		if (id != "") { // single discount
+			if ($("#entry_item_"+id+"d").length > 0) {
+				show_message("Discountul este deja adaugat!");
+				//alert("already added");
+				return false;
+			}
+			var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+id+"d\">"+this.createProductRow(id+"d", this.setIdToProduct(id+"d", this.getProductForDiscount("single", id)))+"</div>";
+			$("#entry_item_"+id).after(new_line); 
+			this.prods.splice(this.getKeyForId(id)+1, 0, this.getItemEntries(id+"d"));
+			this.removeProductButton(id, "percent");
+		} else { // total discount
+			var ids = this.getLastDiscountGroupIds();
+			var id = ids.join("_");
+			var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+id+"d\">"+this.createProductRow(id+"d", this.setIdToProduct(id+"d", this.getProductForDiscount("total")))+"</div>";
+			//$("#form_add_products_table > tbody:last-child").append(new_line);
+			$(".invoice_row:last").after(new_line);
+			this.prods.push(this.getItemEntries(id+"d"));
+			this.removeProductButton(ids, "percent");
+		}
+		this.recalcTotals(false);
+		this.checkCorrection();
+		if (this.supplier_doc) {
+			this.distributeVerify();
+		}
+		if (this.eFactura && this.efactura_discount_cid) {
+			$("#add_product_ap_"+this.efactura_discount_cid).remove();
+			delete this.inter_docs_discount[this.efactura_discount_cid];
+			this.efactura_discount_cid = "";
+		}
+		return true;
+	},
+	canAddTotalDiscount:function() { // is the last product a discount
+        if (this.prods.length < 1) {
+            return null;
+        }
+		var last_prod = this.prods[this.prods.length - 1];
+		if (this.isDiscount(last_prod["id"])) {
+			return false;
+		}
+		if (this.isTaxCustom(last_prod["id"]) || this.isSgr(last_prod["id"])) {
+			// get the one before the tax and try againd
+			var last_prodx = this.prods[this.prods.length - 2];
+			if (this.isDiscount(last_prodx["id"])) {
+				return false;
+			}
+		}
+		return true;
+	},
+	canApplyDistribute:function(cat_id, st) {
+		var p = this.prods;
+		var pt = 0;
+		for(var key in p) {
+			if (this.getApplyDistribute(p[key], cat_id)) {
+				pt++;
+			}
+		}
+		if (typeof st === "undefined") {
+			st = false;
+		}
+		if (st && pt == 0) {
+			return false;
+		}
+		if (pt == 0 || pt > 0) {
+			return true;
+		}
+		return false;
+	},
+	changeCorrectionCurrency:function() { 
+		var key = this.hasCorrection(true);//console.log(key);
+		if (key) { //console.log("#entry_item_"+key+" .cel_name .text");
+			var old_name = $("#entry_item_"+key+" .cel_name .text").html();//console.log(old_name);
+			var new_name = old_name.substr(0, old_name.length-3) + ($("#currency option:selected").text()).substr(0, 3);
+			$("#entry_item_"+key+" .cel_name .text").html(new_name);
+			$("#entry_item_"+key+" input[name='entry[item"+key+"][name]']").remove();
+			$("#entry_item_"+key).append(create_input_hidden_prod(key, "name", new_name));
+		}
+	},
+	changeExpenseTax:function(cat_id) {
+		if (this.supplier_doc) {
+			var custom_text = language.modify_product;
+			var distribute_placeholder = "";
+			custom_text = language.edit;
+			if (this.isImpoziteTaxe(cat_id)) {
+				custom_text += " "+language.tax;
+				distribute_placeholder = language.tax;
+			} else {
+				custom_text += " "+language.expense;
+				distribute_placeholder = language.expense;
+			}
+			$(".distribute_placeholder").html(distribute_placeholder);
+			$('#modal-add-expense').find('.modal-title-text').html(custom_text);
+			$('#modal-add-expense').find('button[data-type="submit"]').html(custom_text);
+		}
+	},
+	checkAddNotices:function(data) { // check different sale price for GV
+		if (!$.isEmptyObject(data)) {
+			var items = {};
+			for(var key in data) {
+				var item = data[key];//console.log(item);
+				if (item["gestiune_type"] != "2") { // only GV
+					continue;
+				} //console.log("here");
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0" || !item["fk_produs_id"] || item["fk_produs_id"] == "0") { // skip non stockable
+					//continue;
+				} //console.log("here 2");
+				var key = item["fk_gestiune_id"]+"_"+item["fk_produs_id"];console.log("key", key);
+				if (!items.hasOwnProperty(key)) {
+					items[key] = {"price": item["pret_fara_tva_2"], "cota_tva": item["cota_tva_option_2"], "tva_inclus": item["tva_inclus_2"]}; // no need for currency. GV is always RON
+					continue;
+				}
+				if (items[key]["price"] != item["pret_fara_tva_2"] ||
+					items[key]["cota_tva"] != item["cota_tva_option_2"] ||
+					items[key]["tva_inclus"] != item["tva_inclus_2"]) {
+					return sprintf(language.different_price_same_product, item["name"]);
+				}
+			} //console.log(items);
+		}
+		return "ok";
+	},
+	checkAddTVAInclus:function(rate, id) { // can add the rate. see if there are other products with 0% - tva inclus
+		if (this.isExpense()) {
+			return true;
+		}
+		if (!this.platitor_tva || !this.hasProducts()) {
+			return true;
+		}//console.log(rate, id);
+		var has_other_vats = false, p = this.prods, nr_prods = 0;
+		for(var key in p) { //console.log(p[key]);
+			if (p[key]["id"] == id) { // exclude comparison with self
+				continue;
+			}
+			if (this.isDiscount(p[key]["id"])) { // exclude discounts
+				continue;
+			}
+			nr_prods++;
+			if (has_other_vats && rate == "d8") { // has other products with different rates
+				return false;
+			}
+			if (p[key]["cota_tva_option"] != "d8") { // different than 0% - tva inclus
+				has_other_vats = true;
+				continue;
+			}
+		}
+		if (has_other_vats && rate == "d8") { // has other products with different rates
+			return false;
+		}
+		if (!has_other_vats && nr_prods > 0 && rate != "d8") { // has only products with 0% - tva inclus, but rate is not tva inclus
+			return false;
+		}
+		return true;
+	},
+	checkCorrection:function(dec, force_delete) {
+		var doc_value = parseFloat($.trim($("#doc_value").val()));
+		var total = parseFloat($("#total_basic").val());
+		//console.log("chk corr = ", doc_value, total);
+		if (!doc_value || !total) {
+			this.removeCorrection();
+			//console.log("correction", this.correction);
+			return;
+		}
+		var dif = number_format(doc_value - total, 2);//get_user_precision());
+		if (this.correction != dif) {
+			this.removeCorrection();
+			this.correction = dif;
+			
+			//this.recalcTotals();
+		} //console.log("correction 2", this.correction);
+		this.recalcTotals(false);
+	},
+	removeCorrection:function() {
+		var key = this.hasCorrection(true);//console.log(key);
+		this.removeProduct(key);
+		$(".correction-li").addClass("hidden");
+		this.correction = 0;
+		this.recalcTotals(false);
+		//return;
+	},
+	check_edit_storno:function() { // check if new total is less than what is already storned
+		var storned_value = $("#storned_value").val();
+		if (typeof storned_value === 'undefined' || storned_value == "0" || storned_value == "") {
+			return true;
+		}
+		storned_value = parseFloat(storned_value);
+		var total = parseFloat($("#total").val());
+		if (total < storned_value) {
+			show_message("err|"+language.modify_storno_smaller);
+			return false;
+		}
+		//console.log(storned_value, total);
+		return true;
+	},
+	checkDistributeMessage:function(cat_id) {
+		if (cat_id == 148) { // Buget stat&locale
+			$(".ok-message-modal").html(language.understood);
+			show_message("info|"+language.info_message_446, false);
+			$("#to-do-after-close").val("reset_message_button_text");
+		} else if (cat_id == 149) { // Fonduri speciale
+			if (!this.hasProducts()) {
+				$(".ok-message-modal").html(language.understood);
+				show_message("info|"+language.info_message_447, false);
+				$("#to-do-after-close").val("reset_message_button_text");
+				return true;
+			}
+		} else if (cat_id == 150) { // TVA
+			if (this.platitor_tva_issuer) {
+				$(".ok-message-modal").html(language.understood);
+				show_message("info|"+language.info_message_vatp_4426, false);
+				$("#to-do-after-close").val("reset_message_button_text");
+				return true;
+			}
+			if (!this.has446Selected()) {
+				$(".ok-message-modal").html(language.understood);
+				show_message("info|"+language.info_message_4426, false);
+				$("#to-do-after-close").val("reset_message_button_text");
+				return true;
+			}
+		}
+		//console.log(cat_id);
+		return false;
+	},
+	checkModalExpenseFields:function(cat_id) {
+		if (cat_id == 115 || cat_id == 148) { // Tichete && Buget stat&locale
+			$(".product_tva_inclus").prop("disabled", true);
+			$(".product_cota_tva").prop("disabled", true);
+			if (cat_id == 115) {
+				$(".product_cota_tva").val("d8");
+			} else if(cat_id == 148) {
+				$(".product_cota_tva").val("d9");
+			}
+		}
+	},
+	checkNewAdaosNegative:function() {
+		var p = this.prods; //console.log(p);
+		var errp = "";
+		var multiple = false;
+		for(var i in p) {
+			var item = p[i];//console.log(item);
+			if (item["has_distribute"]) {
+				var dd = this.distributeToObj(item["distribute"]);//console.log(dd);
+				for(var j in dd) {
+					var to_add = parseFloat(dd[j].value);
+					var values = this.getEntries(j);//console.log(values);
+					var q = parseFloat(values["quantity"]);
+					to_add /= q;
+					to_add = parseFloat(to_add);
+					if (!isNaN(values.pret_fara_tva_2) && values.pret_fara_tva_2 && values.pret_fara_tva_2 != 0) {
+						//console.log("has _2", values, "add:", dd[j].value);
+						var p1 = parseFloat(this.getProductValueAfterDiscount(values)/q);//console.log("after discount",p1);
+						var add_vat = false;
+						if (!this.platitor_tva_issuer && this.platitor_tva) { // add vat to aquisition_price
+							add_vat = true;
+						}
+						if (add_vat) {
+						//	p1 += (values["cota_tva"]/100)*p1;
+						} //console.log("p=",p);
+						//console.log("init p1", p1, to_add);
+						p1 += to_add; 
+						if (values.currency != "99") {
+						  p1 *= parseFloat($("#curs").val());
+						}
+						var p2 = parseFloat(values.pret_fara_tva_2);
+						if (values.currency_2 != "99") {
+							if (values.exch_b && values.exch_b != "0") {
+								p2 *= parseFloat(values.exch_b);
+							} else {
+								p2 *= parseFloat($("#curs").val());
+							}
+						}
+						console.log("p1/p2: ",p1, p2);
+						if (p1 > p2) {
+							if (errp != "") {
+								multiple = true;
+							}
+							errp += (multiple ? "\n" : "")+values["name"];
+						}
+					}
+				}
+				
+			}
+		} //console.log(errp);
+		if (errp != "") {
+			var mpl = multiple ? "ele:<br>" : "ul";
+			show_message("err|"+sprintf(language.message_addition_distribute, mpl, "<strong>"+errp+"</strong>"), false);
+			return true;
+		}
+		return false;
+	},
+	checkPunctLucru:function(pct, id) { //console.log("cpl", pct, id, this.use_stock, this.hasProducts(), this.multiple_pl);
+		if (!this.use_stock) { 
+			return true;
+		}
+		if (!this.hasProducts()) {
+			return true;
+		}
+		if (!this.multiple_pl) { // just the default pl is used
+			return true;
+		}
+		if (!pct || pct == "0") {
+			return true;
+		}
+		var p = this.prods;
+		for(var key in p) { //console.log("p",p);
+			if (!p[key]["punct_lucru"]) {
+				continue;
+			}
+			if (id && p[key]["id"] == id) { // exclude comparison with self
+				continue;
+			}
+			if (p[key]["punct_lucru"] == 0 || p[key]["punct_lucru"] == "0") {
+				continue;
+			}
+			if (p[key]["punct_lucru"] != pct) {
+				return false;
+			}
+		}
+		return true;
+	},
+	checkQuantity:function(q, s, pid, um, field_id, ref_column, id, p_name, doc_id) { // q = quantity desirable, s = available stock
+		// pid = product id
+		// if error return false
+		//console.log(q,s,pid,um,field_id,ref_column, id);
+		if (!this.use_stock) {  // no need to check
+			return true;
+		} //console.log("here");
+		if (typeof field_id === 'undefined') {
+			field_id = "ap";
+		}
+		if (typeof doc_id === 'undefined') {
+			doc_id = false;
+		}
+		q = get_float(q);
+		s = get_float(s);//console.log(q,s);
+		if (!this.hasProducts()) { // no products yet
+			if (q > s) {
+				if (s <= 0) {
+					show_message("err|"+language.error_quantity_negative);
+					$("#"+field_id+"_quantity").val(0);
+				} else {
+					var q_replacement = s+" "+um;
+					show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+					$("#"+field_id+"_quantity").val(s);
+				}
+				return false;
+			}
+		}
+		if (typeof ref_column === 'undefined') {
+			ref_column = "ref_id";
+		}
+		var q_left = s;
+		var q_available = s;
+		var p = this.prods; //console.log("seconds=",q,s,pid,um,field_id,ref_column, id);
+		for(var key in p) { //console.log("p",p[key]);
+			if (p[key][ref_column] != pid) { // check only for the same product
+				continue;
+			}
+			if (id && p[key]["id"] == id) { // exclude comparison with self in modal
+				//console.log("exclude comparison with self");
+				continue;
+			}
+			if (doc_id && p[key][ref_column] == pid) { // if edit a finalized doc, exclude other appearances for the same product 
+				continue;
+			}
+			if (q_left < 0) { // no need to check anymore
+				continue;
+			}
+			q_available = q_left;//console.log("qa1", q_available);
+			q_left -= get_float(p[key]["quantity"]);//console.log("q_left: ",q_left);
+			if (q_left < 0) {
+				q_available = Math.min(q_available, get_float(p[key]["quantity"]));
+			}
+		} //console.log("qa-a", q_available);
+		q_available = Math.min(q_available, q_left);
+		q_left -= q;
+		//console.log("q_left",q_left);
+		if (q_left < 0) {
+			if (q_available <= 0) {
+				show_message("err|"+sprintf(language.warning_prods_wi_stoc_none, p_name), false);
+				//show_message("err|"+language.error_quantity_negative);
+				//$("#"+field_id+"_quantity").val(0);
+			} else {
+				var q_replacement = q_available+" "+um;
+				show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+				$("#"+field_id+"_quantity").val(q_available);
+			}
+			return false;
+		}
+		return true;
+	},
+	checkQuantityDoc:function(q, s, pid, gid, um, field_id, ref_column, id) { // q = quantity desirable, s = available stock
+		// pid = product id
+		// if error return false
+		//console.log(q,s,pid,um,field_id,ref_column, id);//return false;
+		if (!this.use_stock) {  // no need to check
+			return true;
+		} //console.log("here");
+		if (typeof field_id === 'undefined') {
+			field_id = "ap";
+		}
+		q = get_float(q);
+		s = get_float(s);//console.log(q,s);
+		if (!this.hasProducts()) { // no products yet
+			if (q > s) {
+				/*if (s <= 0) {
+					show_message("err|"+language.error_quantity_negative);
+					$("#"+field_id+"_quantity").val(0);
+				} else {
+					var q_replacement = s+" "+um;
+					show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+					$("#"+field_id+"_quantity").val(s);
+				}*/
+				return false;
+			}
+		}
+		if (typeof ref_column === 'undefined') {
+			ref_column = "ref_id";
+		}
+		var q_left = s;
+		var q_available = s;
+		var p = this.prods; //console.log("seconds=",q,s,pid,um,field_id,ref_column, id);
+		for(var key in p) { //console.log("p",p[key]);
+			if (p[key][ref_column] != pid) { // check only for the same product
+				continue;
+			}
+			if (p[key]["fk_gestiune_id"] != gid) { // check only for the same product from the same gestiune
+				continue;
+			}
+			if (id && p[key]["id"] == id) { // exclude comparison with self in modal
+				//console.log("exclude comparison with self");
+				continue;
+			}
+			if (q_left < 0) { // no need to check anymore
+				continue;
+			}
+			q_available = q_left;//console.log("qa1", q_available);
+			//q_left -= get_float(p[key]["quantity"]); // 09.10.2023 deactivate: stock=2, and we cannot add the same product on a different line with 2 !!!
+			if (q_left < 0) {
+				q_available = Math.min(q_available, get_float(p[key]["quantity"]));
+			}
+		} //console.log("qa-a", q_available);
+		q_available = Math.min(q_available, q_left);
+		q_left -= q;
+		//console.log("q_left",q_left);
+		if (q_left < 0) {
+			/*
+			if (q_available <= 0) {
+				show_message("err|"+language.error_quantity_negative);
+				$("#"+field_id+"_quantity").val(0);
+			} else {
+				var q_replacement = q_available+" "+um;
+				show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+				$("#"+field_id+"_quantity").val(q_available);
+			}*/
+			return false;
+		}
+		return true;
+	},
+	checkQuantityMax:function(pid, id, q, ref_name, um, field_id, gid) { // pid = product id
+		// if error return false
+		var entries = this.getEntries(id);console.log(entries, pid, id, q);
+		if (!entries.hasOwnProperty("stoc_after")) {
+			return true;
+		}
+		entries["stoc"] = get_float(entries["stoc"]);
+		entries["stoc_after"] = get_float(entries["stoc_after"]);
+		//console.log(q,s,pid,um,field_id,ref_column, id);
+		if (!this.use_stock) {  // no need to check
+			return true;
+		} //console.log("here");
+		if (!this.hasProducts()) { // no products yet
+			return true;
+		}
+		if (typeof ref_name === 'undefined') {
+			ref_name = "name1_id";
+		}
+		if (entries[ref_name] != pid) { // has selected another product 
+			return true;
+		}
+		if (typeof field_id === 'undefined') {
+			field_id = "product";
+		}
+		var doc_stock = get_float(q);
+		var p = this.prods; //console.log("seconds=",q,s,pid,um,field_id,ref_column, id);
+		for(var key in p) { //console.log("p",p[key]);
+			if (p[key][ref_name] != pid) { // check only for the same product
+				continue;
+			}
+			if (gid && p[key]["fk_gestiune_id"] != gid) { // check only for the same product from the same gestiune -> expense
+				continue;
+			}
+			if (id && p[key]["id"] == id) { // exclude comparison with self in modal
+				//console.log("exclude comparison with self");
+				continue;
+			}
+			
+			doc_stock += get_float(p[key]["quantity"]);
+		} //console.log("max", doc_stock, entries["stoc"], entries["stoc_after"]);
+		if (doc_stock > entries["stoc"]) { //console.log("q > previous ");
+			var q_replacement = entries["stoc"]+" "+um;
+			show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+			$("#"+field_id+"_quantity").val(entries["stoc"]);
+			return false;
+		} else if (entries["stoc"] - doc_stock + entries["stoc_after"] < 0) {  //console.log(entries["stoc"] - doc_stock + entries["stoc_after"]);
+			var q_replacement = entries["stoc"] + entries["stoc_after"]+" "+um;
+			show_message("err|"+sprintf(language.warning_prods_wi_stoc_tr_modal, q_replacement, q_replacement), false);
+			$("#"+field_id+"_quantity").val(entries["stoc"] + entries["stoc_after"]);
+			return false;
+		}
+		return true;
+	},
+	checkQuantityMin:function(pid, id, q, ref_name, gid) { // pid = product id
+		// if error return false
+		var entries = this.getEntries(id);//console.log(entries);
+		entries["stoc_g2"] = get_float(entries["stoc_g2"]);
+		//console.log(q,s,pid,um,field_id,ref_column, id);
+		if (!this.use_stock) {  // no need to check
+			return true;
+		} //console.log("here");
+		if (!this.hasProducts()) { // no products yet
+			return true;
+		}
+		if (typeof ref_name === 'undefined') {
+			ref_name = "name2_id";
+		}
+		var doc_stock = get_float(q);
+		var p = this.prods; //console.log("seconds=",q,s,pid,um,field_id,ref_column, id);
+		for(var key in p) { //console.log("p",p[key]);
+			if (p[key][ref_name] != pid) { // check only for the same product
+				continue;
+			}
+			if (gid && p[key]["fk_gestiune_id"] != gid) { // check only for the same product from the same gestiune -> expense
+				continue;
+			}
+			if (id && p[key]["id"] == id) { // exclude comparison with self in modal
+				//console.log("exclude comparison with self");
+				continue;
+			}
+			
+			doc_stock += get_float(p[key]["quantity"]);
+		} //console.log("qa-a", doc_stock, entries["stoc_g2"], (doc_stock + entries["stoc_g2"]));
+		if ((doc_stock < entries["stoc_g2"])) {
+			return false;
+		}
+		return true;
+	},
+	checkReducereTip:function(pr_type, id, is_expense = false) {
+		if (!this.use_stock || !this.hasProducts()) { 
+			return false;
+		}
+		var column = is_expense ? "fk_cat_id" : "pr_type";
+		var hasDiscount = false;
+		var discounts = [146, 151];
+		var reducere_tip_index = 0;
+		var findIndex = function(categoryId) {
+			return discounts.indexOf(parseInt(categoryId));
+		};
+		// check all
+		for (var key in this.prods) {
+			reducere_tip_index = findIndex(this.prods[key][column]);
+			if (reducere_tip_index > -1) {
+				hasDiscount = true;
+				this.reducere_tip = discounts[reducere_tip_index];
+				break;
+			}
+		}
+		// check current
+		reducere_tip_index = findIndex(pr_type);
+		if (!hasDiscount && reducere_tip_index > -1) { // doesnt has 146 and pr_type is 146
+			this.reducere_tip = discounts[reducere_tip_index];
+			return true;
+		}
+		if (hasDiscount && reducere_tip_index === -1) { // already has one 146 and pr_type is not 146
+			return true;
+		}
+		if (hasDiscount && this.reducere_tip !== discounts[reducere_tip_index]) { // different discount types
+			return true;
+		}
+		return false;
+	},
+	getReducereTipMessage:function(is_expense = false) {
+		switch (this.reducere_tip) {
+			case 146: return is_expense ? language.has_reducere_comerciala_expense : language.has_reducere_comerciala;
+			case 151: return is_expense ? language.has_discount_financiar_expense : language.has_discount_financiar;
+			default: return '';
+		}
+	},
+	checkDocFromFacturare:function() {  //return false;
+		if (!this.use_stock) {
+			return false;
+		}
+		if (this.storno_by_stock) { // already storno stockable
+			return false;
+		}
+		if (!this.doc_from_facturare) { // not doc from facturare
+			return false;
+		}
+		var p = this.prods;//console.log("p=",p);
+		var sm_gestiune = false,
+			sm_type = false,
+			sm_pl = false;
+		for(var key in p) { 
+			var item = p[key];
+			if (item["discount"] || item["discount"] != "0") { // skip discounts
+				continue;
+			}
+			if (!is_service(item["pr_type"])) { 
+				var sm = false;
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0") {
+					sm_gestiune = true;
+				}
+				if (!item["pr_type"] || item["pr_type"] == "0") {
+					sm_type = true;
+				}
+				if (this.multiple_pl) {
+					if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+						sm_pl = true;
+					}
+				}
+			} else if (is_service(item["pr_type"]) && this.multiple_pl) {
+				if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+					sm_pl = true;
+				}
+			}
+		}
+		if (sm_gestiune || sm_type || sm_pl) {
+			$(".ok-message-modal").html(language.understood);
+			$("#to-do-after-close").val("reset_message_button_text");	
+			var msg = "", glue = "";
+			if (sm_type) {
+				msg += glue+sprintf(language.add_doc_product_type, "");
+				glue = "<br>";
+			}
+			if (sm_gestiune) {
+				msg += glue+sprintf(language.add_doc_product_gestiune, "");
+				glue = "<br>";
+			}
+			if (sm_pl) {
+				msg += glue+sprintf(language.add_doc_product_pl, "");
+				glue = "<br>";
+			} 
+			msg += "\r\n\r\nEditeaza Produsele.";
+			//console.log(msg, sm_type, sm_gestiune, sm_price);
+			show_message("err|"+msg, false);
+			$("#invoice_preview_btn").removeClass("disabled");
+			return true;
+		}
+		return false;// if no errors -> false
+	},
+	checkStornoStockable:function() { // check stockable storno for aq_price
+		if (!this.use_stock) {
+			return false;
+		} //console.log(this.storno_by_stock+" ||");return true;
+		if (!this.storno_by_stock) {
+			return false;
+		}
+		var p = this.prods;
+		var sm_gestiune = false,
+			sm_type = false,
+			sm_price = false,
+			sm_pl = false;
+		for(var key in p) { 
+			var item = p[key];//console.log("aq_3=", parseFloat(item["aq_price_3"]));
+			if (item.hasOwnProperty("discount") && (item["discount"] || item["discount"] != "0")) { // skip discounts
+				continue;
+			}
+			//console.log(item);
+			var has_i = real_b(item["has_issued2"]);//console.log("has_i F=", has_i);
+			if (has_i) { // check if it has issued on item gestiune
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0") {
+					has_i = false;
+				} else {
+					if (!item.hasOwnProperty("issued2_gids")) {
+						has_i = false;
+					} else if (item["issued2_gids"].indexOf(","+item["fk_gestiune_id"]+",") == -1) {
+						has_i = false;
+					}
+				}
+			}//console.log(has_i, item);
+			if (!is_service(item["pr_type"]) && !has_i && item["quantity"] < 0) { //real_b(item["is_stoc"])
+				var sm = false;
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0") {
+					sm_gestiune = true;
+				}
+				if (!item["pr_type"] || item["pr_type"] == "0") {
+					sm_type = true;
+				}
+				if (!item.hasOwnProperty("aq_price_3") || (item.hasOwnProperty("aq_price_3") && parseFloat(item["aq_price_3"]) == 0)) {
+					sm_price = true;
+				} //console.log(sm, item);
+				if (this.multiple_pl) {
+					if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+						sm_pl = true;
+					}
+				}
+			} else if (is_service(item["pr_type"]) && this.multiple_pl) {
+				if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+					sm_pl = true;
+				}
+			}
+		}
+		if (sm_gestiune || sm_type || sm_price || sm_pl) {
+			$(".ok-message-modal").html(language.understood);
+			$("#to-do-after-close").val("reset_message_button_text");	
+			var msg = "", glue = "";
+			if (sm_type) {
+				msg += glue+language.add_aqprice_product_type;
+				glue = "<br>";
+			}
+			if (sm_gestiune) {
+				msg += glue+language.add_aqprice_product_gestiune;
+				glue = "<br>";
+			}
+			if (sm_price) {
+				msg += glue+language.add_aqprice_product_price;
+				glue = "<br>";
+			} 
+			if (sm_pl) {
+				msg += glue+language.add_aqprice_product_pl;
+				glue = "<br>";
+			} 
+			msg += "\r\n\r\nEditeaza Produsele.";
+			//console.log(msg, sm_type, sm_gestiune, sm_price);
+			show_message("err|"+msg, false);
+			$("#invoice_preview_btn").removeClass("disabled");
+			return true;
+		} //console.log(msg, sm_type, sm_gestiune, sm_price,sm_pl);
+		return false;
+	},
+	checkAQPrices:function() { // check stockable storno for aq_price
+		if (!this.use_stock) {
+			return false;
+		} //console.log(this.storno_by_stock+" ||");return true;
+		if (this.storno_by_stock) {
+			return false;
+		}
+		if (this.doc_from_facturare) { // already doc from facturare
+			return false;
+		}
+		var p = this.prods;//console.log(p);
+		var sm_gestiune = false,
+			sm_type = false,
+			sm_price = false,
+			sm_pl = false;
+		for(var key in p) { 
+			var item = p[key];//console.log("aq_3=", parseFloat(item["aq_price_3"]));
+			if (item.hasOwnProperty("discount") && (item["discount"] || item["discount"] != "0")) { // skip discounts
+				continue;
+			}
+			console.log(item);
+			var has_i = real_b(item["has_issued2"]);//console.log("has_i F=", has_i);
+			if (has_i) { // check if it has issued on item gestiune
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0") {
+					has_i = false;
+				} else {
+					if (!item.hasOwnProperty("issued2_gids")) {
+						has_i = false;
+					} else if (item["issued2_gids"].indexOf(","+item["fk_gestiune_id"]+",") == -1) {
+						has_i = false;
+					}
+				}
+			}//console.log(has_i, item);
+			if (!is_service(item["pr_type"]) && !has_i && item["quantity"] < 0) { //real_b(item["is_stoc"])
+				var sm = false;
+				if (!item["fk_gestiune_id"] || item["fk_gestiune_id"] == "0") {
+					sm_gestiune = true;
+				}
+				if (!item["pr_type"] || item["pr_type"] == "0") {
+					sm_type = true;
+				}
+				if (!item.hasOwnProperty("aq_price_3") || (item.hasOwnProperty("aq_price_3") && parseFloat(item["aq_price_3"]) == 0)) {
+					sm_price = true;
+				} //console.log(sm, item);
+				if (this.multiple_pl) {
+					if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+						sm_pl = true;
+					}
+				}
+			} else if (is_service(item["pr_type"]) && this.multiple_pl) {
+				if (!item["punct_lucru"] || item["punct_lucru"] == "0") {
+					sm_pl = true;
+				}
+			}
+		}
+		if (sm_gestiune || sm_type || sm_price || sm_pl) {
+			$(".ok-message-modal").html(language.understood);
+			$("#to-do-after-close").val("reset_message_button_text");	
+			var msg = "", glue = "";
+			if (sm_type) {
+				msg += glue+language.add_aqprice_product_type;
+				glue = "<br>";
+			}
+			if (sm_gestiune) {
+				msg += glue+language.add_aqprice_product_gestiune;
+				glue = "<br>";
+			}
+			if (sm_price) {
+				msg += glue+language.add_aqprice_product_price;
+				glue = "<br>";
+			} 
+			if (sm_pl) {
+				msg += glue+language.add_aqprice_product_pl;
+				glue = "<br>";
+			} 
+			msg += "\r\n\r\nEditeaza Produsele.";
+			//console.log(msg, sm_type, sm_gestiune, sm_price);
+			show_message("err|"+msg, false);
+			$("#invoice_preview_btn").removeClass("disabled");
+			return true;
+		} //console.log(msg, sm_type, sm_gestiune, sm_price,sm_pl);
+		
+		return false;
+	},
+	checkStornoStockablePrices:function() { // see if aq_price is bigger than sale_price
+		var mm = "";
+		var sale_price = parseFloat($("#product_pret_fara_tva1").val());
+		if ($("#product_pret_cu_tva").is(":visible")) {
+			sale_price = parseFloat($("#product_pret_cu_tva").val());
+		}
+		var aq_price = parseFloat($("#aq_price_3").val());//console.log(sale_price, aq_price);
+		if (!aq_price) {
+			mm = language.aq_price_negative;
+		}
+		if ($("#aq3_tva_inclus").val() == "0") {
+			var cota = $("#aq3_cota_tva option:selected").text();
+			cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+			aq_price *= (1+cota/100);//console.log(cota);
+		}
+		if (aq_price > sale_price) {
+			mm = language.sale_price_smaller;
+		} //
+		return mm;
+	},
+	checkStockOnDoc:function(q, s, pid) { // q = current quantity, s = backend stock
+		if (!this.use_stock) { 
+			return false;
+		}
+		if (!this.hasProducts()) {
+			return false;
+		}
+		q = get_float(q);
+		s = get_float(s);
+		var p = this.prods, t = 0;
+		for(var key in p) {  //console.log(p[key]);
+			if (p[key]["ref_id"] == pid) { 
+				t += get_float(p[key]["quantity"]);
+			}
+		}
+		if ((q+t) > s) { // added until now + this qunatity is more than total stoc -> true
+			return true;
+		}
+		//console.log(q, s, t, pid);
+		return false;
+	},
+	checkUnloadStock:function() {
+		if (!this.use_stock) { 
+			return false;
+		}
+		if (!this.hasProducts()) {
+			return false;
+		}
+		// check if there are products with negative stock
+		var p = this.prods;
+		var stk = {}, qs = {}, names = {};
+		for(var key in p) {  //console.log(p[key]);
+			var item = p[key];
+			var kk = item["fk_gestiune_id"]+"_"+item["ref_id"];
+			// grab quantity sum for pid,gid pairs
+			if (!stk.hasOwnProperty(kk)) {
+				stk[kk] = 0;
+			}
+			stk[kk] += get_float(item["quantity"]);
+			// grab stoc for teh same pairs
+			if (!qs.hasOwnProperty(kk)) {
+				qs[kk] = get_float(item["stoc"]);
+			}
+			// grab product names in gestiuni for message
+			if (!names.hasOwnProperty(kk)) {
+				names[kk] = item["name"]+": "+item["gestiune_name"];
+			}
+		}
+		// check if there are negative stock... show message and uncheck checkbox
+		var message = "", glue = "";
+		for(k in stk) {
+			//console.log(k, stk[k]);
+			if (stk[k] > qs[k]) { // bigger than available stock
+				message += glue+names[k];
+				glue = "<br>";
+			}
+		} //console.log(message);
+		//console.log(stk, qs, names);
+		if (message) {
+			show_message("err|"+sprintf(language.insufficient_stock_unload, message), false);
+			$("#unload_stock").prop("checked", false);
+		}
+		return false;
+	},
+	createHiddens:function(id, values) { //console.log(values);
+		var hiddens = "", has_init_total = false;
+		for(var key in values) {
+			hiddens += create_input_hidden_prod(id, key, values[key]);
+			if (key == "init_total") {
+				has_init_total = true;
+			}
+		}
+		if (!has_init_total) {
+			var init_total = number_format(parseFloat(values["pret_fara_tva"])*parseFloat(values["quantity"])+parseFloat(values["tva_unitar"]), values["precision"], ".", "", true);
+			hiddens += create_input_hidden_prod(id, "init_total", init_total);
+		}
+		return hiddens;
+	},
+	createInterDocProductHtml:function(prod, id) { //console.log(prod);
+		//var id = prod["nr_crt"];
+		var show_cod_nc_field = false;
+		if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object' && prod["suggested_product"]["cod_nc_id"]) {
+			show_cod_nc_field = true;
+		}
+		var html = '<div class="table_row_add_product d-lg-block gap-1 mt-2 w-full border-bottom" id="add_product_ap_'+id+'">'+
+					'<div class="row text-sm">'+
+						'<div class="col-lg-6 col-12 col-expense-main d-lg-block flex-wrap gap-2 pe-lg-2">';
+				html += '<div class="row  pt-2">';
+				if (this.use_code) {	
+					html += '<div class="col col-lg-2 flex-none pe-lg-1">'+
+							'<div>'+
+					            '<label class="form-label d-lg-none">'+language.code+'</label>'+
+					            '<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_cod_produs" placeholder="'+language.code+'"';
+							if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object') {
+								html += ' value="'+prod["suggested_product"]["cod_produs"]+'"';
+							}
+							html += '>'+
+					        '</div>'+
+						'</div>';
+				}	
+				html += '<div class="col pe-lg-1 '+(this.use_code ? 'ps-lg-1' : '')+'">';
+				html +=		'<label class="form-label d-lg-none"><label>'+language.naming+'</label></label>'+
+									'<div class="input-group input-group-sm d-lg-inline-flex position-relative form-expense-name'+(this.use_code ? ' use_code_product' : '-no-code')+'">'+
+										'<input type="text" class="form-control form-control-sm px-2 border-end-0" id="ap_'+id+'_name" placeholder="'+language.description_expenses+'"';
+									if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object') {
+										html += ' value="'+prod["suggested_product"]["name"]+'"';
+									}
+									html += ' >'+
+										'<span class="input-group-text bg-transparent ps-1 pe-1 border-start-0">'+
+											'<a href="javascript:;" class="input-group-addon text-primary" onclick="delete_autocomplete(\'ap_'+id+'_name\', \'ID'+id+'\');" tabindex="-1"><i class="fas fa-times-circle"></i></a>'+
+										'</span>'+
+									'</div>'+
+									'<input type="hidden" id="ap_'+id+'_name_id"';
+								if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object') {
+									html += ' value="'+prod["suggested_product"]["id"]+'"';
+								}
+								// reset Serviciu
+								if (prod["pr_type"] == "1") {
+									prod["pr_type"] = "";
+									prod["pr_type_text"] = language.choose_category;
+								}
+								html += ' />';
+								if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object') { // add hidden autocomplete ids 
+									html += '<input type="hidden" id="ap_'+id+'_others" value="'+prod["suggested_product"]["name_others"]+'" />';
+								}
+								html += '<span class="expense-init-product'+((this.use_code) ? '-w-code' : '')+'">';
+								html += '<a href="javascript:;" class="text-primary" onclick="move_inter_doc_name(\''+id+'\',\''+prod["name"]+'\',\''+prod["init_cod_produs"]+'\',\''+prod["cod_nc_id"]+'\',\''+prod["cod_nc"]+'\');">'+prod["name"]+'</a>';
+								html += '</span>';
+						html += '</div>';
+						// category
+						html +=	'<div class="col-lg-3 w-dfc px-lg-0">'+
+									'<div class="d-lg-inline-flex help-item expense-category expense-category'+id+' expense-category-small w-full">'+
+									   '<label class="form-label d-lg-none mt-3">'+language.category+'</label>'+
+										createCategory("ap_"+id, "catDropdownID"+id, this.cats2, this.use_stock, id, prod["pr_type_text"])+
+										'<input type="hidden" id="ap_'+id+'_cat_id" value="'+prod["pr_type"]+'" data-is-stoc="'+prod["is_stoc"]+'" data-is-expense="'+prod["is_expense"]+'" data-is-vandabil="'+prod["is_vandabil"]+'" />'+
+								   '</div>'+
+								  '</div>';
+						// gestiune		  
+						html += '<div class="col-lg-2 w-dfg px-lg-2">'+
+										'<div class="d-lg-inline-flex expense-gestiune-holder">'+
+										   '<label class="form-label d-lg-none mt-3 gestiune_area'+id+'" mt-3">'+language.gestiune+'</label>'+
+											'<input type="text" class="form-control form-control-sm bg-white px-2 gestiune_area'+id+'"" id="ap_'+id+'_gestiune" placeholder="'+language.gestiune+'" autocomplete="off">'+
+											'<input type="hidden" id="ap_'+id+'_gestiune_id" />';
+										if (this.multiple_pl) {
+											html += '<label class="form-label d-lg-none pl_area'+id+' hidden">'+language.punct_lucru+'</label>'+
+											'<input type="text" class="form-control form-control-sm bg-white px-2 pl_area'+id+' hidden" id="ap_'+id+'_pl" placeholder="'+language.punct_lucru+'">'+
+											'<input type="hidden" id="ap_'+id+'_pl_id" />';
+										}
+								html+= '</div>'+
+								   '</div>';
+						// end left col(cod, name,cat, gestiune/pl divs		 
+						html += '</div>';
+					if (this.show_is_etransport || this.show_cod_nc) {
+						html += '<div class="col-lg-12  mb-lg-2 ">'+
+								'<div class="row">'+
+									'<div class="wtlel mt-1 mt-lg-0 pe-3 pe-lg-1 etransport-field etr-field-service field-cod-nc field-cod-nc'+id+' ">'+// '+(show_cod_nc_field ? "" : "hidden")+'
+										'<div class="">'+
+											'<label class="form-label d-lg-none">'+language.cod_nc+'</label>'+
+											'<input type="text" class="form-control form-control-sm" id="ap_'+id+'_cod_nc" name="ap_'+id+'_cod_nc" placeholder="'+language.cod_nc_placeholder+'" value="'+(show_cod_nc_field ? prod["suggested_product"]["cod_nc"] : '')+'">'+
+											'<input type="hidden" id="ap_'+id+'_cod_nc_id" value="'+(show_cod_nc_field ? prod["suggested_product"]["cod_nc_id"] : '')+'" />'+
+										'</div>'+
+									'</div>';
+						if (this.show_is_etransport) {			
+							html +=	'<div class="wtlel ms-0 mt-3 mt-lg-0 px-3 px-lg-1 etransport-field etr-field-service hidden">'+
+										'<div class="">'+
+											'<label class="form-label d-lg-none">'+language.scop_operatiune+'</label>'+
+											'<input type="text" class="form-control form-control-sm" id="ap_'+id+'_scop_operatiune" name="ap_'+id+'_scop_operatiune" placeholder="'+language.scop_operatiune+'">'+
+											'<input type="hidden" id="ap_'+id+'_scop_operatiune_id" value="" />'+
+										'</div>'+
+									'</div>'+
+									'<div class="wtleg ms-0  mt-3 mt-lg-0 px-3 px-lg-1 etransport-field etr-field-service hidden">'+
+										'<div class="">'+
+											'<label class="form-label d-lg-none">'+language.gross_weight+'</label>'+
+											'<div class="position-relative">'+
+												'<span class="additional-label d-none d-lg-block" style="top:-14px;">'+language.weight+'</span>'+
+												'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_gross_weight" name="ap_'+id+'_gross_weight" placeholder="'+language.gross_weight_s+'">'+
+											'</div>'+
+										'</div>'+
+									'</div>'+
+									'<div class="wtleg ms-0 mt-3 mt-lg-0 pe-3 pe-lg-2 ps-3 ps-lg-1 etransport-field etr-field-service hidden">'+
+										'<div class="">'+
+											'<label class="form-label d-lg-none">'+language.net_weight+'</label>'+
+											'<div class="position-relative">'+
+												'<span class="additional-label d-none d-lg-block" style="top:-14px;">'+language.weight+'</span>'+
+												'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_net_weight" name="ap_'+id+'_net_weight" placeholder="'+language.net_weight_s+'">'+
+											'</div>'+
+										'</div>'+
+									'</div>';
+						}
+						html +=	'</div>'+
+							'</div>';
+					}
+					var prd_sgr = prod?.suggested_product?.sgr ? '1' : (prod.sgr ? 1 : 0);
+					//var prd_sgr = prod.sgr ? 1 : 0;
+					html += this.show_sgr ?
+						`<div class="form-check mt-4 sgr-container sgr-container-ap_${id}" data-id="${id}">
+							<input type="checkbox" id="ap_${id}_sgr" class="form-check-input operation-box"
+								${prd_sgr == '1' ? 'checked' : ''} />
+							${language.has_sgr}
+						</div>` :
+						`<input type="hidden" id="ap_${id}_sgr" value="${prd_sgr}" />`;
+					html +=	'</div>';// left lg-6
+				html += '<div class="col-lg-6 col-12">'+
+							'<div class="row">';
+						// um + quantity
+						html +=	'<div class="col-12 col-lg-3 wmax-140">'+
+									'<div class="row">'+
+										'<div class="col-12 col-lg-6 py-2 px-3 px-lg-1">'+
+											'<div class="">'+
+												'<label class="form-label d-lg-none">'+language.um+'</label>'+
+												'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_um" value="'+prod["um"]+'" placeholder="'+language.um+'"';
+												if (prod["suggested_product"] && typeof prod["suggested_product"] === 'object') {// && !efactura
+													html += ' disabled';
+												}
+												html += '>';
+										html +=	'<div class="mt-6 stock-add-fields-adaos stock-add-fields-adaos'+id+' stock-add-fields-m'+id+' hidden d-none d-lg-block">'+
+													'<span class="additional-label">'+language.addition+' %</span>'+
+													'<input type="text" class="form-control form-control-sm px-2 " id="ap_'+id+'_addition">'+
+												'</div>'+
+											'</div>'+
+										'</div>'+
+										'<div class="col-12 col-lg-6 py-2 px-3 px-lg-1">'+
+											'<label class="form-label d-lg-none mb-4">'+language.quantity+'</label>'+
+											'<div class="row d-lg-block">'+
+												'<div class="col doc-parent-div doc-parent-div'+id+'">'+
+													'<span class="additional-label stock-add-fields'+id+' hidden">'+language.document+'</span>'+
+													'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_quantity" value="'+prod["quantity"]+'" ';
+												if (!this.isXLS() && !this.eFactura)	{
+													html += ' readonly="readonly"';
+												}
+												html += '>'+
+												'</div>'+
+												'<div class="col mt-lg-6 additional-label-div-st stock-add-fields'+id+' hidden">'+
+													'<span class="additional-label">'+language.received+'</span>'+
+													'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_quantity_2" value="'+prod["quantity"]+'">'+
+												'</div>'+
+											'</div>'+
+										'</div>'+
+									'</div>'+
+								'</div>';
+						// 7 cols for: vat, price, currencies, tva_inclus
+						html += '<div class="col-12 col-lg-7 expense-sums-area mt-5 mt-lg-0">'+
+									'<div class="row">';
+							// vat 
+							html += '<div class="col-3 col-lg-3 flex-none py-2 pe-1 px-lg-1 order-2 order-lg-0 ivr_tva_main">'+
+										'<label class="form-label d-none ivr_tva ivr_tva'+id+'">'+language.vat_rate+'</label>'+
+										'<div class="input-group input-group-sm ivr_tva position-relative">'+
+											'<input type="text" class="form-control form-control-sm px-2 border-end-0 bg-white ap_cota_tva '+(!this.eFactura ? 'disabled' : '')+'" name="ap_'+id+'_cota_tva" id="ap_'+id+'_cota_tva" value="'+prod["cota_tva"]+'%" placeholder="" '+(!this.eFactura ? 'readonly disabled' : '')+'>'+
+											'<span class="input-group-text bg-white ps-1 pe-1 border-start-0">'+
+												'<a href="javascript:;" class="input-group-addon text-primary ap_cota_tva_b '+(!this.eFactura ? 'disabled' : '')+'" id="ap_'+id+'_cota_tva_b" onclick="custom_show_autocomplete(\'ap_'+id+'_cota_tva\');"><i class="fas fa-caret-down"></i></a>'+
+											'</span>'+
+											'<input type="hidden" class="ap_cota_tva_id" name="ap_'+id+'_cota_tva_id" id="ap_'+id+'_cota_tva_id" value="'+prod["cota_tva_option"]+'" />'+
+										'</div>'+
+										'<div class="mt-6 input-group input-group-sm position-relative stock-add-fields'+id+' stock-add-fields-m'+id+' ivr_tva_f hidden">'+
+											'<input type="text" class="form-control form-control-sm px-2 border-end-0 bg-white '+(!this.platitor_tva_issuer ? ' disabled' : '')+'" name="ap_'+id+'_cota_tva_2" id="ap_'+id+'_cota_tva_2" value="'+(this.platitor_tva_issuer ? prod["cota_tva"] : '0')+'%" placeholder="" readonly>'+
+											'<span class="input-group-text bg-white ps-1 pe-1 border-start-0">'+
+												'<a href="javascript:;" class="input-group-addon text-primary '+(!this.platitor_tva_issuer ? ' disabled' : '')+'" id="ap_'+id+'_cota_tva_2_b" onclick="custom_show_autocomplete(\'ap_'+id+'_cota_tva_2\');"><i class="fas fa-caret-down"></i></a>'+
+											'</span>'+
+											'<input type="hidden" name="ap_'+id+'_cota_tva_2_id" id="ap_'+id+'_cota_tva_2_id" value="'+(this.platitor_tva_issuer ? prod["cota_tva_option"] : 'd8')+'" />'+
+										'</div>'+
+									'</div>';
+							// prices
+							html += '<div class="col-3 col-lg-3 py-2 pe-1 px-lg-1 order-0 order-lg-1 doc-parent-div-p'+id+' doc-parent-div-p">'+
+										'<label class="form-label d-none">'+language.value+'<span class="ivr_tva">('+language.no_vat+')</span></label>'+
+										'<div class="position-relative">'+
+										'<span class="additional-label">'+language.aquisition_price+'</span>'+
+										'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_price" placeholder="00.00" value="'+prod["pret_fara_tva"]+'" ';
+										if (!this.isXLS() && !this.eFactura)	{
+											html += ' readonly="readonly" ';
+										}
+										html += '></div>';
+								html +=	'<div class="mt-6 stock-add-fields'+id+' stock-add-fields-m'+id+' stock-add-fields stock-add-fields-m hidden">'+
+											'<span class="additional-label">'+language.sale_price+'</span>'+
+											'<input type="text" class="form-control form-control-sm px-2" id="ap_'+id+'_price_2" placeholder="00.00">'+
+										'</div>'+
+									'</div>';
+							// currencies
+							html += '<div class="w-lg-16 col-3 py-2 px-3 order-1 order-lg-2 px-lg-1">'+
+										'<select class="form-select form-select-sm  form-select-w60 custom-scroll px-2 pe-5" name="ap_'+id+'_currency" id="ap_'+id+'_currency" disabled>'+
+											this.currency_options+
+										'</select>'+
+									    '<div class="mt-6 stock-add-fields'+id+' stock-add-fields-m'+id+' stock-add-fields stock-add-fields-m hidden">'+
+											'<select class="form-select form-select-sm  form-select-w60 custom-scroll px-2 pe-5" name="ap_'+id+'_currency_2" id="ap_'+id+'_currency_2" disabled data-old-value="99">'+
+											   this.currency_options+
+										   '</select>'+
+									   '</div>'+
+									'</div>';
+							// vat included
+							html += '<div class="w-lg-110-vat col-3 py-2 ps-1 px-lg-1 order-3 ivr_tva_main">'+
+										'<label class="form-label d-none ivr_tva">'+language.value+'</label>'+
+										'<select class="form-select form-select-sm px-2 pe-5 custom-scroll ap_tva_inclus" name="ap_'+id+'_tva_inclus" id="ap_'+id+'_tva_inclus" ';
+										if (!this.isXLS() && !this.eFactura)	{
+											html += ' disabled';
+										}
+										html += '>'+
+													'<option value="0" '+((prod["tva_inclus"]) ? 'selected="selected"' : '')+'>'+(language.no_vat).ucfirst()+'</option>'+
+													'<option value="1" '+((prod["tva_inclus"]) ? 'selected="selected"' : '')+'>'+language.with_vat+'</option>'+
+												'</select>';
+									if (this.platitor_tva_issuer) {
+										html += '<select class="form-select form-select-sm px-2 pe-5 custom-scroll mt-6 stock-add-fields'+id+' stock-add-fields-m'+id+' ivr_tva_f hidden" name="ap_'+id+'_tva_inclus_2" id="ap_'+id+'_tva_inclus_2">'+
+													'<option value="0" '+((prod["tva_inclus"]) ? 'selected="selected"' : '')+'>'+(language.no_vat).ucfirst()+'</option>'+
+													'<option value="1" '+((prod["tva_inclus"]) ? 'selected="selected"' : '')+'>'+language.with_vat+'</option>'+
+												'</select>';
+									}	
+								html += '</div>';
+									
+						html += '</div>'+
+							'</div>';
+						
+						// button 
+						html += '<div class="col-12 col-lg-1 pt-lg-2 pb-2 px-3 px-lg-1 minw-badd-100">'+
+									'<a href="javascript:;" onclick="products.add_product_int_doc('+id+');" class="btn btn-sm px-3 py-2 text-sm btn-warning w-badd-full text-nowrap btn-add btn-add-product-on-doc">'+
+										'<span class="me-1 me-lg-0 badd-icon"><i class="fas fa-plus"></i></span>'+
+										'<span class="d-lg-none badd-text">'+language.add+'</span>'+
+									'</a>'+
+								'</div>';
+						
+						
+				html += '</div>'+
+					'</div>';// end right col: um, price, etc
+				
+				// final divs
+				html += '</div>'+
+					'</div>';
+					
+		return html;
+	},
+	delete_efactura_discount:function(id) { //console.log(this.inter_docs_discount);
+		$("#add_product_ap_"+id).remove();
+		delete this.inter_docs_discount[id];
+		//this.efactura_discount_cid = "";
+	},
+	createInterDocProductHtmlDiscount:function(prod, id) { //console.log(prod);
+		//var id = prod["nr_crt"];
+		var html = '<div class="table_row_add_product d-lg-block gap-1 mt-2 w-full border-bottom" id="add_product_ap_'+id+'">'+
+					'<div class="row text-sm">'+
+						'<div class="col-lg-6 col-12 col-expense-main d-lg-block flex-wrap gap-2 pe-lg-2">';
+				if (this.use_code) {	
+					//html += '<div class="col col-lg-2 flex-none py-2"></div>';
+				}	
+				html +=	'<div class="col pt-2 pb-2 pb-lg-0 pb-xl-2 ">'+
+							'<div class="row">'+
+								'<div class="col-12 pe-lg-1">'+
+									prod["name"];
+									if (this.eFactura) { //console.log(id);
+										html += '<br><a href="javascript:;" onclick="products.delete_efactura_discount(\''+id+'\');">Sterge</a>';
+									}
+						html +=	'</div>'+
+							'</div>'+
+						'</div>'+
+				'</div>';// left lg-6
+				html += '<div class="col-lg-6 col-12">'+
+							'<div class="row">';
+				// um + quantity
+				html +=	'<div class="col-12 col-lg-3 d-none wmax-140 d-lg-block">'+
+							'<div class="row">'+
+								'<div class="col-12 col-lg-6 py-2 px-3 px-lg-1 text-center">'+
+									'<div class="">'+
+										prod["um"]+
+									'</div>'+
+								'</div>'+
+								'<div class="col-12 col-lg-6 py-2 px-3 px-lg-1 text-center">'+
+									prod["quantity"]+
+								'</div>'+
+							'</div>'+
+						'</div>';
+				// 7 cols for: vat, price, currencies, tva_inclus
+						html += '<div class="col-12 col-lg-7 expense-sums-area mt-1 mt-lg-0">'+
+									'<div class="row w-full">';
+							// vat 
+							html += '<div class="col-3 col-lg-3 flex-none py-2 pe-1 px-lg-1 order-2 order-lg-0 text-center d-none d-lg-block">'+
+										((!this.platitor_tva_issuer) ? "" : prod["cota_tva"]+"%")+
+									'</div>';
+							// prices
+							html += '<div class="col-3 col-lg-3 py-2 pe-1 px-lg-1 order-0 order-lg-1 text-start text-lg-center">'+
+										number_format(prod["pret_fara_tva"], prod["precision"])+
+									'</div>';
+							// currencies
+							html += '<div class="col py-2 px-3 order-1 order-lg-2 px-lg-1 text-center d-none d-lg-block">'+
+										number_format(prod["valoare"], prod["precision"])+
+									'</div>';
+				html += '</div>'+
+					'</div>';// end right col: um, price, etc
+				
+				// button 
+						html += '<div class="col-12 col-lg-1 pt-lg-2 pb-2 px-3 px-lg-1 minw-badd-100">'+
+									'<a href="javascript:;" onclick="products.add_product_discount(\''+id+'\');" class="btn btn-sm px-3 py-2 text-sm btn-warning w-badd-full text-nowrap btn-add btn-add-product-on-doc">'+
+										'<span class="me-1 me-lg-0 d-xl-none"><i class="fas fa-plus"></i></span>'+
+										'<span class="d-lg-none d-xl-block">'+language.add+'</span>'+
+									'</a>'+
+								'</div>';
+								
+				// final divs
+				html += '</div>'+
+					'</div>';
+				
+		return html;
+	},
+	deleteDistribute:function(id) {
+		var product = this.getEntries(id);
+		delete product["has_distribute"];
+		delete product["distribute"];
+		delete product["distribute_type"];
+		var new_line = this.createProductRow(id, product);
+		$("#entry_item_"+id).html(new_line);
+		this.replaceItem(product);
+	},
+	deleteDistributeDoc:function() {
+		$(".doc_name_plh").html(""); 
+		$(".cdd_label").html(language.choose_doc).tooltip('dispose').attr('title', null);
+		var table = $('#content-table-distribute');
+		table.find("tr.table_row").remove();
+	},
+	deleteProduct:function(id) { // delete product row
+		if (this.isDiscount(id)) { // add percent button to parents
+			this.addProductButton(this.getDiscountGroupIds(id), "percent", "edit");
+			this.removeProduct(id);
+			if (this.supplier_doc) {
+				this.distributeVerify();
+			} 
+		} else { // if has discount applied, then
+			//if (!this.isExpense() && !this.isStorno(id) && !this.hasButtonProduct(id, "percent") && !this.stornoDoc) {
+			//if (!this.hasButtonProduct(id, "percent")) {
+			if (this.hasTaxCustomById(id)) {
+				this.removeProduct(id+"t");
+			}
+			if (this.hasSgrCustomById(id)) {
+				this.removeProduct(id+"s");
+			}
+			if (this.hasDiscount(id)) {
+				if (!confirm(language.delete_product_has_discount+"?")) {
+					return false;
+				}
+				this.deleteProductFromDiscounts(id);
+			} else {
+				this.removeProduct(id);
+			}
+		}
+		this.recalcTotals();
+		this.checkCorrection();
+		return true;
+	},
+	deleteProductFromDiscounts:function(id) { // delete this product from discounts
+		var p = this.getAllProds();//console.log(p);return;
+		for(var key in p) {
+			if (this.isDiscount(p[key]["id"])) {
+				gr_ids = this.getDiscountGroupIds(p[key]["id"]);
+				if ($.inArray(id, gr_ids) != -1) {
+					if (gr_ids.length == 1) { // delete single items discounts, or remaining singles after deleting others from group
+						this.removeProduct(id+"d");
+					} else {
+						gr_ids.splice(gr_ids.indexOf(id),1);
+						var new_id = gr_ids.join("_");
+						var gr_id = p[key]["id"], key_for_gr_id = this.getKeyForId(gr_id);
+						var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+new_id+"d\">"+this.createProductRow(new_id+"d", this.setIdToProduct(new_id+"d", this.getProductForDiscount("total", id, true)))+"</div>";
+						$("#"+this.ENTRY_PRELUDE+gr_id).replaceWith(new_line);
+						p.splice(key_for_gr_id, 1, this.getItemEntries(new_id+"d"));//replace discount
+					}
+				}
+			}
+		}
+		this.removeProduct(id);
+	},
+	distribute:function(v, p, other_doc) {//console.log("values=", v);
+		//var p = this.getAllProds();//console.log(p);return;
+		//console.log("distribute -- ");
+		var total = this.getProductsStockSum(v["fk_cat_id"], p);//console.log("total=",total, p);
+		var precision = get_user_precision();
+		var ds = this.distributeFromProds($("#distribute-type").val(), v["valoare"], v["fk_cat_id"], p, other_doc);//console.log(ds);
+		this.redistributeRefresh(ds);
+	},
+	distributeCheckDeleteOnCustom:function(pid, pname) { // pid is actually id=nr_crt
+		var p = this.prods;
+		var expenses = "", has_error = false, glue = "";
+		for(k in p) {
+			var pr = p[k];
+			if (pr["has_distribute"] && pr["distribute_type_location"] == "1") {
+				if (pr["distribute_type"] == "3") {
+					var dd = this.distributeToObj(pr["distribute"]);
+					for(i in dd) {
+						if (i == pid && dd[i]["percent"] != "0") {
+							has_error = true;
+							expenses += glue+pr["name"];
+							glue = ", ";
+						}
+					}
+				}
+			}
+		}
+		if (has_error) {
+			show_message("err|"+sprintf(language.distribute_delete_on_custom, pname, expenses), false);
+		}
+		return has_error;
+	},
+	distributeDelete:function(pid) {
+		var p = this.prods;
+		for(k in p) {
+			var pr = p[k];
+			if (pr["has_distribute"] && pr["distribute_type_location"] == "1") {
+				if (pr["distribute_type"] == "1" || pr["distribute_type"] == "2") {
+					var valoare = pr["valoare"];
+					if (!this.platitor_tva_issuer && this.platitor_tva) {
+						valoare += pr["tva_unitar"];
+					}
+					var ds = this.distributeFromProds(pr["distribute_type"], valoare, pr["fk_cat_id"]);
+					if ($.isEmptyObject(ds)) {
+						delete pr["has_distribute"];
+						delete pr["distribute"];
+					} else {
+						pr["distribute"] = objToString(ds);
+					}
+					var new_line = this.createProductRow(pr["id"], pr);
+					$("#entry_item_"+pr["id"]).html(new_line);
+					this.replaceItem(pr);
+					//console.log("has distribute", pr, ds);
+				} else { // custom -> delete pid from this distribute
+					var dd = this.distributeToObj(pr["distribute"]);
+					delete dd[pid];
+					pr["distribute"] = objToString(dd);
+					var new_line = this.createProductRow(pr["id"], pr);
+					$("#entry_item_"+pr["id"]).html(new_line);
+					this.replaceItem(pr);
+				}
+			}
+		}
+		this.recalcTotals();
+	},
+	distributeFromProds:function(type, new_valoare, cat_id, p, other_doc) { // get percents and values from this.prods for type=1||2
+		if (typeof type === "undefined") {
+			type = 1;
+		}
+		type = parseInt(type);
+		if (typeof p === "undefined") {
+			p = this.getAllProds();
+		}
+		if (typeof other_doc === "undefined") {
+			other_doc = false;
+		}
+		var total, precision = 4;//get_user_precision();
+		if (type == 1) {
+			total = this.getProductsStockSum(cat_id, p);
+		} else if (type == 2) {
+			total = this.getProductsStockSumByQ(cat_id, p);
+		}
+		var ds = {};//console.log(p, cat_id);
+		for(var key in p) {
+			if (this.getApplyDistribute(p[key], cat_id)) {
+				var percent;
+				if (type == 1) { //console.log(total, p[key]["valoare"]);
+					percent = this.getProductValueAfterDiscount(p[key])/total;
+				} else if (type == 2) {
+					percent = p[key]["quantity"]/total;
+				} //console.log(p, "percent",percent);
+				var nice_percent = number_format(percent*100, 2);
+				var value = number_format(new_valoare*percent, precision);
+				ds[p[key]["id"]] = {"percent": nice_percent, "value": value};
+				if (other_doc) {
+					ds[p[key]["id"]]["name"] = cleanString(p[key]["name"]);
+					ds[p[key]["id"]]["quantity"] = number_format(p[key]["quantity"], precision);
+					ds[p[key]["id"]]["initv"] = number_format(p[key]["initv"], precision);
+				}
+			}
+		}
+		return ds;
+	},
+	distributeToObj:function(d) {
+		var dstr = {};
+		var d1 = d.split("~");//console.log(d1);
+		for(k in d1) { // for each product in distribute
+			var d2 = d1[k].split("|");//console.log(d2);
+			dstr[d2[0]] = {"percent": d2[1], "value": d2[2]};
+			if (d2[3]) {
+				dstr[d2[0]]["name"] = d2[3];
+			}
+			if (d2[4]) {
+				dstr[d2[0]]["quantity"] = d2[4];
+			}
+			if (d2[5]) {
+				dstr[d2[0]]["initv"] = d2[5];
+			}
+		}
+		return dstr;
+	},
+	distributeVerify:function(pid, edit) { // if add new stockable product, foreach has_distribute redistribute or add new-pid(pid is id in doc, not product_id) with 0 for custom distribution
+		if (typeof edit === "undefined") {
+			edit = false;
+		}
+		/*var othd = false;
+		if (values["distribute_type_location"] == "2") {
+			othd = true;
+		} else if ($("#distribute-type-location").is(':visible') && $("#distribute-type-location").val() == "2") {
+			othd = true;
+		}
+		var ds = this.getDistributeFromPage();//console.log(ds);
+		*/
+		var p = this.prods;
+		for(k in p) {
+			var pr = p[k];
+			if (pr["has_distribute"] && pr["distribute_type_location"] == "1") {//console.log("distributeVerify", pr);
+				if (pr["distribute_type"] == "1" || pr["distribute_type"] == "2") {
+					var valoare = pr["valoare"];
+					if (!this.platitor_tva_issuer && this.platitor_tva) {
+						valoare += pr["tva_unitar"];
+					}
+					var ds = this.distributeFromProds(pr["distribute_type"], valoare, pr["fk_cat_id"]);
+					pr["distribute"] = objToString(ds);
+					var new_line = this.createProductRow(pr["id"], pr);
+					$("#entry_item_"+pr["id"]).html(new_line);
+					this.replaceItem(pr);
+					//console.log("has distribute", pr, ds);
+				} else if (!edit) { // custom -> add newpid with 0 at the end if not edit. on edit the product is already here and is distributed
+					pr["distribute"] += "~"+pid+"|0|0";
+					var new_line = this.createProductRow(pr["id"], pr);
+					$("#entry_item_"+pr["id"]).html(new_line);
+					this.replaceItem(pr);
+				}
+			}
+		}
+	},
+	distributeRefineLocation:function(cat_id) { 
+		if (this.canApplyDistribute(cat_id, true)) {
+			if ($("#distribute-type-location > option").length < 2) {
+				$("#distribute-type-location").prepend($("<option></option>")
+							.attr("value", 1).text(language.on_this_doc)); 
+			}
+		} else {
+			$("#distribute-type-location option[value='1']").remove();
+		} 
+	},
+	redistribute:function(custom_change, check_empty) { // if some value is changed recalculate distribute percents and values
+		var type = $("#distribute-type").val();
+		var new_valoare = this.redistributeGetModalValue();
+		//console.log(new_valoare, type);
+		if (typeof custom_change === "undefined") {
+			custom_change = false;
+		}
+		if (typeof check_empty === "undefined") {
+			check_empty = false;
+		} 
+		if ($("#distribute-type").val() == "0") { // dont distribute
+			return;
+		}
+		var values = this.getEntries($("#entry_id").val());//console.log(values);
+		var othd = false;
+		if (values["distribute_type_location"] == "2") {
+			othd = true;
+		} else if ($("#distribute-type-location").is(':visible') && $("#distribute-type-location").val() == "2") {
+			othd = true;
+		}
+		var ds = this.getDistributeFromPage();//console.log(ds);
+		if (check_empty && $.isEmptyObject(ds)) { // edit expense and not distributed yet
+			var tmp_v = this.getEntries($("#entry_id").val());
+				tmp_v["valoare"] = new_valoare;//console.log("tmp_v",tmp_v);
+			this.distribute(tmp_v);
+			return;
+		} //console.log("her2", custom_change);
+		var total = 0, precision = 4;//get_user_precision();
+		if (!custom_change) {
+			if (type == "1") {
+				if (othd) {
+					total = this.getProductsStockSum(values["fk_cat_id"], ds);
+				} else {
+					total = this.getProductsStockSum(values["fk_cat_id"]);
+				}
+			} else if (type == 2) {
+				if (othd) {
+					total = this.getProductsStockSumByQ(values["fk_cat_id"], ds);
+				} else {
+					total = this.getProductsStockSumByQ(values["fk_cat_id"]);
+				}
+			} //console.log("total=",total);
+			// change ds for new values, and refresh
+			for(k in ds) {
+				var pr;
+				if (othd) {
+					pr = ds[k];
+				} else {
+					pr = this.getEntries(k);
+				}
+				if (pr && this.getApplyDistribute(pr, values["fk_cat_id"])) {
+					var percent;
+					if (type == "1") {
+						percent = this.getProductValueAfterDiscount(pr)/total;
+					} else if (type == "2") {
+						percent = pr["quantity"]/total;
+					} //console.log(percent, pr, total);
+					if (type != "3") {
+						var nice_percent = number_format(percent*100, 2);
+						var value = number_format(new_valoare*percent, precision);
+						ds[k]["percent"] = nice_percent;
+						ds[k]["value"] = value;
+					} else {
+						var value = number_format(new_valoare*(ds[k]["percent"]/100), precision);
+						ds[k]["value"] = value;
+					}
+				}
+			} //console.log(ds, total);
+		} // else we refresh html with input with the same values
+		this.redistributeRefresh(ds);
+	},
+	redistributeCheck:function() {
+		if (!$("#distribute-type").is(':visible')) {
+			return false;
+		}
+		var ds = this.getDistributeFromPage();
+		var cat_id = $("#product_cat_id").val();// = this.getEntries($("#entry_id").val());
+		var text;
+		if (this.isImpoziteTaxe(cat_id)) {
+			text = language.tax;
+		} else {
+			text = language.expense;
+		}
+		var type = $("#distribute-type").val();
+		if (type != "0") { // has selected some distribute type
+			var ll = $("#distribute-type-location").val();
+			if (ll == "1") {
+				if ($.isEmptyObject(ds)) {
+					show_message("err|"+sprintf(language.distribute_no_products, text), false);
+					return true;
+				}
+			} else if (ll == "2") { // other doc
+				if (!$(".doc_name_plh").html() || $(".doc_name_plh").html() == "") {
+					show_message("err|"+sprintf(language.distribute_no_products_oth, text), false);
+					return true;
+				}
+				if ($.isEmptyObject(ds)) {
+					show_message("err|"+sprintf(language.distribute_no_products, text), false);
+					return true;
+				}
+			}
+		}
+		if (type == '3') { // continue only for custom
+			var total = 0;
+			for(k in ds) {
+				total += parseFloat(ds[k]["percent"]);
+			}
+			total = number_format(total, 4);
+			if (total < 100 && total != 99.99) {
+				show_message("err|"+language.distribute_total_split2, false);
+				return true;
+			}
+			if (total > 100) {
+				show_message("err|"+language.distribute_total_split, false);
+				return true;
+			}
+		}
+		return false;
+	},
+	redistributeGetModalValue:function() {
+		var q = $("#product_quantity").val();
+		var p = $("#product_pret_fara_tva").val();
+		var ti = $("#product_tva_inclus").val();
+		var c = $("#product_cota_tva option:selected").text();
+		if (c) {
+			c = parseFloat(c.substring(0, c.indexOf("%")));
+		}
+		var add_vat = false;
+		if (!this.platitor_tva_issuer && this.platitor_tva) { // add vat to aquisition_price
+			add_vat = true;
+		}
+		if (ti == "1" && !add_vat) { // tva inclus
+			p = p/(1 + c/100);
+		}
+		p *= q;
+		if (ti != "1" && add_vat) {
+			p += (c/100)*p;
+		} //console.log("p=",p);
+		return p;
+	},
+	redistributePercent:function(val, pid) { // if only 2 products redistribute automatically, else add all... show error when the user clicks submit button
+		var new_valoare = this.redistributeGetModalValue();
+		var ds = this.getDistributeFromPage();
+		var size = Object.keys(ds).length;
+		var precision = 4;//get_user_precision();;
+		//console.log(ds, size, pid);
+		for(k in ds) {
+			if (k == pid) { // update this percent and value
+				ds[k]["percent"] = val;//console.log(new_valoare, val, precision);
+				var value = number_format(new_valoare*(val/100), precision);
+				ds[k]["value"] = value;
+			} else if (size == 2) { //only if there are 2 products
+				ds[k]["percent"] = number_format(100-val, 2);
+				var value = number_format(new_valoare*(ds[k]["percent"]/100), precision);
+				ds[k]["value"] = value;
+			}
+		}
+		this.redistributeRefresh(ds);
+	},
+	redistributeValue:function(val, pid) { // if only 2 products redistribute automatically, else add all... show error when the user clicks submit button
+		var new_valoare = this.redistributeGetModalValue();
+		var ds = this.getDistributeFromPage();
+		var size = Object.keys(ds).length;
+		var precision = 4;//get_user_precision();
+		//console.log(ds, size, pid);
+		for(k in ds) {
+			if (k == pid) { // update this percent and value
+				ds[k]["value"] = val;
+				var percent = number_format((val/new_valoare)*100, 2);
+				ds[k]["percent"] = percent;
+			} else if (size == 2) { //only if there are 2 products
+				ds[k]["value"] = number_format(new_valoare-val, precision);
+				var percent = number_format((ds[k]["value"]/new_valoare)*100, 2);
+				ds[k]["percent"] = percent;
+			}
+		}
+		this.redistributeRefresh(ds);
+	},
+	redistributeRefresh:function(ds) { // refresh ds in html
+		var html = '<tbody class="border-0">', row = "", precision = get_user_precision();
+		var table = $('#content-table-distribute');//console.log(this.paymentIds);
+		table.find("tr.table_row").remove();
+		var total_percent = 0, total_valoare = 0;
+		var custom = ($("#distribute-type").val() == "3");//console.log("f ds=", ds);
+		for(k in ds) { 
+			row = '<tr class="table_row">'+
+					'<td class="ps-4 text-wrap" scope="col">';
+					if (ds[k].hasOwnProperty("name")) {
+						row += ds[k]["name"];
+					} else {
+						row += this.getNameForId(k);
+					}
+					row += '</td>'+
+					'<td class="text-wrap text-end">';
+					if (custom) {
+						row += '<input type="text" class="form-control form-control-sm float-field percent-field" id="ds_pid_'+k+'_p" data-id="'+k+'" value="'+((ds[k]["percent"] && ds[k]["percent"] != "0") ? ds[k]["percent"] : "")+'" data-old="'+ds[k]["percent"]+'" />';
+					} else {
+						row += ds[k]["percent"];
+					}
+					row += ' %</td>'+
+					'<input type="hidden" name="product_distribute['+k+']" data-id="'+k+'" data-value="'+ds[k]["value"]+'" value="'+ds[k]["percent"]+'"';
+					if (ds[k].hasOwnProperty("name")) {
+						row += ' data-name="'+ds[k]["name"]+'"';
+						row += ' data-quantity="'+ds[k]["quantity"]+'"';
+						row += ' data-initv="'+ds[k]["initv"]+'"';
+					}
+					row += ' />'+
+					'<td class="d-none d-lg-table-cell text-wrap text-end">';
+					if (custom) {
+						row += '<input type="text" class="form-control form-control-sm float-field value-field" id="ds_pid_'+k+'_v" data-id="'+k+'" value="'+ds[k]["value"]+'" data-old="'+ds[k]["value"]+'" />';
+					} else {
+						row += number_format(ds[k]["value"], precision);
+					}
+					row += '</td>'+
+				'</tr>';
+			html += row;
+			total_percent += parseFloat(ds[k]["percent"]);
+			total_valoare += parseFloat(ds[k]["value"]);
+		}
+		if (!custom) {
+			total_percent = 100;
+		} else if (total_percent >= 99.99 && total_percent <=100) {
+			total_percent = 100;
+		} 
+		if (total_percent == 100 && precision == 4) {
+			precision = 3;
+		} //console.log(total_percent, total_valoare, ds);
+		// total
+		row = '<tr class="table_row">'+
+				'<td class="ps-4 font-bold" scope="col">'+language.total+'</td>'+
+				'<td class="text-wrap font-bold text-end">'+nice_float(total_percent, 2)+' %</td>'+
+				'<td class="d-none d-lg-table-cell text-wrap font-bold  text-end">'+nice_float(total_valoare, precision)+'</td>'+
+			'</tr>';
+		html += row;
+		html += '</tbody>';
+		table.append(html);
+		//$("#distribute-table").removeClass("hidden");
+	},
+	initDistribute:function(v) {//console.log("v init",v);
+		this.redistributeRefresh(this.distributeToObj(v["distribute"]));
+	},
+	elongateCategory:function(is_stoc, js_id) {
+		if (typeof js_id === 'undefined') {
+			js_id = "";
+		}
+		//console.log("elongate","stoc="+is_stoc, "js="+js_id);
+		// reset category
+		$(".expense-category"+js_id).addClass("expense-category-small");
+		if (is_stoc || is_stoc == "1") { //console.log("show gestiune");
+			$(".gestiune_area"+js_id).removeClass("hidden");
+			$(".pl_area"+js_id).addClass("hidden");
+		} else { //console.log("hide gestiune");
+			if (js_id) {
+				$(".gestiune_area"+js_id).addClass("hidden");
+			} else {
+				$(".gestiune_area"+js_id+":not(.not-hidden)").addClass("hidden");
+			}
+			if (this.multiple_pl) {
+				$(".pl_area"+js_id).removeClass("hidden");
+			} else {
+				$(".expense-category"+js_id).removeClass("expense-category-small");
+			}
+		}
+	},
+	elongateProductName:function() {
+		if (!this.use_stock) { //console.log("not stock");
+			return false;
+		}
+		var base_class = "form-group-name";
+		if (this.use_code) {
+			base_class += '-cc';
+		} //console.log(base_class);
+		var gpv = false, prv = false;
+		if ($(".gestiune_area").is(":visible") || $(".pl_area").is(":visible")) { 
+			gpv = true; // gestiune or pl is visible... both cannot be visible at the same time, and they occupy the same space/area
+		}
+		if ($(".pr_type_area").is(":visible")) {
+			prv = true;
+		}
+		//console.log(gpv, prv, base_class);
+		if (gpv && prv) { // both visible
+			$("."+base_class).removeClass(base_class+"-2");
+			$("."+base_class).addClass(base_class+"-3");
+		} else if (gpv || prv) { // one visible
+			$("."+base_class).removeClass(base_class+"-3");
+			$("."+base_class).addClass(base_class+"-2");
+		} else { // both invisible
+			$("."+base_class).removeClass(base_class+"-2");
+			$("."+base_class).removeClass(base_class+"-3");
+		}
+		return true;
+	},
+	getAllProds:function() {
+		return this.prods;
+	},
+	getAllProdsIds:function(string) {
+		var prods = this.getAllProds();
+		var pids = [];
+		for(i in prods) {
+			pids.push(prods[i]["ref_id"]);
+		}
+		if (typeof string === "undefined") {
+			string = false;
+		}
+		if (string) {
+			return pids.join(",");
+		}
+		return pids;
+	},
+	getApplyDistribute:function(v, cat_id) {
+		if (v.hasOwnProperty("from_md")) {
+			return true;
+		}
+		if (v["is_stoc"] != "null" && (v["is_stoc"] || v["is_stoc"] == "1")) { // stoc
+			if (!this.getApplyDistributeFS(v["fk_cat_id"], cat_id)) {
+				return true;
+			}
+		}
+		if (v["fk_cat_id"]) {
+			if ($.inArray(parseInt(v["fk_cat_id"]), [91,104]) > -1) { // mijloace fixe
+				return true;
+			}
+		}
+		return false;
+	},
+	getApplyDistributeFS:function(cat_id, d_cat_id) { // Fonduri speciale
+		if (typeof cat_id === "undefined") {
+			cat_id = 0;
+		}
+		if (typeof d_cat_id === "undefined") {
+			d_cat_id = 0;
+		}
+		if (d_cat_id == "149" && cat_id == "76") {
+			return true;
+		}
+		return false;
+	},
+	getDiscountGroupIds:function(group_id, is_full) { // get ids for discount group
+		if(typeof is_full !== 'undefined' && is_full) {
+			group_id = group_id.replace(this.ENTRY_PRELUDE, "");//substring(id.lastIndexOf("_")+1);
+		}
+		group_id = group_id.replace("d", "");
+		return group_id.split("_");
+	},
+	getEntries:function(id, is_full) { // return entries by row id
+		if(typeof is_full !== 'undefined' && is_full) {
+			id = id.replace(this.ENTRY_PRELUDE, "");//id.substring(id.lastIndexOf("_")+1);
+		} //console.log(this.prods);
+		for(var key in this.prods) {
+			if (this.prods[key]["id"] == id) {
+				return this.prods[key];
+			}
+		}
+		return "";
+	},
+	getEntriesForProductId:function(id) {
+		for(var key in this.prods) {
+			if (this.prods[key]["ref_id"] == id) {
+				return this.prods[key];
+			}
+		}
+		return "";
+	},
+	getGroupIdByProductId:function(id, return_pr) { // get group_id the product id belongs
+	//console.log(id);
+		if (this.expense) {
+			id = id.toString();
+		}
+		if (typeof return_pr === "undefined") {
+			return_pr = false;
+		}
+		var p = this.getAllProds();//console.log(p);
+		for(var key in p) {
+			if (this.isDiscount(p[key]["id"])) {
+				gr_ids = this.getDiscountGroupIds(p[key]["id"]);//console.log(id, p[key]["id"], gr_ids);
+				if ($.inArray(id, gr_ids) != -1) {
+					if (return_pr) {
+						return p[key];
+					}
+					return p[key]["id"];
+				}
+			}
+		}
+		return "";
+	},
+	getItemEntries:function(id) { //grab properties from table row for row id
+		var values = {};
+			values["full_id"] = this.ENTRY_PRELUDE+id;
+			values["id"] = id;//.replace(this.ENTRY_PRELUDE, "");//id.substring(id.lastIndexOf("_")+1);
+			//console.log($("#" + this.ENTRY_PRELUDE + id).children());
+		$("#" + this.ENTRY_PRELUDE + id).children().each(function() { //console.log("n: ",this);
+			if (this.name) {//console.log(this);
+				var name = this.name;
+				name = name.substring(name.lastIndexOf("[")+1);//indexOf("'")+1);
+				name = name.substring(0, name.indexOf("]"));
+				var val = $(this).val();
+				if (val == "false") {
+					val = false;
+				}
+				if (val == "true") {
+					val = true;
+				}
+				values[name] = val;
+			}
+		});
+		return values;
+	},
+	getKeyForId:function(id) {
+		var p = this.getAllProds();
+		for(var key in p) { //console.log(id, key, p[key]);
+			if (p[key]["id"] == id) {
+				return parseInt(key);
+			}
+		}
+		return p.length;
+	},
+	getLastDiscountGroupIds:function() { // get items ids for last discount group
+		var ids = [], p = Array.prototype.slice.call(this.prods);
+		p.reverse();
+		for(var key in p) {
+			if (this.isDiscount(p[key]["id"])) {
+				break;
+			}
+			if (this.isTaxCustom(p[key]["id"])) {
+				continue;
+			}
+			if (this.isSgr(p[key]["id"])) {
+				continue;
+			}
+			if (p[key].hasOwnProperty("has_distribute")) {
+				continue;
+			}
+			ids.push(p[key]["id"]);
+		}//console.log(ids);
+		return ids;
+	},
+	getNameForId:function(id) {
+		var product = this.getEntries(id);
+		if (product) {
+			return product["name"];
+		} else {
+			return supplier_docs.getNameForId(id);
+		}
+		return "";
+	},
+	getNameForProductId:function(id) {
+		for(var key in this.prods) {
+			if (this.prods[key]["ref_id"] == id) {
+				return this.prods[key]["name"];
+			}
+		}
+		return "";
+	},
+	getProductForDiscount:function(type, id, exclude_current) { // type=(single,total)
+		var product = {};//console.log(type, id);
+		if (typeof exclude_current === 'undefined') {
+			exclude_current = false;
+		}
+		if(typeof id === 'undefined' || (!this.hasItem(id+"d") && (type=="single"))) { // default group/last items or single discount not added yet
+			//console.log("here");
+			product["procentual"] = $("#discount_percent").prop('checked') ? 1 : 0; // or fix
+			product["discount"] = parseFloat($.trim($("#discount_valoare").val()));
+			product["name"] = language.discount+" ";
+			if(type == "single") {
+				var ref_values = this.getEntries(id);
+			} else {
+				var ref_values = this.getValuesForDiscountUpdate();// default values/last items
+			}//console.log(ref_values);
+			if (product["procentual"] == 1) {
+				product["name"] += product["discount"]+"% ";
+			} else if(type == "total") { // multiple
+				product["name"] += language.products;
+			}
+			if(type == "single") { // single, add product name
+				product["name"] += ref_values["name"];
+			}
+			product["um"] = "buc";
+			product["quantity"] = 1;
+			product["cota_tva"] = ref_values["cota_tva"];
+			product["precision"] = get_user_precision();
+		} else {
+			if(type == "total") {
+				var ref_gr_id = this.getGroupIdByProductId(id);//console.log(ref_gr_id);
+				var product = this.getEntries(ref_gr_id);//console.log(product);
+				if (exclude_current) {
+					ref_values = this.getValuesForDiscountUpdate(ref_gr_id, id);
+				} else {
+					ref_values = this.getValuesForDiscountUpdate(ref_gr_id);
+				}
+			} else { // get single discount values
+				var ref_values = this.getEntries(id);
+				product = this.getEntries(id+"d");
+			}
+			product["cota_tva"] = ref_values["cota_tva"];
+		}
+		//console.log("ref_values", ref_values);
+		//ref_values["valoare"] = ref_values["pret_fara_tva"]*ref_values["quantity"];
+		product["procentual"] = parseInt(product["procentual"], 10);
+		if (product["procentual"] == 1) {
+            var total = nice_float((parseFloat(ref_values["valoare"]) + parseFloat(ref_values["tva_unitar"])) * (parseFloat(product["discount"]) / 100), product["precision"]);
+			var pret_fara_tva = total / (1 + parseFloat(ref_values["cota_tva"]) / 100);
+			var tva = total - pret_fara_tva;
+		} else {
+			if (!this.hasItem(id+"d")) {
+				var pret_fara_tva  = product["discount"]/(1 + ref_values["cota_tva"]/100);
+				var tva = product["discount"] - pret_fara_tva;
+			} else {
+				var pret_fara_tva = Math.abs(product["pret_fara_tva"]);
+				var tva = Math.abs(product["tva_unitar"]);
+			}
+		} //console.log("storno_doc: "+this.stornoDoc, "product=",product);
+		if ((product["storno"] && product["procentual"]) || this.isStornoDocEdit(product)) {
+			pret_fara_tva = Math.abs(pret_fara_tva);
+			tva = Math.abs(tva);
+		} //console.log(pret_fara_tva, tva);
+		product["pret_fara_tva"] = nice_float(-pret_fara_tva, product["precision"]);
+		if (this.isStornoDocEdit(product) || product["storno"]) {
+			product["tva_unitar"] = nice_float(tva, product["precision"]);
+		} else {
+			product["tva_unitar"] = nice_float(-tva, product["precision"]);	
+		}
+		//console.log(product);
+		product["valoare"] = product["pret_fara_tva"]*product["quantity"];
+		return product;
+	},
+	isStornoDocEdit:function(product) {
+		if (this.stornoDoc && product["procentual"]) { // check only on edit storno
+			if (product["quantity"] < 0) { // only discount stornoed
+				return true;
+			}
+		}
+		return false;
+	},
+	getProductsSum:function(i, id) { // i = (ap,product) /// id - product id in products list
+		//console.log("sum=",i,id);
+		var p = this.prods, total_fara_tva = 0, total_tva = 0;
+		var precision = get_user_precision();
+		for(var key in p) { //console.log("p",p);
+			var prd = p[key];
+			if (i == "product" && id && prd["id"] == id) { // exclude comparison with self
+				continue;
+			} //console.log("prd sum: ",prd);
+			total_fara_tva += number_format(prd["pret_fara_tva"] * prd["quantity"], precision);
+			total_tva += number_format(prd["tva_unitar"], precision);
+		}
+		var total = total_fara_tva;
+		if (this.platitor_tva) {
+			total += total_tva;
+		}
+		return total;
+	},
+	getProductsSumForIds:function(ids) {
+		var p = this.prods, total = 0;
+		var precision = get_user_precision();
+		for(var key in p) { //console.log("p",p);
+			var prd = p[key]; //console.log("prd=",prd);
+			if (this.getApplyDistribute(prd)) {
+				if ($.inArray(prd["id"], ids) != -1) {
+					total += parseFloat(prd["valoare"]);//number_format(prd["valoare"], precision);
+				}
+			}
+		}
+		return total;
+	},
+	getProductsStockSum:function(cat_id, p) { // sum valoare for all the stockable products
+		var total = 0;
+		var precision = get_user_precision();
+		if (typeof p === 'undefined') {
+			p = this.prods;
+		} //console.log(p);
+		for(var key in p) { //console.log("p",p);
+			var prd = p[key]; //console.log("prd=",prd);
+			if (this.getApplyDistribute(prd, cat_id)) { //console.log("chk discount", prd);
+				total += number_format(this.getProductValueAfterDiscount(prd), precision);
+			}
+		} 
+		return total;
+	},
+	getProductsStockSumByQ:function(cat_id, p) { // sum quantity for all the stockable products
+		var total = 0;
+		var precision = get_user_precision();
+		if (typeof p === 'undefined') {
+			p = this.prods;
+		}
+		for(var key in p) { //console.log("p",p);
+			var prd = p[key]; //console.log("prd=",prd);
+			if (this.getApplyDistribute(prd, cat_id)) {
+				total += number_format(prd["quantity"], precision);
+			}
+		}
+		return total;
+	},
+	getProductValueAfterDiscount:function(prd) {
+		var valoare = parseFloat(prd["valoare"]);
+		if (prd.hasOwnProperty("from_md")) { //console.log("prd=", prd);
+			if (prd.hasOwnProperty("initv")) {
+				return parseFloat(prd["initv"]);
+			}
+			return valoare;
+		}
+		if (this.hasDiscount(prd["id"])) {
+			var grp = this.getGroupIdByProductId(prd["id"], true);
+			if (grp) {
+				if (grp["procentual"] == "1") { // extract discount from valoare
+					valoare -= (parseFloat(grp["discount"])/100)*prd["valoare"];
+					if (!this.platitor_tva_issuer && this.platitor_tva) { // add vat to aquisition_price
+						var tva_unitar = parseFloat(prd["tva_unitar"]);
+							tva_unitar -= (parseFloat(grp["discount"])/100)*prd["tva_unitar"];
+							valoare += tva_unitar;
+					}
+				} else { // fix
+					var ids = this.getDiscountGroupIds(grp["id"]);//console.log(ids);
+					var tt = this.getProductsSumForIds(ids);//console.log(ids, tt, valoare);
+					var pp = (valoare*100)/tt;
+					valoare -= (pp/100)*Math.abs(grp["valoare"]);
+				}
+			}
+		} else {
+			if (!this.platitor_tva_issuer && this.platitor_tva) { // add vat to aquisition_price
+				valoare += parseFloat(prd["tva_unitar"]);
+			}
+		} //console.log(valoare, prd);
+		return valoare;
+	},
+    getWorkstation:function() {
+        if (!this.multiple_pl) {
+            return false;
+        }
+		for (var key in this.prods) {
+            var product = this.prods[key];
+			if (!product["punct_lucru"]) {
+				continue;
+			}
+            return product["punct_lucru"];
+		}
+        return false;
+    },
+	getValuesForDiscountUpdate:function(group_id, exclude) { // get values for items to add discount
+		//console.log("getValuesForDiscountUpdate", group_id, exclude);
+		var values = {}, ids, exclude_id = false;
+		if(typeof group_id === 'undefined') {
+			ids = this.getLastDiscountGroupIds();
+		} else {
+			ids = this.getDiscountGroupIds(group_id);
+			if (typeof exclude !== 'undefined') {
+				exclude_id = true;
+			}
+		}//console.log(exclude_id, exclude);
+		values["pret_fara_tva"] = 0;
+		values["cota_tva"] = 0;
+		values["precision"] = parseFloat(get_user_precision());
+		values["valoare"] = 0;
+		values["tva_unitar"] = 0;
+		values["tva_total"] = 0
+		for(var key in ids) {
+			var entry = this.getEntries(ids[key]);//console.log(entry);
+			if (exclude_id && entry["id"] == exclude) {
+				continue;
+			}
+			values["pret_fara_tva"] += parseFloat(entry["pret_fara_tva"]);
+			values["cota_tva"] = parseFloat(entry["cota_tva"]);
+			values["valoare"] += parseFloat(entry["pret_fara_tva"]) * parseFloat(entry["quantity"]);
+			values["tva_unitar"] += parseFloat(entry["tva_unitar"]);
+			values["tva_total"] += parseFloat(entry["tva_unitar"]);// * parseFloat(entry["quantity"]);
+		} //console.log(values);
+		values["pret_fara_tva"] = number_format(values["pret_fara_tva"], values["precision"]);
+		values["valoare"] = number_format(values["valoare"], values["precision"]);
+		values["tva_unitar"] = number_format(values["tva_unitar"], values["precision"]);
+		values["tva_total"] = number_format(values["tva_total"], values["precision"]);
+		return values;
+	},
+	getUseCode:function() {
+		return this.use_code;
+	},
+	getUseStock:function() {
+		return this.use_stock;
+	},
+	groupProductsInForm:function(field_name) {
+		if (typeof field_name === 'undefined') {
+			field_name = "all_products" 
+		}
+		var entries = $('input[name^=entry]');//console.log(entries);
+		entries.each(function(index) {
+			if ($(this)[0].id != "entry_id") {
+				$(this).remove();
+			}
+		});
+		//console.log("all prods",);
+		$("#"+field_name).val(JSON.stringify(this.getAllProds()));
+	},
+	has446Selected:function() {
+		var p = this.prods;
+		if (p.length > 0) {
+			for(var key in p) {
+				if (p[key]["fk_cat_id"] == "148") {
+					return true;
+				}
+			}
+		}
+		return false;
+	},
+	hasAllCatsSelected:function() {
+		var rrw = $(".table_row_add_product").length;console.log("rrwN:", rrw, this.isXLS());
+		if (this.eFactura) {
+			if (rrw > 1) {
+				return false;
+			}
+		}  else {
+			if (this.isXLS() && rrw > 0) {
+				return false;
+			} 
+			if(!this.isXLS() && rrw > 0) {
+				return false;
+			}
+		}
+		
+		/*
+		var p = this.prods;//console.log(p);
+		for(var key in p) {
+			var name = $.trim(p[key]["name"]),
+				ref_id = $.trim(p[key]["ref_id"]),
+				fk_cat_id = $.trim(p[key]["fk_cat_id"]);
+			if (fk_cat_id == "" || fk_cat_id == "0" || fk_cat_id == "undefined" || typeof fk_cat_id === 'undefined') {
+				return false;
+			}
+		}*/
+		return true;
+	},
+	hasButtonProduct:function(id, type) {
+		if ($("#"+this.ENTRY_PRELUDE+id+":has(li.product_percent_"+type+")").length > 0) {
+			return true;
+		}
+		return false;
+	},
+	hasChangedPricesFromModal:function(entry_id, mv) { // mv = modal values.. if these are changed -> send request to server to check for user_change_sale_price
+		/*mv:   cota_tva "d1"
+currency"99"
+price"18"
+tva_inclus"1"
+exchange_rate - optional
+
+// entries:
+cota_tva_option_2"d1"
+currency_2"99"
+pret_fara_tva_2"18"
+tva_inclus_2  1*/
+		var values = this.getEntries(entry_id);
+		var v_price = values["pret_fara_tva_2"];
+		var v_cota = values["cota_tva_option_2"];
+		var v_currency = values["currency_2"];
+		var v_tva_inclus = values["tva_inclus_2"];
+		if (mv.hasOwnProperty("is_expense")) {
+			v_price = values["init_total_2"]/values["quantity_2"];
+		}
+		if (mv.hasOwnProperty("exchange_rate")) {
+			mv["exchange_rate"] = parseFloat(mv["exchange_rate"]);
+		}
+		if (values.hasOwnProperty("exchange_rate")) {
+			values["exchange_rate"] = parseFloat(values["exchange_rate"]);
+		}
+		if (mv.hasOwnProperty("is_doc")) {
+			v_price = values["pret_fara_tva"];
+			v_cota = values["cota_tva_option"];
+			v_currency = values["currency"];
+			v_tva_inclus = values["tva_inclus"];
+			if (values["currency"] != "99") {
+				v_price = values["init_price"];
+			}
+		}
+		v_price = parseFloat(v_price);
+		if (typeof v_tva_inclus !== "boolean") {
+			v_tva_inclus = parseInt(v_tva_inclus);
+		}
+		if (typeof mv["tva_inclus"] !== "boolean") {
+			mv["tva_inclus"] = parseInt(mv["tva_inclus"]);
+		}
+		mv["price"] = parseFloat(mv["price"]);
+		if ( (!mv.hasOwnProperty("is_expense") && !this.platitor_tva) || // not expense and not vat_payer 
+			(mv.hasOwnProperty("is_expense") && !this.platitor_tva_issuer) ) { // expense and not vat_payer_issuer 
+			v_cota = "";
+			v_tva_inclus = "";
+			mv["cota_tva"] = "";
+			mv["tva_inclus"] = "";
+		}
+		//console.log(values, mv);
+		//console.log(mv["tva_inclus"],mv["price"], v_price, v_cota, v_currency, v_tva_inclus);
+		if (mv["price"] != v_price ||
+			mv["currency"] != v_currency ||
+			mv["cota_tva"] != v_cota ||
+			mv["tva_inclus"] != v_tva_inclus ||
+			(mv.hasOwnProperty("exchange_rate") && values.hasOwnProperty("exchange_rate") && (mv["exchange_rate"] != values["exchange_rate"]))
+			) {
+			return true;
+		}
+		return false;
+		//
+	},
+	hasCorrection:function(return_id) {
+		var p = this.prods;
+		if (typeof return_id === 'undefined') {
+			return_id = false;
+		}
+		for(var key in p) {
+			if (p[key]["is_correction"] || p[key]["is_correction"] == "1") {
+				if (return_id) {
+					return p[key]["id"];
+				}
+				return true;
+			}
+		}
+		return false;
+	},
+	hasCotaTI:function() {
+		//if (this.isExpense()) {
+		//	return false;
+		//}
+		if (!this.hasProducts()) {
+			return false;
+		}
+		var p = this.prods;
+		for(var key in p) { //console.log("p:",p[key]);
+			if (this.isCotaTi(p[key]["cota_tva_option"])) {
+				return true;
+			}//console.log(p[key]);
+		}
+		return false;
+	},
+	hasCotaTIOld:function() {
+		if (!this.hasProducts()) {
+			return false;
+		}
+		var p = this.prods;
+		for(var key in p) { //console.log("p:",p[key]);
+			if (this.isCotaTiOld(p[key]["cota_tva_option"])) {
+				return true;
+			}//console.log(p[key]);
+		}
+		return false;
+	},
+	hasDiscount:function(id) {
+		if (this.getGroupIdByProductId(id) != "") {
+			return true;
+		}
+		return false;
+	},
+	hasDiscountFix:function() {
+		var p = this.prods;
+		for(var key in p) {
+			if (this.isDiscount(p[key]["id"])) {
+				var entry = this.getEntries(p[key]["id"]);
+				entry["procentual"] = parseInt(entry["procentual"], 10);
+				if (entry["procentual"] == 0) {
+					return true;
+				}
+			}
+		}
+		return false;
+	},
+	hasItem:function(id) {
+		if (this.getEntries(id) != "") {
+			return true;
+		}
+		return false;
+	},
+	hasProducts:function() {
+		if (this.prods.length > 0) {
+			return true;
+		}
+		return false;
+	},
+	hasProductsWithDifferentPrice:function(pid, gid, price, currency, is_expense, tva_inclus, cota_tva, id) {
+		//console.log(pid,gid,price,currency, is_expense,tva_inclus, cota_tva, id);//return true;
+		var p = this.prods;
+		if (typeof is_expense === 'undefined') {
+			is_expense = false;
+		}
+		if (typeof id === 'undefined') {
+			id = -1;
+		}
+		for(var key in p) { //console.log(p[key]);
+			var pp = p[key];//console.log(pp);
+			if (pp["id"] == id) { // exclude comparison with self
+				continue;
+			}
+			if (pp.hasOwnProperty("gestiune_type") && pp.hasOwnProperty("fk_gestiune_id")) {
+				if (pp["gestiune_type"] == "2") { // global valoric
+					if (pp["ref_id"] == pid && pp["fk_gestiune_id"] == gid) {
+						var pp_price = pp["pret_fara_tva"];
+						if (pp.hasOwnProperty("init_price")) {
+							pp_price = pp["init_price"];
+						}
+						if (id != -1) { // modal
+							if (!is_expense) {
+								pp["tva_inclus"] = false;
+							}
+						} else {
+							if (pp["tva_inclus"]) { //
+								if (pp.hasOwnProperty("user_price") && pp["user_price"] != "0" && pp["user_price"] != "0.00") {
+									pp_price = pp["user_price"];
+								} else {
+									pp_price = pp["init_price_tvai"];
+								}
+							}
+						}
+						var pp_currency = pp["currency"];
+						var pp_cota_tva_option = pp["cota_tva_option"];
+						var pp_tva_inclus = pp["tva_inclus"];
+						if (is_expense) {
+							pp_price = pp["user_price"];//pp["pret_fara_tva_2"];
+							pp_currency = pp["currency_2"];
+							pp_cota_tva_option = pp["cota_tva_option_2"];
+							pp_tva_inclus = pp["tva_inclus_2"];
+							if (pp["tva_inclus_2"]) {
+								//pp_price = pp["init_total_2"];
+							}
+							if (!this.platitor_tva_issuer) {
+								pp_tva_inclus = false;
+								tva_inclus = false;
+								pp_cota_tva_option = "";
+								cota_tva = "";
+							}
+						}
+						pp_price = parseFloat(pp_price);
+						price = parseFloat(price);
+						//console.log("after procesing=", pp_price, price, pp["currency"], pp["tva_inclus"]);
+						var check_cota = false;
+						if (typeof cota_tva !== 'undefined') {
+							check_cota = true;
+						} //console.log(pp_price, price, pp_currency, currency, cota_tva, tva_inclus, pp);
+						if (is_expense) {
+							if (pp_price != price || pp_currency != currency ||
+								(check_cota && (pp_tva_inclus != tva_inclus || pp_cota_tva_option != cota_tva))) { // different price and currency
+								return true;
+							}
+						} else if (pp_price != price || pp_currency != currency ||
+							(check_cota && (pp_tva_inclus != tva_inclus || pp_cota_tva_option != cota_tva))) { // different price and currency
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
+	},
+	hasProductsWithoutGestiune:function() {
+		var p = this.prods;
+		for(var key in p) { //console.log(p[key]);
+			if (this.isStockType(p[key]["pr_type"]) && (p[key]["fk_gestiune_id"] == '0' || !p[key]["fk_gestiune_id"])) {
+				return true;
+			}
+		}
+		return false;
+	},
+	hasSameCoteTVA:function() { // check if items have the same cota_tva, starting at the end
+		var tva = "", p = Array.prototype.slice.call(this.prods);
+		p.reverse();
+		for(var key in p) {
+			if (this.isDiscount(p[key]["id"])) {
+				break;
+			}
+			if (this.isTaxCustom(p[key]["id"])) {
+				continue;
+			}
+			if (this.isSgr(p[key]["id"])) {
+				continue;
+			}
+			if (tva == "") {
+				tva = p[key]["cota_tva"];
+				continue;
+			}
+			if (p[key]["cota_tva"] != tva) {
+				return false;
+			}
+		}
+		return true;
+	},
+	hasStock:function() {
+		if (!this.isExpense()) {
+			return false;
+		}
+		var p = this.prods;
+		for(var key in p) {
+			if (p[key]["is_stoc"] == "null") {
+				continue;
+			}
+			if (p[key]["is_stoc"] || p[key]["is_stoc"] == "1") {
+				return true;
+			}
+			//console.log(p[key]);
+		}
+		return false;
+	},
+	hasTichete:function() {
+		if (!this.isExpense()) {
+			return false;
+		}
+		var p = this.prods;
+		for(var key in p) {
+			if (p[key]["fk_cat_id"] == "115") {
+				return true;
+			}
+		}
+		return false;
+	},
+	initAutocomplete:function(id) { // transformed to selected cat to prod
+		var th = this;
+		if (this.interDocMode) {
+			//$("#ap_name_"+id).change(function(){
+				var product = th.getEntries(id);
+					product.name = $.trim($("#ap_name_"+id+" option:selected").text());
+					product.ref_id = $(this).val();
+					var new_line = th.createProductRow(id, product, true);//console.log(new_line);
+					$("#entry_item_"+id).html(new_line);
+					th.replaceItem(product);
+					$("#ap_name_"+id).val(product.ref_id);
+					th.initAutocomplete(id);// reatach change to new select
+					th.recalcTotals();
+				//console.log($(this).val());
+			//});
+		}
+	},
+	initAutocomplete2:function(id) {
+		/*
+		var th = this;
+		if (this.interDocMode) {
+			var product = th.getEntries(id);
+				product.description = $("#ap_"+id+"_cat").html();
+				product.fk_cat_id = $("#ap_"+id+"_cat_id").val();
+			console.log("init autocomplete 2",product);
+			var new_line = th.createProductRow(id, product);console.log(new_line);
+				$("#entry_item_"+id).html(new_line);
+				th.replaceItem(product);
+				//$("#ap_name_"+id).val(product.ref_id);
+				th.recalcTotals();
+		}
+		*/
+	},
+	initInterDocProducts:function(init_prods) { //console.log("here");
+		if ($.isEmptyObject(init_prods)) return;
+		var main_form_product;
+		if (this.eFactura) {
+			main_form_product = $(".table_row_add_product");
+		} //console.log("init_prods: ", init_prods);
+		var is_first = true, id = 1;
+		for(var key in init_prods) {
+			var prod = init_prods[key];//console.log("prd: ",prod);
+			if (prod["is_discount"]) {
+				//this.prods[prod["nr_crt"]-1] = prod;
+				var pp_id = prod["id_item"];
+				//var prod_to_add = this.setIdToProduct(pp_id, prod);
+				//var new_line = "<div class=\"table_row invoice_row\" id=\"entry_item_"+pp_id+"\">"+this.createProductRow(pp_id, prod_to_add)+"</div>";//console.log(new_line);
+				//$(".table_row_add_product:last").after(new_line);
+				//$("#"+prod["full_id"]+" .nr_crt_prod").html("");//prod["nr_crt"]);
+				//$(".table_row_add_product:last").after(this.createInterDocProductHtmlDiscount(prod, pp_id));
+				$("#spcpl").before(this.createInterDocProductHtmlDiscount(prod, pp_id));
+				this.inter_docs_discount[pp_id] = prod;
+				continue;
+			}
+			$("#spcpl").before(this.createInterDocProductHtml(prod, id));
+			/*if (is_first) {
+				$(".header_invoice").after(this.createInterDocProductHtml(prod, id));
+			} else {
+				$(".table_row_add_product:last").after(this.createInterDocProductHtml(prod, id));
+			}*/
+			if (prod["is_stoc"]) {
+				$(".stock-add-fields"+id).removeClass("hidden");
+				$(".doc-parent-div"+id).addClass("additional-label-div-st");
+				$(".doc-parent-div-p"+id).addClass("additional-label-div-st-p");
+				$(".stock-add-fields-adaos"+id).removeClass("hidden");
+				if (prod["is_vandabil"]) { // vandabil
+					$(".stock-add-fields-m"+id).removeClass("hidden");
+					$(".doc-parent-div-p"+id).addClass("additional-label-div-st-p");
+				} else {
+					$(".stock-add-fields-m"+id).addClass("hidden");
+					$(".doc-parent-div-p"+id).removeClass("additional-label-div-st-p");
+				}
+			}
+			products.elongateCategory(prod["is_stoc"], id);
+			//console.log($("#ap_"+id+"_cat_id").data("is-stoc"), "#b-catDropdownID"+id);
+			if ($("#ap_"+id+"_cat_id").data("is-stoc")) {
+				$("#b-catDropdownID"+id).addClass("disabled");
+			} 
+			// AUTOCOMPLETEs
+			set_autocomplete_produs("ap_"+id+"_name", "/nomenclator/get_products_values/?from_expense=1&cod_nc=1", undefined, function (item, id) {
+				var base_id = (id).substring(3, (id).lastIndexOf("_"));
+				//console.log(base_id);
+				var ap_cat_id = $("#ap_"+base_id+"_cat_id").val();//console.log(ap_cat_id);
+				if ((ap_cat_id == 74 || ap_cat_id == 86 || ap_cat_id == 77 || ap_cat_id == 96) &&
+					$("#ap_"+base_id+"_gestiune_id").data("type") == "2") {
+						$("#ap_"+base_id+"_gestiune").val("");
+						$("#ap_"+base_id+"_gestiune_id").val("");
+				} //console.log("item: ",item);
+				if (window.hasOwnProperty("check_products_fields_etransport")) {
+					check_products_fields_etransport(item.all.pr_type);
+				}
+				if (window.hasOwnProperty("check_products_cod_nc")) {
+					check_products_cod_nc(item.all.pr_type, base_id);
+				}
+			}, undefined, {0: "ap_"+id+"_others"}, true);
+			$("#ap_"+id+"_name").click(function(){show_autocomplete(this.id);});// show autocomplete
+			$("#ap_"+id+"_name").blur(function(){
+				var txt = $.trim($(this).val());
+				var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+				if (txt == '') {
+					$("#"+this.id+"_id").val("");//console.log(this.id);
+					$("#b-catDropdownID"+base_id).removeClass("disabled");
+				} else { // check for changes
+					var params = {"idp": "ap_"+base_id, "cat_id": "ID"+base_id};
+					check_for_product_changes(params);
+				}
+			});
+			$("#ap_"+id+"_name").keypress(function() {
+				//$("#"+this.id+"_id").val("");// reset id
+				//var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+				//$("#b-catDropdownID"+base_id).removeClass("disabled");
+			});
+			if (this.use_code) { 
+				$("#ap_"+id+"_cod_produs").blur(function(e){
+					if ($(this).hasClass("code-check")) {
+						return;
+					} 
+					var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+					base_id = base_id.substring(0, base_id.indexOf("_"));
+					//console.log("base_id=","|"+base_id+"|");
+					$(this).addClass("code-check");
+					check_product_by_code($(this), $("#ap_"+base_id+"_name_id").val(), "ap_"+base_id, "2", $("#ap_"+base_id+"_cat_id").val(), $("#ap_"+base_id+"_name").val());
+				});
+				$("#ap_"+id+"_cod_produs").keydown(function(e){
+					if (e.keyCode == 13) {
+						$(this).addClass("code-check");
+						var base_id = (this.id).substring(3, (this.id).lastIndexOf("_"));
+						base_id = base_id.substring(0, base_id.indexOf("_"));
+						check_product_by_code($(this), $("#ap_"+base_id+"_name_id").val(), "ap_"+base_id, "2", $("#ap_"+base_id+"_cat_id").val(), $("#ap_"+base_id+"_name").val());
+					}
+				});
+			}
+			// gestiune autocomplete
+			set_autocomplete_gestiune("ap_"+id+"_gestiune", "/nomenclator/get_gestiuni_values", 0, undefined, undefined, {0: "ap_"+id+"_cat_id"}, "ap_"+id+"_filter_type");
+			$("#ap_"+id+"_gestiune").click(function(){show_autocomplete(this.id);});// show autocomplete
+			$("#ap_"+id+"_gestiune").blur(function(){
+				var txt = $.trim($(this).val());
+				if (txt == '') {
+					$("#"+this.id+"_id").val("");
+					$("#"+this.id+"_id").data("type","");
+				}
+				if (!$("#"+this.id+"_id").val()) { // reset product name also
+					$(this).val("");
+				}
+			});
+			$("#ap_"+id+"_gestiune").keydown(function(e) {
+				if (e.keyCode != 13) {
+					$("#"+this.id+"_id").val("");
+					$("#"+this.id+"_id").data("type","");
+				}
+			});
+			// punct_lucru
+			set_autocomplete_custom("ap_"+id+"_pl", "/nomenclator/get_pl_values?grs=1", "pl");
+			$("#ap_"+id+"_pl").click(function(){show_autocomplete(this.id);});// show autocomplete
+			$("#ap_"+id+"_pl").blur(function(){
+				var txt = $.trim($(this).val());
+				if (txt == '') {
+					$("#"+this.id+"_id").val("");
+				}
+			});
+			// um
+			set_autocomplete_custom("ap_"+id+"_um", "/nomenclator/get_um_values", "um");
+			$("#ap_"+id+"_um").click(function(){show_autocomplete(this.id);});// show autocomplete
+			// cota tva
+			set_autocomplete_custom("ap_"+id+"_cota_tva", "/account/get_cota_values", "ap_"+id+"_cota_tva", 0, undefined, function(kk, ii){
+				sync_price_addition("ap_"+id, "price", ii);
+			});
+			$("#ap_"+id+"_cota_tva").click(function(){custom_show_autocomplete(this.id);});// show autocomplete
+			set_autocomplete_custom("ap_"+id+"_cota_tva_2", "/account/get_cota_values", "ap_"+id+"_cota_tva_2", 0, undefined, function(kk, ii){
+				sync_price_addition("ap_"+id, "price_2", ii);
+			});
+			$("#ap_"+id+"_cota_tva_2").click(function(){custom_show_autocomplete(this.id);});// show autocomplete
+			// price formating
+			$("#ap_"+id+"_price").blur(function() {
+				check_and_parse_price(this.id, function(ii){sync_price_addition("ap_"+id, "price", ii);}, get_user_precision(), true, true, 0, true, false);
+			});
+			$("#ap_"+id+"_price_2").blur(function() {
+				check_and_parse_price(this.id, function(ii){sync_price_addition("ap_"+id, "price_2", ii);}, get_user_precision(), true, true, 0, false, false);
+			});
+			$("#ap_"+id+"_quantity").blur(function() {
+				check_and_parse_price(this.id, function(id){$("#"+id+"_2").val($("#"+id).val());}, get_user_precision(), true);
+			});
+			$("#ap_"+id+"_quantity_2").blur(function() {
+				check_and_parse_price(this.id, undefined, get_user_precision(), true);
+			});
+			$("#ap_"+id+"_addition").blur(function() {
+				check_and_parse_price(this.id, function(ii){sync_price_addition("ap_"+id, "addition", ii);}, get_user_precision(), true);
+			});
+			$("#ap_"+id+"_tva_inclus").change(function() {
+				sync_price_addition("ap_"+id, "price", this.id);
+			});
+			$("#ap_"+id+"_tva_inclus_2").change(function() {
+				sync_price_addition("ap_"+id, "price_2", this.id);
+			});
+			if ($("#ap_"+id+"_cod_nc").length > 0) { // cod nc
+				set_autocomplete_cod_nc("ap_"+id+"_cod_nc", "/nomenclator/get_product_cod_nc", undefined, function(e){}, undefined, 600);
+				$("#ap_"+id+"_cod_nc").click(function(){show_autocomplete(this.id);});// show autocomplete
+				$("#ap_"+id+"_cod_nc").blur(function(){
+					var txt = $.trim($(this).val());
+					if (txt == '') {
+						$("#"+this.id+"_id").val("");
+					}
+					if (!$("#"+this.id+"_id").val()) { // reset 
+						$(this).val("");
+					}
+				});
+				$("#ap_"+id+"_cod_nc").keydown(function(e) {
+					if (e.keyCode != 13) {
+						$("#"+this.id+"_id").val("");
+					}
+				});
+			}
+			if (this.show_is_etransport) { //console.log("autocomplete nc");
+				
+				//if ($("#ap_scop_operatiune").length > 0) { // scop operatiune
+					set_autocomplete_scop_operatiune("ap_"+id+"_scop_operatiune", "/nomenclator/get_product_scop_operatiune", undefined, function(e){}, undefined, 600, {0: "etr_optype"});
+					$("#ap_"+id+"_scop_operatiune").click(function(){ //console.log($("#etr_optype").val());
+							if (!$("#etr_optype").val() || $("#etr_optype").val() == "0") {
+								show_modal_etransport();
+								setTimeout( function() { 
+									$("#etr_optype").attr('title', nl2br(htmlEntitiesDecode(language.etr_scop_type_link)))
+										.tooltip({html:true, placement:'bottom', customClass:'inner-tooltip-300'})
+										.tooltip('show');
+									setTimeout(function() {
+										$("#etr_optype").tooltip('hide');
+									}, 5 * 1000);
+								}, 500);
+								return false;
+							};
+						show_autocomplete(this.id);
+					});// show autocomplete
+					$("#ap_"+id+"_scop_operatiune").blur(function(){
+						var txt = $.trim($(this).val());
+						if (txt == '') {
+							$("#"+this.id+"_id").val("");
+						}
+						if (!$("#"+this.id+"_id").val()) { // reset 
+							$(this).val("");
+						}
+					});
+					$("#ap_"+id+"_scop_operatiune").keydown(function(e) {
+						if (e.keyCode != 13) {
+							$("#"+this.id+"_id").val("");
+						}
+					});
+				//}
+				$("#ap_"+id+"_gross_weight").blur(function() {
+					check_and_parse_price(this.id, undefined, undefined, undefined, true);
+					//check_and_parse_price(this.id, function(ii){sync_price_addition("ap_"+id, "price", ii);}, get_user_precision(), true, true, 0, true, false);
+				});
+				$("#ap_"+id+"_net_weight").blur(function() {
+					check_and_parse_price(this.id, undefined, undefined, undefined, true);
+					//check_and_parse_price(this.id, function(ii){sync_price_addition("ap_"+id, "price", ii);}, get_user_precision(), true, true, 0, true, false);
+				});
+			}
+			is_first = false;
+			id++;
+		}
+		$(".ui-autocomplete").addClass("custom-scroll");
+		if (this.eFactura) {
+			//$(".table_row_add_product:last").after(main_form_product);
+		}
+		//console.log(this.inter_docs_discount);
+	},
+	initProductsForEdit:function(init_prods, fn, fn_after) {
+		if ($.isEmptyObject(init_prods)) return;
+		if (typeof fn === "undefined") {
+			fn = function(){};
+		}
+		if (typeof fn_after === "undefined") {
+			fn_after = function(){};
+		} //console.log("init_prods: ", init_prods);
+		for(var key in init_prods) {
+			var prod_to_add = this.processProductForEdit(init_prods[key]);//console.log("1", prod_to_add);
+				prod_to_add = this.setIdToProduct(prod_to_add["id"], prod_to_add);//console.log(prod_to_add);
+			var new_line = "<div class=\"border-bottom invoice_row\" id=\"entry_item_"+prod_to_add["id"]+"\">"+this.createProductRow(prod_to_add["id"], prod_to_add, true)+"</div>";
+			if (!this.hasProducts()) { // insert after header
+				if (!this.isInventoryPR()) {
+					$(".header_invoice").after(new_line);
+				} else {
+					$("#collapse_products_list").append(new_line);
+				}
+			} else { // insert after last table_row --- last in table
+				$(".invoice_row:last").after(new_line);
+			}
+			this.prods.push(prod_to_add);
+			if ($.isNumeric(prod_to_add["id"])) {
+				var c_id = parseInt(prod_to_add["id"]);
+				if (c_id >= nr_crt_prod) {
+					nr_crt_prod = c_id+1;//console.log(c_id, nr_crt_prod);
+				}
+			}
+			fn(nr_crt_prod-1);
+			fn_after(prod_to_add["id"]);
+			//this.initAutocomplete(prod_to_add.id)
+		}
+		for(var key in this.prods) { //console.log("has discount=", this.prods[key]["id"]);
+			if (this.hasDiscount(this.prods[key]["id"]) || this.isStorno(this.prods[key]["id"])) { //console.log("it has discount");
+				this.removeProductButton(this.prods[key]["id"], "percent");
+			}
+		}
+		//fn_after();
+		this.recalcTotals();
+		//this.setInterDocMode(false);
+	},
+	isDiscount:function (id, is_full)  { // this row id is discount
+		if(typeof is_full !== 'undefined' && is_full) {
+			id = id.replace(this.ENTRY_PRELUDE, "");
+		}
+		if (!$.isNumeric(id)) {
+			if (this.isTaxCustom(id)) {
+				return false;
+			}
+			if (this.isSgr(id)) {
+				return false;
+			}
+			return true;
+		}
+		return false;
+    },
+	isDocFromFacturare:function() {
+		return this.doc_from_facturare;
+	},
+	isEFactura:function() {
+		return this.eFactura;
+	},
+	isXLS:function() {
+		return this.xls;
+	},
+	isExpense:function() {
+		return this.expense;
+	},
+	isImpoziteTaxe:function(cat_id) {
+		if (cat_id == "148" || cat_id == "149" || cat_id == "150") {
+			return true;
+		}
+		return false;
+	},
+	isInterDocMode:function() {
+		return this.interDocMode;
+	},
+	isInventoryPR:function() { // unsed in InventoryProducts
+		return false;
+	},
+	isMobile:function() {
+		return this.mobile;
+	},
+	isPlatitorTva:function() {
+		return this.platitor_tva;
+	},
+	isPlatitorTvaIssuer:function() {
+		return this.platitor_tva_issuer;
+	},
+	isStockType:function(id, additionals) {
+		if ($.inArray(parseInt(id), this.stock_types) > -1) {
+			return true;
+		}
+		if (typeof additionals !== "undefined") {
+			if ($.inArray(parseInt(id), additionals) > -1) {
+				return true;
+			}
+		}
+		return false;
+	},
+	isStorno:function (id, is_full) { // this row id is storno
+		var row = this.getEntries(id, is_full);//console.log(row);
+		if (row["storno"]) {
+			return true;
+		}
+		return false;
+	},
+	isStornoByStock:function() {
+		return this.storno_by_stock;
+	},
+	recalcForPrecision:function(precision) {
+		var p = this.prods;
+		for(var key in p) {
+			var product = p[key];//console.log(product);
+			product["precision"] = precision;
+			var tva_inclus = product["tva_inclus"];
+			if (this.isExpense()) {
+				if (tva_inclus == "0") {
+					tva_inclus = false;
+				} else if (tva_inclus == "1") {
+					tva_inclus = true;
+				}
+			}
+			if (tva_inclus) {
+				//console.log("inclus",product);
+				product["init_total"] = parseFloat(product["init_total"]);
+				product["cota_tva"] = parseFloat(product["cota_tva"]);
+				var valoare = number_format(product["init_total"]/(1+product["cota_tva"]/100), product["precision"], ".", "", true);
+				var tva_unitar = number_format(product["init_total"]-valoare, product["precision"], ".", "", true);
+				if (product["storno"]) {
+					product["tva_unitar"] = -tva_unitar;
+					product["valoare"] = -valoare;
+				} else {
+					product["tva_unitar"] = tva_unitar;
+					product["valoare"] = valoare;
+				}
+				//console.log(valoare, tva_unitar);
+			} else {
+				//console.log("not inclus", product);
+				product["pret_fara_tva"] = number_format(product["pret_fara_tva"], (this.efactura_precision ? 4 : product["precision"]), ".", "", true);
+				product["cota_tva"] = parseFloat(product["cota_tva"]);
+				product["quantity"] = parseFloat(product["quantity"]);
+				var valoare = number_format(product["pret_fara_tva"]*product["quantity"], product["precision"], ".", "", true);
+				var tva_unitar = number_format((product["cota_tva"]/100)*valoare, product["precision"], ".", "", true);
+				product["tva_unitar"] = tva_unitar;
+				product["valoare"] = valoare;
+			}
+			var new_line = this.createProductRow(product["id"], product);
+			$("#entry_item_"+product["id"]).html(new_line);
+			this.replaceItem(product);
+			recalc_discounts(product["id"]);
+		}
+		this.recalcTotals(); 
+		//console.log(p);
+	},
+	calcValueInLei:function(initValue) {
+		var newValue = '',
+			precision = get_user_precision(),
+			exchange_rate = $('#curs').val(),
+			currency = $('#currency').val();
+		if (currency === '99') {
+			return '';
+		}
+		newValue = number_format(nice_float(initValue * exchange_rate, precision), precision);
+		return '<br><small class="exchange_rate">' + newValue + ' Lei</small>';
+	},
+	recalcTotals:function(check_tax) { // reinit nr_crt and recalculate totals
+		var p = this.prods, new_crt = 0, total_fara_tva = 0, total_tva = 0, correction = 0;//console.log(p);return;
+		var total_ti = {}; // total tva_inclus
+		//console.log(p);
+		var precision = get_user_precision();
+		for(var key in p) {//console.log(p[key]);
+			var entry = this.getEntries(p[key]["id"]);//console.log("recalcTotals",new_crt, p[key], entry);
+			new_crt++; //console.log($("#"+entry["full_id"]).length);
+			$("#"+entry["full_id"]+" .nr_crt_prod").html(new_crt);
+			p[key]["nr_crt"] = new_crt;
+			$("#entry_item_"+p[key]["id"]+" input[name='entry[item"+p[key]["id"]+"][nr_crt]']").remove();
+			$("#entry_item_"+p[key]["id"]).append(create_input_hidden_prod(p[key]["id"], "nr_crt", new_crt));
+			if (entry["is_correction"] == "1") {
+				correction = number_format(entry["dif"], precision);
+			} else {
+				var vat_incl = real_b(entry["tva_inclus"]);//console.log(entry);
+				if (entry.hasOwnProperty("discount") && entry["discount"] != 0 && entry["discount"] != "0") {
+					vat_incl = true;
+				} 
+				//if (!vat_incl) {
+					total_fara_tva += number_format(entry["valoare"], precision);
+					total_tva += number_format(entry["tva_unitar"], precision);
+				/*} else { // for tva_inclus, group by cota_tva and after for extract total_fara_tva and tva and add them to totals
+					if (!total_ti.hasOwnProperty(entry["cota_tva"])) {
+						total_ti[entry["cota_tva"]] = 0;
+					} 
+					total_ti[entry["cota_tva"]] += number_format(entry["valoare"], precision);
+					total_ti[entry["cota_tva"]] += number_format(entry["tva_unitar"], precision);
+				}*/
+			}
+		} //console.log("total_ti=", total_ti);
+		if (!$.isEmptyObject(total_ti)) {
+			for(ti in total_ti) {
+				ti_fara_tva  = total_ti[ti]/(1 + ti/100);
+				ti_tva = total_ti[ti] - ti_fara_tva;
+				total_fara_tva += number_format(ti_fara_tva, precision);
+				total_tva += number_format(ti_tva, precision);
+			}
+		}
+
+		
+		//if (!this.isExpense()) {
+			if (typeof check_tax === 'undefined') {
+				check_tax = true;
+			}
+			if (check_tax) {
+				clearTimeout(this.sgrTo);
+				this.sgrTo = setTimeout(() => this.checkSgr(), 10);
+		
+				clearTimeout(this.taxTo);
+				this.taxTo = setTimeout(() => this.checkTaxCustom(), 20);
+			}
+		//}
+		//console.log("recalc totals | check_tax: "+check_tax);
+		//
+		if (this.correction != 0) { // intermediar correction
+			//correction = this.correction;
+		}
+		var currency_text = ($("#currency option:selected").text()).substr(0, 3);
+		//console.log(total, total_fara_tva, total_tva);
+		var total = total_fara_tva;
+		if (this.platitor_tva) {
+			total += total_tva;
+		} else if(this.isExpense() && window.hasOwnProperty("selected_supplier_tva") && selected_supplier_tva==1) {
+			total += total_tva;
+		}
+		total = number_format(total, precision);//.toFixed(precision);
+		total_fara_tva = number_format(total_fara_tva, precision);//.toFixed(precision);
+		total_tva = number_format(total_tva, precision);//.toFixed(precision);
+		
+		total_basic = number_format(total, precision);
+		if (correction != 0) {
+			$("#total_correction_holder").html(correction+' '+currency_text);$("#total_correction").val(correction);
+			$(".correction-li").removeClass("hidden");
+			total += correction;
+		} else {
+			$(".correction-li").addClass("hidden");
+		} //console.log(total, total_fara_tva, total_tva);
+		total = number_format(total, 2);//precision);
+		if (!this.platitor_tva) {
+			total_fara_tva = number_format(total_fara_tva, 2);
+		}
+		//console.log(total, total_fara_tva, total_tva, this.platitor_tva);
+		$("#total_fara_tva_holder").html(total_fara_tva+' '+currency_text + this.calcValueInLei(total_fara_tva));$("#total_fara_tva").val(total_fara_tva);
+		$("#total_tva_holder").html(total_tva+' '+currency_text + this.calcValueInLei(total_tva));$("#total_tva").val(total_tva);
+		$("#total_holder").html(total+' '+currency_text + this.calcValueInLei(total));$("#total").val(total).change();
+		$("#total_basic").val(total_basic);
+		
+		if (this.isExpense()) {
+			if (window.hasOwnProperty("update_to_payment")) {
+				update_to_payment();
+			}
+		} else {
+			if (window.hasOwnProperty("update_to_collect")) {
+				update_to_collect();
+			}
+		}
+		if (window.hasOwnProperty("credits")) {
+			credits.setTotalDoc(total);// set doc total  to credits
+		}
+		if (this.hasProducts()) { // show totals and hide empty row
+			$("#totals").removeClass("hidden");
+			$("#empty_row").addClass("hidden");//hide();
+		} else { // if no products hide totals and show empty row
+			$("#totals").addClass("hidden");//hide();
+			$("#empty_row").removeClass("hidden");//show();
+		} //console.log(p);
+		//this.checkCorrection(false, true);
+	},
+    removeProductButton:function (id, type)  {
+        if (id instanceof Array) {
+			for(var key in id) {
+				this.removeProductButton(id[key], type);
+			}
+		} else {
+			$("#entry_item_"+id+" .product_percent_"+type).remove();
+		}
+    },
+	removeProduct:function(id) {
+		$("#"+this.ENTRY_PRELUDE+id).remove();
+		var p = this.prods;
+		for(var key in p) {
+			if (p[key]["id"] == id) {
+				p.splice(key, 1);
+				$(".discount-total").removeClass("hidden");
+			}
+		}
+		//this.checkCorrection();
+	},
+	replaceAqPrices:function(id, aq_prices) {
+		if (!id || id == "") {
+			return;
+		}
+		var p = this.prods;
+		var key = this.getKeyForId(id);//console.log(id, key);
+		var prd = this.getEntries(id);
+		prd["aq_prices"] = aq_prices;
+		p.splice(key, 1, prd);
+	},
+	replaceItem:function(product) { // replace an item in this.prods
+		var p = this.prods;
+		var key = this.getKeyForId(product["id"]);
+		var prd = this.getEntries(product["id"]);
+		var aq_prices = prd.hasOwnProperty("aq_prices") ? prd.aq_prices : this.aq_prices;
+		if (
+			Array.isArray(aq_prices) &&
+			aq_prices.filter((item) => parseInt(item.name1_id) === parseInt(prd.ref_id)).length !== 0
+			) {
+			product.aq_prices = aq_prices;
+		}
+		p.splice(key, 1, product);//replace discount
+	},
+	revertToEdit:function() {
+		$("#distribute-table").addClass("hidden");
+		$('#modal-add-expense').find('.modal-title-text').html(language.modify_product);
+		$('#modal-add-expense').find('button[data-type="submit"]').html(language.modify_product);
+		$("#distribute-type").val(0);
+		if ($("#distribute-type-location > option").length > 1) {
+			$("#distribute-type-location").val(1);
+		} 
+		$(".doc_name_plh").html(""); 
+		$(".cdd_label").html(language.choose_doc);
+		$(".distribute-second").addClass("hidden");
+		$(".distribute-third").addClass("hidden");
+		$('#content-table-distribute').find("tr.table_row").remove();
+	},
+	setEFactura:function(ef) {
+		this.eFactura = ef;
+	},
+	setEfacturaPrecision:function(efp) {
+		this.efactura_precision = efp;
+	},
+	isEfacturaPrecision:function() {
+		return this.efactura_precision;
+	},
+	setXLS:function(x) {
+		this.xls = x;
+	},
+	setExpense:function(exp) {
+		this.expense = exp;
+	},
+	setInterDocMode:function(idm) {
+		this.interDocMode = idm;
+	},
+	setSupplierDoc:function(spd) {
+		this.supplier_doc = spd;
+	},
+	setStornoDoc:function(sd) {
+		this.stornoDoc = sd;
+	},
+	// helper functions
+	createProduct2Add:function(id) { // extract information from dom for manipulation
+		//console.log("products 2add");
+		var product = {};
+		if ($("#pfk_doc_id").length) {
+			product["fk_doc_id"] = cleanString($("#pfk_doc_id").val());
+		}
+		var old_entries = this.getItemEntries($("#entry_id").val());//console.log("old_entries",old_entries);
+		//product["tva_inclus"] = old_entries["tva_inclus"];
+		if (old_entries["init_total"]) {
+			product["init_total"] = old_entries["init_total"];
+		}
+		if (old_entries["reff_doc_id"]) {
+			product["reff_doc_id"] = old_entries["reff_doc_id"];
+		}
+		if (old_entries["dummy_pr"]) {
+			product["dummy_pr"] = old_entries["dummy_pr"];
+		}
+		if (old_entries["fk_dummy_pr"]) {
+			product["fk_dummy_pr"] = old_entries["fk_dummy_pr"];
+		}
+		if (old_entries["issued2_gids"]) {
+			product["issued2_gids"] = old_entries["issued2_gids"];
+		}
+		if (id == "product") {
+			product["spcpl"] = $("#spcpl_modal").val();
+		} else if (old_entries["spcpl"]) {
+			product["spcpl"] = old_entries["spcpl"];
+		} else {
+			product["spcpl"] = $("#spcpl").val();
+		}
+		// transfer
+		if (old_entries["name1_id"]) {
+			product["name1_id"] = old_entries["name1_id"];
+		}
+		if (old_entries["name2_id"]) {
+			product["name2_id"] = old_entries["name2_id"];
+		}
+		if (old_entries["stoc_g2"]) {
+			product["stoc_g2"] = old_entries["stoc_g2"];
+		}
+		if (old_entries["stoc_after"]) {
+			product["stoc_after"] = old_entries["stoc_after"];
+		}
+		var id_i = "";
+		if (id.search("_") != -1) { // has _X in id
+			id_i = id.substring(id.indexOf("_")+1);
+		}
+        if ($("#ap_image").length) {
+			product["image"] = cleanString($("#ap_image").val());
+		}
+		if($("#aq_price_3").is(":visible")) {
+			product["aq_price_3"] = $("#aq_price_3").val();
+			product["aq3_tva_inclus"] = $("#aq3_tva_inclus").val();
+			product["aq3_cota_tva_option"] = $("#aq3_cota_tva").val();
+			var aq_cota = $("#aq3_cota_tva option:selected").text();
+			if (aq_cota) {
+				aq_cota = parseFloat(aq_cota.substring(0, aq_cota.indexOf("%")));//console.log(cota);
+			} else {
+				aq_cota = 0;
+			}
+			product["aq3_cota_tva"] = aq_cota;
+		}
+		//console.log("id_i", id_i);
+		// gestiune + punct_lucru
+		if($(".gestiune_area"+id_i).is(":visible")) { // gestiune is visible
+			if ($("#"+id+"_gestiune_id").length > 0) { // autocomplete
+				//console.log("autocomplete gestiune");
+				product["fk_gestiune_id"] = $("#"+id+"_gestiune_id").val();
+				product["gestiune_name"] = $("#"+id+"_gestiune").val();
+				product["punct_lucru"] = $("#"+id+"_gestiune_id").data("punct_lucru");
+				product["gestiune_type"] = $("#"+id+"_gestiune_id").data("type");
+			} else { // select
+				product["fk_gestiune_id"] = $("#"+id+"_gestiune").val();
+				product["gestiune_name"] = $("#"+id+"_gestiune").find(":selected").text();
+				product["pl_name"] = $("#"+id+"_gestiune").find(":selected").data("pl_name");
+				product["punct_lucru"] = $("#"+id+"_gestiune").find(":selected").data("punct_lucru");
+				product["gestiune_type"] = $("#"+id+"_gestiune").find(":selected").data("type");
+			}
+		} else if ($(".pl_area"+id_i).is(":visible")) { // pl is visible
+			if ($("#"+id+"_pl_id").length > 0) { // autocomplete
+				product["punct_lucru"] = $("#"+id+"_pl_id").val();
+				product["pl_name"] = $("#"+id+"_pl").val();
+			} else { // select
+				product["punct_lucru"] = $("#"+id+"_pl").val();
+				product["pl_name"] = $("#"+id+"_pl").find(":selected").text();
+			}
+		} //console.log(product);
+		if (this.isExpense()) {
+			//product["name"] = $.trim($("#"+id+"_name_id option:selected").text());
+			product["name"] = cleanString($("#"+id+"_name").val());
+			//product["name"] = cleanString($("#"+id+"_name").html());
+			// cat
+			product["fk_cat_id"] = $("#"+id+"_cat_id").val();
+			product["is_stoc"] = $("#"+id+"_cat_id").data("is-stoc");
+			product["is_expense"] = $("#"+id+"_cat_id").data("is-expense");
+			product["is_vandabil"] = $("#"+id+"_cat_id").data("is-vandabil");
+			product["description"] = $("#"+id+"_cat").html();
+			// additional fields
+			product["quantity_2"] = parseFloat($("#"+id+"_quantity_2").val(), 10);
+			product["addition"] = parseFloat($("#"+id+"_addition").val(), 10);
+		} else {
+			product["name"] = cleanString($("#"+id+"_name").val());
+			product["is_stoc"] = $("#"+id+"_name_id").data("is-stoc");
+			product["is_expense"] = $("#"+id+"_name_id").data("is-expense");
+			if($("#"+id+"_pr_type").is(":visible")) {
+				product["pr_type"] = $("#"+id+"_pr_type").val();
+			} else {
+				product["pr_type"] = $("#"+id+"_product_type_id").val();
+			}
+		}
+		if (id == "product") {
+			product["has_issued2"] = $("#product_has_issued2").val();
+		} else {
+			product["has_issued2"] = $("#"+id+"_has_issued2").val();
+		}
+		if($("#"+id+"_name_translation").is(":visible")) {
+			product["name_translation"] = cleanString($("#"+id+"_name_translation").val());
+			product["um_translation"] = cleanString($("#"+id+"_um_translation").val());
+		}
+		product["ref_id"] = $("#"+id+"_name_id").val();
+		if ($("#"+id+"_cod_produs").length) {
+			product["cod_produs"] = cleanString($("#"+id+"_cod_produs").val());
+		}
+		if ($("#"+id+"_description").length) {
+			product["description"] = cleanString($("#"+id+"_description").val());
+		}
+		product["um"] = cleanString($("#"+id+"_um").val());
+		// etransport
+		if ($("#"+id+"_cod_nc_id").length > 0 && $("#"+id+"_cod_nc").is(":visible")) { // etransport or show_cod_nc
+			product["cod_nc_id"] = cleanString($("#"+id+"_cod_nc_id").val());
+			product["cod_nc"] = cleanString($("#"+id+"_cod_nc").val());
+		}
+		if ($("#"+id+"_scop_operatiune_id").length > 0 && $("#"+id+"_scop_operatiune").is(":visible")) {
+			product["scop_operatiune_id"] = cleanString($("#"+id+"_scop_operatiune_id").val());
+			product["scop_operatiune"] = cleanString($("#"+id+"_scop_operatiune").val());
+		}
+		var has_sgr = 0;//console.log("haba:", id, this.interDocMode);
+		if ($("#"+id+"_sgr").length > 0) {
+			if (id == "product") { 
+				if ($("#"+id+"_sgr").is(':checked')) {
+					has_sgr = 1;
+				}
+			} else {
+				if ($("#"+id+"_sgr").length > 0) { // 
+					if (id == "ap") { // default
+						if ($("#"+id+"_sgr").is(":visible")) { // expense add, sgr check is visible
+							if ($("#"+id+"_sgr").is(':checked')) {
+								has_sgr = 1;
+							}
+						} else {
+							var has_sgr = parseInt($("#"+id+"_sgr").val());//console.log("has-tax: "+id, $("#"+id+"_has_tax").val(), has_tax);	
+						}
+					} else { // wallet
+						if ($("#"+id+"_sgr").is(':checked')) {
+							has_sgr = 1;
+						} else {
+							if (this.interDocMode && product["is_stoc"]) {
+								if ($("#"+id+"_sgr").val() == 1) {
+									has_sgr = 1;
+								}
+							}
+						}
+					}
+				}
+			}
+			/*
+			product["sgr"] = $("#"+id+"_sgr").is('[type="checkbox"]')
+				? ($("#"+id+"_sgr").is(':checked') ? 1 : 0)
+				: $("#"+id+"_sgr").val();
+			let valuesFromAutocomplete = $(`#${id}_name`).data('product');
+			if (id == "ap" && typeof valuesFromAutocomplete === 'object') {
+				product.sgr = valuesFromAutocomplete.sgr;
+			}
+			*/
+		}
+		product["sgr"] = has_sgr;
+		if (!has_sgr) {
+			if (old_entries["sgr"]) { // had previous sgr
+				product["sgr_deleted"] = 1;
+			}
+		}
+		/*if (old_entries["has_tax"]) {
+				product["has_tax"] = 1;
+				product["tax_name"] = old_entries["tax_name"];
+				product["tax_type"] = old_entries["tax_type"];
+				product["tax_value"] = old_entries["tax_value"];
+				product["tax_cota"] = old_entries["tax_cota"];
+				product["tax_cota_percent"] = old_entries["tax_cota_percent"];
+				product["tax_tva_inclus"] = old_entries["tax_tva_inclus"];
+				product["tax_cont_contabil"] = old_entries["tax_cont_contabil"];
+			}
+			*/
+		var has_tax = false;
+		if (id == "product") { 
+			if ($("#"+id+"_has_tax").length > 0) {
+				if ($("#"+id+"_has_tax").is(':checked')) {
+					has_tax = true;
+				}
+			}
+		} else {
+			if ($("#"+id+"_has_tax").length > 0) { // taxa custom
+				var has_tax = parseInt($("#"+id+"_has_tax").val());//console.log("has-tax: "+id, $("#"+id+"_has_tax").val(), has_tax);	
+			}
+		}
+		if (has_tax == 1) {
+			product["has_tax"] = 1;
+			product["tax_name"] = $("#"+id+"_tax_name").val();
+			product["tax_value"] = $("#"+id+"_tax_value").val();
+			product["tax_cont_contabil"] = $("#"+id+"_tax_cont_contabil").val();
+			if (id == "product") {
+				product["tax_tva_inclus"] = $("#"+id+"_tax_tva_inclus").prop('checked') ? true : false;
+				product["tax_type"] = $('input[name="product_tax_type"]:checked').attr('id') === 'tax_type_percent' ? 1 : 2;
+				product["tax_cota"] = $("#"+id+"_tax_cota_tva").val();
+				product["tax_cota_percent"] = $("#"+id+"_tax_cota_tva").val();
+				var cota_tax = $("#"+id+"_tax_cota_tva option:selected").text();
+				product["tax_cota_percent"] = parseFloat(cota_tax.substring(0, cota_tax.indexOf("%")));
+			} else {
+				product["tax_tva_inclus"] = ($("#"+id+"_tax_tva_inclus").val() == "1" ? true : false);
+				product["tax_type"] = $("#"+id+"_tax_type").val();
+				product["tax_cota"] = $("#"+id+"_tax_cota").val();
+				product["tax_cota_percent"] = $("#"+id+"_tax_cota_percent").val();
+			}
+		} else if (old_entries["has_tax"]) { // had previous tax
+			product["tax_deleted"] = 1;
+		}
+		//console.log("prd: ", product);
+		if ($("#"+id+"_gross_weight").length > 0 && $("#"+id+"_gross_weight").is(":visible")) {
+			product["gross_weight"] = formatPrice($("#"+id+"_gross_weight").val(), 4);
+		}
+		if ($("#"+id+"_net_weight").length > 0 && $("#"+id+"_net_weight").is(":visible")) {
+			product["net_weight"] = formatPrice($("#"+id+"_net_weight").val(), 4);
+		}
+		if ($("#product_code_ean").length > 0) {
+			product["product_code_ean"] = $("#product_code_ean").val();
+		}
+		if ($("#product_code_client").length > 0) {
+			product["product_code_client"] = $("#product_code_client").val();
+		}
+		
+		product["doc_currency"] = cleanString($("#currency").val());
+		
+		product["currency"] = cleanString($("#"+id+"_currency").val());
+		product["currency_2"] = cleanString($("#"+id+"_currency_2").val());
+		
+		product["quantity"] = parseFloat($("#"+id+"_quantity").val(), 10);
+		if (id == "product") {
+			product["cota_tva_option"] = $("#"+id+"_cota_tva").val();
+			if (this.isExpense()) {
+				product["cota_tva_option_2"] = $("#"+id+"_cota_tva_2").val();
+			}
+		} else {
+			product["cota_tva_option"] = $("#"+id+"_cota_tva_id").val();
+			if (this.isExpense()) {
+				product["cota_tva_option_2"] = $("#"+id+"_cota_tva_2_id").val();
+			}
+		} //console.log(product);
+		var cota, cota_2;
+		if (this.platitor_tva || this.isExpense()) {
+			if (id == "product") {
+				cota = $("#"+id+"_cota_tva option:selected").text();//console.log(cota);
+				if (this.isExpense() && $("#"+id+"_cota_tva_2").is(":visible")) {
+					cota_2 = $("#"+id+"_cota_tva_2 option:selected").text();
+				}
+			} else {
+				cota = $("#"+id+"_cota_tva").val();
+				if (this.isExpense() && $("#"+id+"_cota_tva_2").is(":visible")) {
+					cota_2 = $("#"+id+"_cota_tva_2").val();
+				} else if ($("#"+id+"_cota_tva_2").is(":visible")) { // transfer
+					cota_2 = $("#"+id+"_cota_tva_2").val();
+				}
+			} //console.log(id, cota, cota_2);
+			if (cota) {
+				cota = parseFloat(cota.substring(0, cota.indexOf("%")));//console.log(cota);
+			}
+			if (this.isExpense() && $("#"+id+"_cota_tva_2").is(":visible")) {
+				if (cota_2) {
+					cota_2 = parseFloat(cota_2.substring(0, cota_2.indexOf("%")));//console.log(cota);
+				}
+			}
+		} else {
+			cota = "0";
+			cota_2 = 0;
+		} //console.log(cota);
+		if (!this.isExpense() && this.isCotaTi(product["cota_tva_option"])) {
+			cota = 0;
+		}
+		product["cota_tva"] = cota;
+		if (this.isExpense()) {
+			product["cota_tva_2"] = cota_2;
+		}
+		if (id == "ap") { // select 
+			product["tva_inclus"] = (parseInt($("#"+id+"_tva_inclus").val()) == 1) ? true : false;//console.log(product);return;
+			if (this.isExpense()) {
+				product["tva_inclus_2"] = (parseInt($("#"+id+"_tva_inclus_2").val()) == 1) ? true : false;//console.log(product);return;
+			}
+		} else { // product has radios or in modal
+			if (this.isExpense()) {
+				product["tva_inclus"] = (parseInt($("#"+id+"_tva_inclus").val()) == 1) ? true : false;//console.log(product);return;
+				product["tva_inclus_2"] = (parseInt($("#"+id+"_tva_inclus_2").val()) == 1) ? true : false;//console.log(product);return;
+			} else {
+				product["tva_inclus"] = old_entries["tva_inclus"];//$("#"+id+"_tva_inclus1").prop("checked") ? true : false;
+				//if (id == "product") {
+				//	product["tva_inclus"] = $('#product_with_vat').val();
+				//}
+			}
+		}
+		if (this.isExpense()) {
+			product["exch_b"] = $("#"+id+"_exchange_ratex_2").val();
+		}
+		product["precision"] = get_user_precision();
+		//console.log(product);
+		product["has_pr_exchange"] = false;
+		if ($(".pr-exchange").is(':visible')) { // product currency is different from doc currency
+			product["has_pr_exchange"] = true;	
+		} //console.log("p2 vis=", $("#"+id+"_pret_fara_tva_2").is(':visible'));
+		if (id == "ap" || this.isExpense()) {
+			var price, pret_fara_tva, tva,
+				price_2, pret_fara_tva_2, tva_2;
+			if (!product["has_pr_exchange"]) {
+				if (id == "product" && this.isExpense()) {
+					price = parseFloat($("#"+id+"_pret_fara_tva").val());
+					if ($("#"+id+"_pret_fara_tva_2").is(':visible')) {
+						price_2 = parseFloat($("#"+id+"_pret_fara_tva_2").val());
+					}
+				} else {
+					price = parseFloat($("#"+id+"_price").val());
+					if ($("#"+id+"_price_2").is(':visible')) {
+						price_2 = parseFloat($("#"+id+"_price_2").val());
+					}
+				}
+			} else { // modify for price_2 also
+				price = parseFloat($("#"+id+"_price_ex").val());
+				product["init_price"] = parseFloat($("#"+id+"_price").val());
+				if (product["tva_inclus"]) {
+					product["init_price_tvai"] = number_format(product["init_price"], product["precision"], ".", "", true);
+					product["init_price"] = number_format(product["init_price"]/(1 + cota/100), product["precision"], ".", "", true);
+					product["init_price_tva_unitar"] = number_format(product["init_price_tvai"] - product["init_price"], product["precision"], ".", "", true);
+				}
+				product["exchange_rate"] = parseFloat($("#"+id+"_exchange_rate").val());
+			} 
+			if (!product["tva_inclus"]) {
+				tva = (cota/100)*price;
+				pret_fara_tva = price;
+			} else {
+				pret_fara_tva  = price/(1 + cota/100);
+				tva = price - pret_fara_tva;
+			}
+			if (!product["tva_inclus_2"]) {
+				tva_2 = (cota_2/100)*price_2;
+				pret_fara_tva_2 = price_2;
+			} else {
+				pret_fara_tva_2 = price_2/(1 + cota_2/100);
+				tva_2 = price_2 - pret_fara_tva_2;
+			}
+		} else { // modify for additional fields also stock
+				if (product["has_pr_exchange"]) {
+					var pret_fara_tva = parseFloat($("#"+id+"_price_ex").val());
+					product["init_price"] = parseFloat($("#"+id+"_pret_fara_tva1").val());
+					product["exchange_rate"] = parseFloat($("#"+id+"_exchange_rate").val());
+					var pret_fara_tva = parseFloat($("#"+id+"_price_ex").val());
+					var price = parseFloat($("#"+id+"_pret_cu_tva").val());
+				} else {
+					if (product["tva_inclus"]) {
+						var pret_fara_tva = parseFloat($("#"+id+"_pret_fara_tva").val());
+					} else {
+						var pret_fara_tva = parseFloat($("#"+id+"_pret_fara_tva1").val());
+					}
+					var price = parseFloat($("#"+id+"_pret_cu_tva").val());
+				}
+				var tva = parseFloat($("#"+id+"_tva_unitar").val());
+				if ($.trim($("#pstorno").val()) != "") {
+					product["storno"] = true;
+				}
+			
+		} //console.log(price, pret_fara_tva);
+		var user_price, user_price_1;// _1 is  just for expenses(aquisition price)
+		//console.log("id=", id);
+		if (id == "ap" || id.search(/ap_[0-9]/i) != -1) {
+			if ($("#"+id+"_price_2").is(':visible')) { // expense
+				user_price = $("#"+id+"_price_2").val();
+			} else {//doc
+				user_price = $("#"+id+"_price").val();
+			}
+			user_price_1 = $("#"+id+"_price").val();
+			if (!$("#"+id+"_price_2").is(':visible') && product["has_pr_exchange"] && product["gestiune_type"] == "2") { // GV issue factura
+				product["tva_inclus"] = false;
+			}
+		} else { // modal
+			if ($("#"+id+"_pret_fara_tva_2").is(':visible')) { // expense
+				user_price = $("#"+id+"_pret_fara_tva_2").val();
+			} else {//doc
+				if (product["has_pr_exchange"] && product["gestiune_type"] == "2") {
+					user_price = $("#"+id+"_pret_fara_tva1").val();
+					product["tva_inclus"] = false;
+				} else if ($("#"+id+"_pret_fara_tva1").is(':visible') && !$("#"+id+"_pret_cu_tva").is(':visible')) { // neplatitor de tva
+					user_price = $("#"+id+"_pret_fara_tva1").val();
+				} else { 
+					if (!$("#"+id+"_pret_cu_tva").prop("readonly")) {
+						user_price = $("#"+id+"_pret_cu_tva").val();
+					} else {
+						user_price = $("#"+id+"_pret_fara_tva1").val();
+					}
+				}
+			}
+			if ($("#"+id+"_pret_fara_tva").is(':visible')) { // expense
+				user_price_1 = $("#"+id+"_pret_fara_tva").val();
+			}
+		}//console.log("usp: ",user_price);
+		product["user_price"] = user_price;
+		product["user_price_1"] = user_price_1;
+		product["price_tr_2"] = price_2;
+		product["pret_fara_tva"] = parseFloat(pret_fara_tva);//number_format(pret_fara_tva, product["precision"], ".", "", true);//.toFixed(product["precision"]);
+		if (this.isExpense()) {
+			product["pret_fara_tva_2"] = parseFloat(pret_fara_tva_2);
+		}
+		if (!this.platitor_tva) {
+			tva = 0;
+			tva_2 = 0;
+		}
+		//product["tva_unitar"] = number_format(tva*product[""], product["precision"], ".", "", true);
+		//console.log("ii",product["pret_fara_tva"], product["quantity"], product["precision"], cota);
+		//console.log("pftva", pret_fara_tva);
+		if (product["tva_inclus"]) { //console.log("price",price);
+			var total_price_1 = nice_float(price*product["quantity"], product["precision"]);
+			//product["tva_unitar"] = number_format(total_price_1-(product["pret_fara_tva"]*product["quantity"]), product["precision"], ".", "", true);
+			product["tva_unitar"] = number_format(total_price_1 - total_price_1/(1+cota/100), product["precision"], ".", "", true);
+			product["valoare"] = number_format(total_price_1/(1+cota/100), product["precision"], ".", "", true);
+			//var tva_val = number_format(total_price_1*(cota/100), product["precision"], ".", "", true);//console.log(tva_val);
+			//product["tva_unitar"] = tva_val;
+			//product["pret_fara_tva_all"] = number_format(total_price_1 - tva_val, product["precision"], ".", "", true);
+			product["init_total"] = nice_float(price*product["quantity"], product["precision"]);
+		} else { 
+			product["tva_unitar"] = number_format((product["pret_fara_tva"]*Math.abs(product["quantity"]))*(cota/100), product["precision"], ".", "", true);
+			product["valoare"] = number_format(product["pret_fara_tva"]*Math.abs(product["quantity"]), product["precision"], ".", "", true);
+			product["init_total"] =  number_format(price*Math.abs(product["quantity"]), product["precision"], ".", "", true);
+			if (product["quantity"] < 0) {
+				product["tva_unitar"] = -product["tva_unitar"];
+				product["valoare"] = -product["valoare"];
+				product["init_total"] = -product["init_total"];
+			}
+		}
+		//console.log("product", cota, product);
+		// additional fields also stock
+		if (this.isExpense()) {
+			if (product["tva_inclus_2"]) { //console.log("price",price);
+				var total_price_1_2 = nice_float(price_2*product["quantity"], product["precision"]);
+				//product["tva_unitar_2"] = number_format(total_price_1_2-(product["pret_fara_tva_2"]*product["quantity_2"]), product["precision"], ".", "", true);
+				product["tva_unitar_2"] = number_format(total_price_1_2 - total_price_1_2/(1+cota_2/100), product["precision"], ".", "", true);
+				product["valoare_2"] = number_format(total_price_1_2/(1+cota_2/100), product["precision"], ".", "", true);
+				product["init_total_2"] = nice_float(price_2*product["quantity"], product["precision"]);
+			} else {
+				product["tva_unitar_2"] = number_format((product["pret_fara_tva_2"]*Math.abs(product["quantity"]))*(cota_2/100), product["precision"], ".", "", true);
+				product["valoare_2"] = number_format(product["pret_fara_tva_2"]*Math.abs(product["quantity"]), product["precision"], ".", "", true);
+				product["init_total_2"] = number_format(price_2*Math.abs(product["quantity"]), product["precision"], ".", "", true);
+				if (product["quantity"] < 0) {
+					product["tva_unitar_2"] = -product["tva_unitar_2"];
+					product["valoare_2"] = -product["valoare_2"];
+					product["init_total_2"] = -product["init_total_2"];
+				}
+			}
+		}
+		product["stoc"] = get_float($("#"+id+"_name_id").data("stoc"));
+		// distribute on doc_supplier
+		if (this.supplier_doc && $("#distribute-table").is(':visible') && $("#distribute-type").val() && $("#distribute-type").val() != "0") {
+			product["has_distribute"] = 1;
+			product["distribute"] = objToString(this.getDistributeFromPage());
+			product["distribute_type"] = $("#distribute-type").val();
+			product["distribute_type_location"] = $("#distribute-type-location").val(); 
+			product["distribute_doc_name"] = $(".doc_name_plh").html();
+		}
+		//console.log("prt",product);
+		//console.log(product["init_price"]);
+		//var valoare = pret_fara_tva*product["quantity"];
+		//product["valoare"] = valoare.toFixed(product["precision"]);
+		//var tva_total = tva*product["quantity"];
+		//product["tva"] = tva_total.toFixed(product["precision"]);
+		//console.log(id, product);
+		if (!this.isExpense()) {
+			if (this.total_storno != 0) {
+				var ttl = this.getProductsSum(id, old_entries["id"]);//console.log("ttl=",ttl);
+					ttl += parseFloat(product["pret_fara_tva"])*parseFloat(product["quantity"]) + parseFloat(product["tva_unitar"]);
+					ttl = number_format(ttl, product["precision"], ".", "", true);
+				//console.log("ttl=",ttl);
+				if (ttl < -this.total_storno) {
+					show_message("err|"+language.storno_more_than_stornoed);
+					$("#btn-edit-product-modal").removeClass("disabled");
+					return false;
+				}
+			} //else console.log("no storno check :))) ");
+			//console.log(product);
+			if (!this.checkAddTVAInclus(product["cota_tva_option"], $("#entry_id").val())) {
+				show_message("err|"+language.error_different_vat_rates_inclus);
+				return false;
+			}
+		} //console.log("product final",product);
+		return product;
+	},
+	isCotaTi:function(cota_id) { // taxare inversa 5,9,19
+		if (cota_id == "d10" || cota_id == "d11" || cota_id == "d12") {
+			return true;
+		}
+		return false;
+	},
+	isCotaTiOld:function(cota_id) { // taxare inversa 5,9,19
+		if (cota_id == "d6") {
+			return true;
+		}
+		return false;
+	},
+	createProductButton:function(id, type, pr) {
+		var f = "", text = "";
+		if (type == "delete") {
+			if (!this.eFactura && (this.interDocMode || this.hide_inter_doc)) { // cannot delete inter doc, on edit doc also
+				return "";
+			}
+			f = "delete_product('"+id+"');";
+			text = language.delete_the_product;
+			if (this.isExpense()) {
+				f = "delete_product_expense('"+id+"');";
+				text = (language.delete).ucfirst();//_the_expense;
+			}
+		} else if(type == "percent") { //console.log(id, type, pr);
+			if (this.isStorno(id) || this.stornoDoc) { // storno cannot have discount
+				var pr = this.getEntries(id); //console.log("pr: ", pr);
+				if (pr["quantity"] < 0) {
+					return "";
+				}
+			} 
+			if (this.eFactura) {
+				if (this.efacturaHasDiscount(id)) { //console.log("id: ", id, this.inter_docs_discount);
+					return "";
+				}
+			}
+			if (!this.eFactura && (this.interDocMode || this.hide_inter_doc)) { // cannot discount inter doc, on edit doc also
+				return "";
+			}
+			if (this.supplier_doc && (typeof pr !== "undefined")) { // doc furnizor
+				if (pr["is_expense"] == "1" && pr["has_distribute"] == "1") { // is expense and it has distribute already
+					return "";
+				}
+				if (this.isImpoziteTaxe(pr["fk_cat_id"])) {
+					return "";
+				}
+			}
+			text = language.apply_discount;
+			f = "show_dialog_produs_discount('"+id+"');";
+		} else if (type == "edit") { //console.log(pr);
+			text = language.modify_product;
+			if (this.supplier_doc && (typeof pr !== "undefined")) { // doc furnizor
+				if (pr["is_expense"] == "1") {
+					text = language.edit;
+					if (this.isImpoziteTaxe(pr["fk_cat_id"])) {
+						text += " "+language.tax;
+					} else {
+						text += " "+language.expense;
+					}
+				}
+			}
+			f = "show_dialog_produs_issue('"+id+"');";
+			if (this.isExpense()) {
+				//text = language.modify_product
+				f = "show_dialog_expense_issue('"+id+"');";
+			}
+		} 
+		return '<li class="product_percent_'+type+'"><a href="javascript:void(0);" class="dropdown-item" onclick="'+f+'">'+text+'</a></li>';
+	},
+	efacturaHasDiscount:function(id) {
+		for(var di in this.inter_docs_discount) {
+			var gid = di.replace("d", "");
+			var idg = gid.split("_");
+			var idgi = idg.map(function (x) { 
+			  return parseInt(x, 10); 
+			});
+			//console.log(parseInt(id), idgi);
+			if ($.inArray(parseInt(id), idgi) > -1) {
+				return true;
+			}
+		}
+		return false;
+	},
+	createProductRow:function(id, pr, fields, nr_crt) { // create html for product
+		if (!pr) {
+			return false;
+		}
+		if (typeof fields === 'undefined') {
+			fields = false;
+		}
+		if (typeof nr_crt === 'undefined') {
+			nr_crt = id;
+		}
+		var new_line = '<div class="d-flex gap-2 w-full text-sm">'+
+							'<div class="col-7 col-lg-5 col-xl-6 d-flex flex-none flex-lg-wrap gap-2">';
+			new_line += '<div class="w-10 ps-3 py-2 font-semibold d-none d-lg-block"><span class="text nr_crt_prod">'+nr_crt+'</span></div>';
+			new_line += '<div class="py-2 prd-max-550 prdjs-holder-'+id+' ';
+			if (this.interDocMode) {
+				new_line += ' help-item';
+			}
+			new_line += '">';
+			//if (this.interDocMode) {  // fields !!!
+			//} else {
+				new_line += '<div class="">'+
+								'<span>'+pr["name"];
+					if($.trim(pr["cod_produs"]) != "") {
+						new_line += '('+pr["cod_produs"]+')';
+					}
+			//}
+			if("name_translation" in pr) {
+				if (pr["name_translation"] != "") {
+					new_line += "("+pr["name_translation"]+")";
+				}
+			}
+			new_line += '</span>';
+			new_line += '</div>';
+			if($.trim(pr["description"]) != "") {
+				//if (!this.interDocMode) {
+					new_line += '<div class="text-xs text-muted"><span>'+nl2br(this.prTypeProcess(pr["description"],pr));
+					if (pr["has_distribute"] == "1") {
+						new_line += " ("+distribute_types_nice[pr["distribute_type"]]+")";
+					}
+					new_line += '</span>';
+					new_line += '</div>';
+				//}
+			} 
+			if (this.show_pr_type_name) {
+				if (this.pr_type_values.hasOwnProperty(pr["pr_type"])) {
+					new_line += '<div class="text-xs text-muted"><span>'+this.prTypeProcess(this.pr_type_values[pr["pr_type"]], pr)+"</span></div>";
+				}
+			}	
+			if (pr.hasOwnProperty("gestiune_name") || pr.hasOwnProperty("pl_name")) {
+				var add_pl = false, add_pl_par = false;
+				if ($("#ap_pl").length > 0) { // exists in page
+					add_pl = true;	
+				}
+				new_line += '<div class="text-xs text-muted"><span class="prod-gestiune-name">'
+				// add gestiune name
+				if (pr.hasOwnProperty("gestiune_name")) {
+					new_line += pr["gestiune_name"];
+					add_pl_par = true;
+				}
+				// add punct lucru name
+				if (add_pl && pr.hasOwnProperty("pl_name")) {
+					if (add_pl_par) {
+						new_line += '(';
+					}
+					new_line += pr["pl_name"];
+					if (add_pl_par) {
+						new_line += ')';
+					}
+				}
+				new_line += '</span></div>';
+			}
+			if (this.storno_by_stock) { //console.log("pr=",pr);
+				if (!pr["discount"] || pr["discount"] == "0") {
+					if (!is_service(pr["pr_type"])) {
+						//aq 
+						if (!pr.hasOwnProperty("aq_price_3") || !pr["aq_price_3"]) {
+							new_line += '<div class="text-xs text-danger"><span>Cost: 0 RON</span></div>';
+						}
+						// pr_type
+						if (!pr.hasOwnProperty("pr_type") || !pr["pr_type"] || pr["pr_type"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Tip: nu are</span></div>';
+						}
+						// gestiune
+						if (!pr.hasOwnProperty("fk_gestiune_id") || !pr["fk_gestiune_id"] || pr["fk_gestiune_id"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Gestiune: nu are</span></div>';
+						}
+						if (this.multiple_pl) {
+							if (pr["pr_type"] == "0") {
+							if (!pr.hasOwnProperty("punct_lucru") || !pr["punct_lucru"] || pr["punct_lucru"] == "0") {
+								new_line += '<div class="text-xs text-danger"><span>Punct de lucru: nu are</span></div>';
+							}
+							}
+						}
+					} else if (this.multiple_pl) {
+						if (!pr.hasOwnProperty("punct_lucru") || !pr["punct_lucru"] || pr["punct_lucru"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Punct de lucru: nu are</span></div>';
+						}
+					}//new_line += 'this.storno_by_stock';
+				}
+			} else if (this.doc_from_facturare) {
+				if (!pr["discount"] || pr["discount"] == "0") {
+					if (!is_service(pr["pr_type"])) {
+						// pr_type
+						if (!pr.hasOwnProperty("pr_type") || !pr["pr_type"] || pr["pr_type"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Tip: nu are</span></div>';
+						}
+						// gestiune
+						if (!pr.hasOwnProperty("fk_gestiune_id") || !pr["fk_gestiune_id"] || pr["fk_gestiune_id"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Gestiune: nu are</span></div>';
+						}
+						if (this.multiple_pl) {
+							if (pr["pr_type"] == "0") {
+							if (!pr.hasOwnProperty("punct_lucru") || !pr["punct_lucru"] || pr["punct_lucru"] == "0") {
+								new_line += '<div class="text-xs text-danger"><span>Punct de lucru: nu are</span></div>';
+							}
+							}
+						}
+					} else if (this.multiple_pl) {
+						if (!pr.hasOwnProperty("punct_lucru") || !pr["punct_lucru"] || pr["punct_lucru"] == "0") {
+							new_line += '<div class="text-xs text-danger"><span>Punct de lucru: nu are</span></div>';
+						}
+					}
+				}
+			}
+			new_line += this.addETransportText(pr);
+			new_line += '</div>'; // end crt + name
+			new_line += '</div>'; // end col-7
+			// um
+			new_line += '<div class="w-lg-16 flex-none py-2 d-none d-lg-block text-'+(this.isExpense() ? 'start' : 'center')+'">'+
+							'<span>'+(pr.hasOwnProperty("um") ? pr["um"] : '')+'</span>'+
+						'</div>';
+			if (this.isExpense()) { // q+ tva .... they were reversed on the old design
+				new_line += '<div class="w-lg-16 flex-none py-2 text-center">'+
+							'<span>'+(pr.hasOwnProperty("quantity") ? pr["quantity"] : '')+'</span>'+
+							'<span class="d-lg-none"> x </span>'+
+						'</div>';
+				new_line += '<div class="w-lg-20 flex-none py-2 d-none d-lg-block text-center ivr_tva">'+
+								'<span>'+(pr.hasOwnProperty("cota_tva") ? pr["cota_tva"]+'%' : '')+'</span>'+
+							'</div>';
+			} else { // q 
+				new_line += '<div class="w-lg-16 flex-none py-2 text-center">'+
+							'<span>'+pr["quantity"]+'</span>'+
+							'<span class="d-lg-none"> x </span>'+
+						'</div>';
+			}
+			if (this.platitor_tva && !this.isExpense()) {
+				new_line += '<div class="w-lg-20 flex-none py-2 d-none d-lg-block text-center ivr_tva">'+
+								'<span>'+pr["cota_tva"]+'%</span>'+
+							'</div>';
+			}
+			// price 
+			new_line += '<div class="col d-flex gap-2">'+
+							'<div class="d-flex gap-2 w-lg-1/2 flex-none text-lg-center">'+
+								'<div class="py-2 w-full">'+ // pr["precision"]
+									(pr.hasOwnProperty("pret_fara_tva") ? number_format(pr["pret_fara_tva"], (this.efactura_precision ? 4 : pr["precision"]) )+(this.isExpense() && !this.isDiscount(id) ? ' '+this.currency_values[pr["currency"]] : '')+this.zgetPrice2(pr) : '')+
+								'</div>'+
+							'</div>'+
+							'<div class="issue-invoice-value flex-none py-2 text-end pe-3 d-none d-lg-block">'
+							if (pr.hasOwnProperty("pret_fara_tva_all") || pr.hasOwnProperty("pret_fara_tva")) {//console.log(pr);
+								new_line += number_format(pr["valoare"],pr["precision"]);
+							}
+				new_line += '</div>'+
+						'</div>';
+			// vat
+			if (this.platitor_tva || this.isExpense()) {	
+				new_line += '<div class="w-lg-24 flex-none py-2 d-none d-lg-block text-end">'+
+								((pr.hasOwnProperty("tva_unitar") && pr["is_correction"] != "1") ? number_format(pr["tva_unitar"], pr["precision"]) : '')+
+							'</div>';
+			}
+
+			if (this.display_options) {
+				new_line += '<div class="py-1 ms-auto cel_opt">';
+				var buttons_html = "";
+				if (!pr.hasOwnProperty("is_correction")) {
+					if (!this.isDiscount(id)) {
+						if (pr.hasOwnProperty("nn_can_edit") && !pr["nn_can_edit"]) { } else {
+							buttons_html += this.createProductButton(id, "edit", pr);
+						}
+					}
+					if (!this.isDiscount(id) && !this.isStorno(id)) { // if is not discount or storno
+						if (!this.hasDiscount(id)) { // if does not have discount active
+							if (pr.hasOwnProperty("nn_can_discount") && !pr["nn_can_discount"]) { } else {
+								if (this.isExpense()) {
+									if (pr.hasOwnProperty("fk_cat_id") && [146, 151].indexOf(parseInt(pr["fk_cat_id"])) > -1) { 
+										$(".discount-total").addClass("hidden");
+									} else {
+										buttons_html += this.createProductButton(id, "percent", pr);
+									}
+								} else {
+									if (pr.hasOwnProperty("pr_type") && [146, 151].indexOf(parseInt(pr["pr_type"])) > -1) { 
+										$(".discount-total").addClass("hidden");
+									} else {
+										buttons_html += this.createProductButton(id, "percent");
+									}
+								}
+							}
+						}
+					}
+				}
+				//if (this.interDocMode || this.hide_inter_doc) { // cannot delete inter doc
+				if (pr.hasOwnProperty("nn_can_delete") && !pr["nn_can_delete"]) { } else {
+					buttons_html += this.createProductButton(id, "delete");
+				}
+				if (this.isSgr(id)) {
+					buttons_html = '';
+					new_line += '<div class="p-3 pe-2"></div>';
+				} //console.log(id);
+				if (this.isTaxCustom(id)) {
+					buttons_html = '';
+					new_line += '<div class="p-3 pe-2"></div>';
+				}
+				if (buttons_html) {
+					new_line += '<div class="dropdown ms-1">'+
+						'<a class="text-warning text-lg" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'+
+							'<i class="far fa-caret-square-down"></i>'+
+						'</a>'+
+						'<ul class="dropdown-menu dropdown-menu-end">'+buttons_html+"</ul>"+
+					"</div>";
+				}
+				new_line += "</div>";
+			}
+		new_line += '</div>';
+		// hidden
+		new_line += this.createHiddens(id, pr);
+		new_line += '</div>';
+		
+		return new_line;
+	},
+	addETransportText:function(product, skip_nc) {
+		if (typeof skip_nc === "undefined") {
+			skip_nc = false;
+		}
+		var html = "", etr_checked = false;
+		if (this.show_is_etransport) {
+			if ($("#show_is_etransport").is(":checked")) {
+				etr_checked = true;
+			}
+		}
+		if (!$.isNumeric(product["id"])) {
+			return html;
+		}
+		if (this.use_stock && this.show_is_etransport && etr_checked) {
+			if (!this.isExpense() && !check_etr_fields(product["pr_type"])) {
+				return html;
+			}
+			if (this.isExpense() && !check_etr_fields(product["fk_cat_id"])) {
+				return html;
+			}
+		}
+		// cod nc
+		//html += language.cod_nc+": ";
+		if (product["cod_nc_id"] && product["cod_nc"]) {
+			html += language.cod_nc+": "+product["cod_nc"];
+		} else if (etr_checked) {
+			html += language.cod_nc+": "+'<span class="text-danger">Nu are</span>';
+		}
+		if (!this.show_is_etransport || !etr_checked) { // no etransport -> stop
+			return '<div class="text-xs text-muted prdjs-nc-'+product["id"]+'">'+html+'</div>';
+		}
+		var html_cod_nc = "";
+		if (this.show_cod_nc) {
+			html_cod_nc ='<div class="text-xs text-muted prdjs-nc-'+product["id"]+'">'+html+'</div>';
+			html = "";
+		} else {
+			html += "<br>";
+		}
+		if (skip_nc && $(".prdjs-holder-"+product["id"]+" .prdjs-nc-"+product["id"]).length != 0) {
+			html_cod_nc = "";
+		}
+		// scop
+		html += "Scop: ";
+		if (product["scop_operatiune_id"]) {
+			html += product["scop_operatiune"];
+			has_scop = true;
+		} else {
+			html += '<span class="text-danger">Nu are</span>';
+		}
+		// greutate bruta
+		html += "<br>";
+		html += language.gross_weight+"/"+product["um"]+": ";
+		if (product["gross_weight"] && product["gross_weight"] != "0.0000") {
+			has_gross = true;
+			html += product["gross_weight"];
+		} else {
+			html += '<span class="text-danger">Nu are</span>';
+		}
+		// greutate neta
+		html += "<br>";
+		html += language.net_weight+"/"+product["um"]+": "; 
+		if (product["net_weight"] && product["net_weight"] != "0.0000") {
+			html += product["net_weight"];
+			has_net = true;
+		} else {
+			html += '<span class="text-danger">Nu are</span>';
+		}
+		if (html) { 
+			html = '<div class="text-xs text-muted prdjs-etr-'+product["id"]+'">'+html+'</div>';
+		}
+		return html_cod_nc+html;
+	},
+	updateETransportTexts:function(thchk) {
+		if (!this.hasProducts()) {
+			return false;
+		} 
+		var p = this.prods;
+		var show_tooltip = false;
+		for(var key in p) {  //console.log(p[key]);
+			if (!thchk) { // is not checked anymore
+				$(".prdjs-holder-"+p[key]["id"]+" .prdjs-etr-"+p[key]["id"]).remove();
+			} else { // is checked
+				if ($(".prdjs-holder-"+p[key]["id"]+" .prdjs-etr-"+p[key]["id"]).length == 0) {
+					$(".prdjs-holder-"+p[key]["id"]).append( this.addETransportText(p[key], true) );
+				}
+				if ($(".prdjs-holder-"+p[key]["id"]+" .text-danger").length > 0) {
+					show_tooltip = true;
+				}
+			} 
+		} 
+		if (show_tooltip) { 
+			var first_opt = $(".cel_opt").first().find(".dropdown");
+			first_opt.attr('title', nl2br(htmlEntitiesDecode(language.modify_product+"ul")))
+								.tooltip({html:true, placement:'bottom'})
+								.tooltip('show');
+							setTimeout(function() {
+								first_opt.tooltip('hide');
+							}, 5 * 1000);
+		}
+	},
+	eTransportOpType:function(op) {
+		if (!this.hasProducts()) {
+			return false;
+		} 
+		var p = this.prods;
+		for(var key in p) {  
+			if (!$.isNumeric(p[key]["id"])) { // discount
+				continue;
+			}
+			if (!p[key]["scop_operatiune"]) {
+				continue;
+			}
+			var scop = p[key]["scop_operatiune"].substring(0,1);
+			if (!scop || !op) {
+				continue;
+			}
+			op = parseInt(op);			
+			scop = parseInt(scop);//console.log(op, scop, p);
+			switch(op) {
+				case 1:
+					if (scop != 1) {
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 2:
+					if (scop != 2) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 7:
+					if (scop != 3) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 8:
+					if (scop != 4) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 9:
+					if (scop != 5) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 10:
+					if (scop != 6) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				case 11:
+					if (scop != 7) { 
+						this.eTransportOpTypeReset(key);
+					}
+					break;
+				
+			}
+		} 
+		this.updateETransportTexts(true);
+		return false;
+	},
+	eTransportOpTypeReset:function(key) {
+		this.prods[key]["scop_operatiune_id"] = "";
+		this.prods[key]["scop_operatiune"] = "";
+		$(".prdjs-holder-"+this.prods[key]["id"]+" .prdjs-etr-"+this.prods[key]["id"]).remove();
+	},
+	checkProductsETransport:function() {
+		if (!this.show_is_etransport) {
+			return "";
+		}
+		if (!this.hasProducts()) {
+			return "";
+		} 
+		if (!this.use_stock) {
+			return "";
+		}
+		var p = this.prods;
+		for(var key in p) {  
+			if ($(".prdjs-holder-"+p[key]["id"]+" .prdjs-etr-"+p[key]["id"]+" .text-danger").length > 0) {
+				return language.etr_missing_attributes_products+"<br>";
+			}
+		}
+		return "";
+	},
+	hasProductsWithScop:function() {
+		if (!this.show_is_etransport) {
+			return false;
+		}
+		if (!this.hasProducts()) {
+			return false;
+		} 
+		var p = this.prods;
+		for(var key in p) {  
+			if (p[key]["scop_operatiune_id"]) {
+				return true;
+			}
+		}
+		return false;
+	},
+	hasAtLeastOneWithEtrFields:function() {
+		if (!this.hasProducts()) {
+			return false;
+		} 
+		var p = this.prods;
+		for(var key in p) {  
+			if (p[key]["scop_operatiune_id"] && p[key]["cod_nc_id"] && 
+				p[key]["gross_weight"] && p[key]["gross_weight"] != "0.00" && p[key]["net_weight"] && p[key]["net_weight"] != "0.00"
+			) {
+				return true;
+			}
+		}
+		return false;
+	},
+	hasItemsWithoutDataEtr:function() {
+		var p = this.prods;
+		for(var key in p) {  
+			if (!p[key]["scop_operatiune_id"] || !p[key]["cod_nc_id"] || 
+				!p[key]["gross_weight"] || p[key]["gross_weight"] == "0.00" || 
+				!p[key]["net_weight"] || p[key]["net_weight"] == "0.00"
+			) {
+				return true;
+			}
+		}
+		return false;
+	},
+	getDistributeFromPage:function() {
+		var distribute = {};
+		var entries = $('input[name^=product_distribute]');//console.log(entries);
+		entries.each(function(index) {
+			distribute[$($(this)[0]).data("id")] = {"percent" : $($(this)[0]).val(), "value": $($(this)[0]).data("value")};
+			if ($($(this)[0]).data("name")) {
+				distribute[$($(this)[0]).data("id")]["name"] = stripCharsFromString($($(this)[0]).data("name"), {"1":"|", "2":"~"});
+				distribute[$($(this)[0]).data("id")]["from_md"] = 1;
+				distribute[$($(this)[0]).data("id")]["quantity"] = $($(this)[0]).data("quantity");
+				distribute[$($(this)[0]).data("id")]["initv"] = $($(this)[0]).data("initv");
+			}
+		});
+		return distribute;
+	},
+	processProductForEdit:function(p) {
+		p["precision"] = p["user_precision"];
+		p["ref_id"] = p["fk_produs_id"];
+		p["id"] = p["id_item"];
+		//p["punct_lucru"] = p["fk_punct_lucru"];
+		// delete extra fields
+		delete p["user_precision"];
+		delete p["id_item"];
+		//delete p["fk_doc_id"];
+		delete p["id_item"];
+		delete p["fk_produs_id"];
+		//delete p["fk_punct_lucru"];
+		if (p["name_translation"] == "") {
+			delete p["name_translation"];
+			delete p["um_translation"];
+		}
+		// format floats
+		p["precision"] = parseInt(p["precision"], 10);
+		if (!this.isExpense() && !p.hasOwnProperty("no_cost")) {
+			if (p["tva_inclus"]) {
+				//p["pret_fara_tva"] = p["valoare"]/p["quantity"];
+			}
+			if (p["currency"] != $("#currency").val()) { //console.log(p["currency"], $("#currency").val());
+				p["init_price"] = p["price"];
+			}
+		} 
+		//if (this.efactura_precision) { console.log("bau");
+		//	p["pret_fara_tva"] = parseFloat(number_format(p["pret_fara_tva"],4));//).toFixed(p["precision"]);
+		//}
+		p["tva_unitar"] = parseFloat(number_format(p["tva_unitar"],p["precision"]));//).toFixed(p["precision"]);
+		p["valoare"] = parseFloat(number_format(p["valoare"],p["precision"]));//).toFixed(p["precision"]);
+		p["tva"] = parseFloat(number_format(p["tva"],p["precision"]));//).toFixed(p["precision"]);
+		p["discount"] = parseFloat(number_format(p["discount"],p["precision"]));//).toFixed(p["precision"]);
+		//console.log("p: ",p);
+		
+		return p;
+	},
+	prTypeProcess:function(t, pr) { // pr type name processing 
+		if (pr && (pr["fk_cat_id"] == "149" || pr["pr_type"] == "149")) {
+			t = $.trim(t.replace(/Fonduri Speciale/ig, 'Fonduri speciale - 447'));//console.log("t=",t);
+		}
+		return t;
+	},
+	reset:function() {
+		this.prods.length = 0;
+		$(".invoice_row").remove();
+		products.recalcTotals();
+		//console.log(this.prods);
+	},
+	setAqPrices:function(aq) {
+		this.aq_prices = aq;
+	},
+	setCatsOptions:function(options) {
+		this.cats_options = options;
+	},
+	setCats2:function(options) {
+		this.cats2 = options;
+	},
+	setCurrencyOptions:function(options) {
+		this.currency_options = options;
+	},
+	setCurrencyValues:function(values) {
+		this.currency_values = values;
+	},
+	setDocFromFacturare:function(s) {
+		if (typeof s === "undefined") {
+			s = true;
+		}
+		this.doc_from_facturare = s;
+	},
+	setGestiuneToStockProducts:function (gid_options) {
+		var p = this.prods;
+		for(var key in p) {
+			var item = p[key];//console.log(item);
+			if (item.is_stoc) {
+				for(i in gid_options) {
+					item[i] = gid_options[i];
+				}
+			} else if (item["ref_id"] && item["ref_id"] != "0") {
+				item["pr_type"] = 1;
+			}//console.log(item);
+			var entry_id = item["id"];
+			var new_line = this.createProductRow(entry_id, item);
+			$("#entry_item_"+entry_id).html(new_line);
+			this.replaceItem(item); 
+		}
+		this.recalcTotals();
+	},
+	setGestiuniOptions:function(options) {
+		this.gestiuni_options = options;
+	},
+	setHideInterDoc:function(hid) {
+		this.hide_inter_doc = hid;
+	},
+	setIdToProduct:function(id, product) {//console.log(product);
+		product["id"] = id;
+		product["full_id"] = this.ENTRY_PRELUDE + id;
+		return product;
+	},
+	setMultiplePl:function(pl) {
+		this.multiple_pl = pl;
+	},
+	setPlatitorTva:function(tva_status) {
+		this.platitor_tva = tva_status;
+	},
+	setPlatitorTvaIssuer:function(tva_status) {
+		this.platitor_tva_issuer = tva_status;
+	},
+	setMobile:function(m) {
+		if (typeof m === "undefined" || !m) {
+			m = true;
+		}
+		this.mobile = m;
+	},
+	setMode:function(m) {
+		if (typeof m === "undefined" || !m) {
+			m = 2;
+		}
+		if (m != 1 && m != 2) {
+			m = 2;
+		}
+		this.mode = parseInt(m);
+	},
+	setPrTypeValues:function(values) {
+		this.pr_type_values = values;
+	},
+	setShowIsEtransport:function(s) {
+		this.show_is_etransport = s;
+	},
+	isShowIsEtransport:function() {
+		return this.show_is_etransport;
+	},
+	setShowPrType:function(s) {
+		this.show_pr_type_name = s;
+	},
+	setStockTypes:function(st) {
+		this.stock_types = st;
+	},
+	setStornoByStock:function(s) {
+		if (typeof s === "undefined") {
+			s = true;
+		}
+		this.storno_by_stock = s;
+	},
+	setTotalStorno:function(ts) {
+		this.total_storno = parseFloat(ts);
+		//console.log(this.total_storno);
+	},
+	setUseCode:function(c) {
+		this.use_code = c;
+	},
+	setUseStock:function(us) {
+		this.use_stock = us;
+	},
+	setDisplayOptions:function(display) {
+		this.display_options = display;
+	},
+	setShowCodNC:function(s) {
+		this.show_cod_nc = s;
+	},
+	getShowCodNC:function() {
+		return this.show_cod_nc;
+	},
+	zgetPrice2:function(pr) {
+		var txt = "";
+		if (!this.isExpense()) {
+			return txt;
+		}
+		if (pr.hasOwnProperty("pret_fara_tva_2")) {
+			if (pr["pret_fara_tva_2"] && pr["pret_fara_tva_2"] != "") {
+				pr["pret_fara_tva_2"] = parseFloat(pr["pret_fara_tva_2"]);
+				if (pr["pret_fara_tva_2"] != 0) {
+					txt = number_format(pr["pret_fara_tva_2"], pr["precision"]);
+					txt += ' '+this.currency_values[pr["currency_2"]];
+				} //console.log(this.currency_values);
+			}
+		}
+		if (txt) {
+			txt = '<br><span class="prod-description">'+txt+'</span>';
+		}
+		return txt;
+	},
+	log:function() {
+		console.log("log products");	
+	},
+	getProdsCurrencies:function(reff_currency) { //console.log("reff_currency", reff_currency);
+		var p = this.prods;
+		var currencies = [];
+		if (!this.hasProducts()) {
+			return currencies;
+		}
+		reff_currency = parseInt(reff_currency);
+		for(var key in p) {
+			var product = p[key];
+			product["currency"] = parseInt(product["currency"]);
+			if (product["currency"] != reff_currency) {
+				currencies.push(product["currency"]);
+			}
+		}
+		return currencies;
+	},
+	refreshByExchangeRates:function(reff_currency, date) { //console.log("refreshByExchangeRates ",reff_currency, date);
+		var currencies = this.getProdsCurrencies(reff_currency);
+		if (currencies.length == 0) {
+			return false;
+		} //console.log(currencies);
+		var th = this;
+		var jqxhr = getjqxhr("/utils/get_exchange_rate_currencies_bulk/", {"currencies": currencies, "reff_currency": reff_currency, "date": date}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			if (data.type == "ok") {
+				th.refreshByExchangeRatesActual(data.message);
+			}
+			wait_cursor(false);
+		}).fail(function() {
+			show_error_page();
+		});
+	},
+	refreshByExchangeRatesActual:function(exchange_rates) {  //console.log("gioni");//var exchange_rate = 4.9854;
+		var p = this.prods;
+		for(var key in p) {
+			var product = p[key];//console.log(product);
+			if (this.isDiscount(product["id"])) {
+				continue;
+			}
+			if (!exchange_rates[product["currency"]]) {
+				continue;
+			}
+			var exchange_rate = exchange_rates[product["currency"]];
+			product["exchange_rate"] = exchange_rate;
+			var tva_inclus = real_b(product["tva_inclus"]);//console.log(product);
+			var cota_tva = parseFloat(product["cota_tva"]);
+			if (product["price"] && product["price"] && product["price"] && product["price"] != "0.00") {
+				product["user_price"] = product["price"];
+			}
+			if (tva_inclus) { //console.log("price",price);
+				var price = product["user_price"] * exchange_rate;//console.log("price: ",price);
+				var total_price_1 = nice_float(price*product["quantity"], product["precision"]);
+				//product["tva_unitar"] = number_format(total_price_1-(product["pret_fara_tva"]*product["quantity"]), product["precision"], ".", "", true);
+				product["tva_unitar"] = number_format(total_price_1 - total_price_1/(1+cota_tva/100), product["precision"], ".", "", true);
+				product["valoare"] = number_format(total_price_1/(1+cota_tva/100), product["precision"], ".", "", true);
+				//var tva_val = number_format(total_price_1*(cota/100), product["precision"], ".", "", true);//console.log(tva_val);
+				//product["tva_unitar"] = tva_val;
+				//product["pret_fara_tva_all"] = number_format(total_price_1 - tva_val, product["precision"], ".", "", true);
+				product["init_total"] = nice_float(price*product["quantity"], product["precision"]);
+				product["pret_fara_tva"] = price/(1+cota_tva/100);
+				
+			} else { 
+				product["pret_fara_tva"] = number_format(product["user_price"] * exchange_rate, product["precision"], ".", "", true);
+				product["tva_unitar"] = number_format((product["pret_fara_tva"] * Math.abs(product["quantity"]))*(cota_tva/100), product["precision"], ".", "", true);
+				product["valoare"] = number_format(product["pret_fara_tva"] * Math.abs(product["quantity"]), product["precision"], ".", "", true);
+				product["init_total"] =  number_format(product["pret_fara_tva"] * Math.abs(product["quantity"]), product["precision"], ".", "", true);
+				/*if (product["quantity"] < 0) {
+					product["tva_unitar"] = -product["tva_unitar"];
+					product["valoare"] = -product["valoare"];
+					product["init_total"] = -product["init_total"];
+				}*/
+			}
+			var new_line = this.createProductRow(product["id"], product);
+			$("#entry_item_"+product["id"]).html(new_line);
+			this.replaceItem(product);
+			recalc_discounts(product["id"]);
+		}
+		this.recalcTotals(); 
+	}
+}

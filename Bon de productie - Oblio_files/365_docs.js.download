@@ -1,0 +1,4514 @@
+function show_dialog_produs() {
+	$(".no-price-div").addClass("hidden");
+    $('#group-container').removeClass('hidden');
+	$("#modal-add-product").modal('show');
+}
+function show_client_details(client, fk_doc_id, hide_edit) {//console.log("client:",client);
+	if ($.isEmptyObject(client)) return;
+	if(typeof hide_edit === 'undefined'){
+    	hide_edit = false;
+	};
+	if (window.hasOwnProperty("products")) {
+		if (products.isShowIsEtransport()) {
+			show_client_details_etr(client, fk_doc_id, hide_edit);
+			return true;
+		}
+	}
+	var html = "";
+	if (!hide_edit) {
+		$("#fk_doc_id").val(fk_doc_id);
+		html += '<div style="float:right;"><a href="#" class="edit-action" data-id="' + client.client_id + '" rel="tooltip-edit-action" data-from-issue="1"><i class="fas fa-pen text-primary"></i></a></div>';
+	}
+	//html += "<b>"+client["company"]+"</b>";
+	html += createRowFromColumns(client, ["cif", "reg_com", "cod_client"], undefined, false);
+	html += createRowFromColumns(client, ["address", "city", "state"]);//country"]);
+	html += createRowFromColumns(client, ["phone"]);
+	//html += createRowFromColumns(client, ["persoana_contact", "email", "phone"]);
+	//html += createRowFromColumns(client, ["iban", "bank"]);
+	$("#client_details").html(html);
+	show_client_details_spv(client);
+}
+function show_client_details_etr(client, fk_doc_id, hide_edit) {
+	var html = "";
+	if (!hide_edit) {
+		$("#fk_doc_id").val(fk_doc_id);
+		html += '<div style="float:right;"><a href="#" class="edit-action" data-id="' + client.client_id + '" rel="tooltip-edit-action" data-from-issue="1"><i class="fas fa-pen text-primary"></i></a></div>';
+	}
+	html += "<div class='text-nowrap overflow-hidden text-truncate' style='max-width: 350px;'><span>CIF: "+client["cif"]+"</span>";
+	if (client["city"].length > 30) {
+		//client["city"] = client["city"].substr(0, 30)+"..";
+	}
+	html += "<span>"+client["city"]+((client["city"] && client["state"]) ? ", " : "")+client["state"]+"</span>";
+	$("#client_details").html(html);
+	// client country
+	$("#partener_country").val(client["country"]);
+	$("#partener_country_details").html("<div class='text-nowrap overflow-hidden text-truncate' style='max-width: 350px;'><span style='margin-right: 15px;'>CIF: <b>"+client["cif"]+"</b></span><span>"+client["company"]+"</span></div>");
+	show_client_details_spv(client);
+}
+function show_client_details_spv(client) {
+	if (client.hasOwnProperty("country_code")) {
+		if (client.country_code == "RO") {
+			$("#spv_extern").prop("checked", false);
+			$(".spv_extern-div").addClass("hidden");
+		} else {
+			$("#spv_extern").prop("checked", true);
+			$(".spv_extern-div").removeClass("hidden");
+		}
+	}
+}
+function show_supplier_details(supplier) {
+
+}
+function autocomplete_custom_select(type, items, id) { //console.log(type, items,id);
+	if (type == "client") {
+		show_client_details(items);
+	}
+	if (type == "produs") {
+		complete_product_details(items, id);
+	}
+	if (type == "intocmit_de") {
+		complete_intocmit_de_details(items);
+	}
+	if (type == "delegat") {
+		complete_delegat_details(items);
+	}
+	if (type == "supplier") {
+		show_supplier_details(items);
+	}
+	if (type == "produs_tr_1") {
+		complete_product_details_tr_1(items, id);
+	}
+	if (type == "produs_tr_2") {
+		complete_product_details_tr_2(items, id);
+	}
+	if (type == "product_recipe") {
+		complete_product_details_product_recipe(items, id);
+	}
+	if (type == "product_recipe_alt") {
+		complete_product_details_product_recipe(items, id, "_alt");
+	}
+	if (type == "produs_production") {
+		complete_product_details_production(items, id);
+	}
+	if (type == "produs_inventory") {
+		complete_product_details_inventory(items, id);
+	}
+}
+function complete_product_details(product, id, skip_price) {
+	if ($.isEmptyObject(product)) return;
+	if (typeof skip_price === "undefined") {
+		skip_price = false;
+	}
+	if (products.isStornoByStock()) {
+		skip_price = true;
+	}
+	var precision = get_user_precision();
+	var id_s = ""; // short, without _
+	if (typeof id === 'undefined' || id == "ap_name" || id == "product_name") {
+		id = "";
+	} else {
+		id = id.substring(3, id.lastIndexOf("_"));
+		id_s = id;
+		id += "_";
+	}
+	product.price = number_format(product.price, 4);//precision);//console.log("product:", product);
+	if ($.trim($("#entry_id").val()) == "") {
+		$("#ap_"+id+"cod_produs").val(product.cod_produs);
+		$("#ap_"+id+"description").val(product.description);
+		$("#ap_"+id+"um").val(product.um);
+		$("#ap_"+id+"cod_nc").val(product.cod_nc);
+		$("#ap_"+id+"cod_nc_id").val(product.cod_nc_id);
+		$("#ap_"+id+"sgr").val(product.sgr).filter('[type="checkbox"]').prop('checked', parseInt(product.sgr) === 1);
+		$("#ap_quantity").val(1);
+		$("#ap_"+id+"gross_weight").val(product.gross_weight);
+		$("#ap_"+id+"net_weight").val(product.net_weight);
+		if (product.hasOwnProperty("has_tax") && parseInt(product.has_tax) === 1) {
+			$("#ap_"+id+"has_tax").val(1);
+			$("#ap_"+id+"tax_name").val(product.tax_name);
+			$("#ap_"+id+"tax_type").val(product.tax_type);
+			$("#ap_"+id+"tax_value").val(product.tax_value);
+			$("#ap_"+id+"tax_cota").val(product.tax_cota);
+			$("#ap_"+id+"tax_cota_percent").val(product.tax_cota_percent);
+			$("#ap_"+id+"tax_tva_inclus").val(product.tax_tva_inclus);
+			$("#ap_"+id+"tax_cont_contabil").val(product.tax_cont_contabil);
+		}
+		if (!products.isExpense()) {
+			if (!is_service(product.pr_type) && $("#ap_gestiune").is(":visible") && $("#ap_gestiune").find(":selected").data("type") == "2") { // override
+				$("#ap_currency").val(99).prop("disabled", true);
+				product.currency = 99;
+			} else {
+				$("#ap_currency").val(product.currency).prop("disabled", false);
+			}
+			if (product.price) {
+				$("#ap_price").val(product.price);
+			} else {
+				$("#ap_price").val("");
+			}
+		}
+        if (product.hasOwnProperty('image') && $('#ap_image').length) {
+            $('#ap_image').val(product.image);
+        }
+		if (!$("#ap_cota_tva").hasClass("disabled")) {
+			if (!products.isExpense()) {
+				$("#ap_cota_tva").val(product.cota_tva);
+				$("#ap_cota_tva_id").val(product.cota_tva_option);
+				$("#ap_tva_inclus").val(product.tva_inclus);
+			}
+		}
+		$("#ap_um_translation").val(product.um);
+		var trans = product.translations;
+		if (trans) {
+			$("#ap_name_translation").val(trans[$("#language").val()]);
+		}
+		calculate_currencies_exchange(product.currency, product.price);
+		if (product.is_category) { // product type <-> expense category
+			$("#ap_"+id+"cat_id").val(product.pr_type);
+			$("#ap_"+id+"cat_id").data("is-stoc", "1");
+			$("#ap_"+id+"name_id").data("is-stoc", "1");
+			$("#ap_"+id+"cat_id").data("is-expense", "");
+			$("#ap_"+id+"cat").html(product.pr_type_text);
+			$(".stock-add-fields"+id_s).removeClass("hidden");
+			$(".doc-parent-div"+id_s).addClass("additional-label-div-st");
+			$(".doc-parent-div-p"+id_s).addClass("additional-label-div-st-p");
+			$(".stock-add-fields-adaos"+id_s).removeClass("hidden");
+			$(".gestiune_area").removeClass("hidden"); // showgestiune
+			$(".pl_area").addClass("hidden"); // hide punct_lucru
+			if (id_s != "") { // inter doc id
+				$("#b-catDropdownID"+id_s).addClass("disabled");
+			} else {
+				$("#b-catDropdown"+id).addClass("disabled");
+				$("#b-catDropdownP").addClass("disabled");
+			}
+			//$(".expense-category").css("width", "35%");
+		} else { // not stoc, ie service
+			$("#ap_"+id+"cat_id").val("");
+			$("#ap_"+id+"cat_id").data("is-stoc", "");
+			$("#ap_"+id+"name_id").data("is-stoc", "");
+			$("#ap_"+id+"cat_id").data("is-vandabil", "");
+			$("#ap_"+id+"cat_id").data("is-expense", "1");
+			$("#ap_"+id+"cat").html(language.choose_category);
+			$(".stock-add-fields"+id_s).addClass("hidden");
+			$(".doc-parent-div"+id_s).removeClass("additional-label-div-st");
+			$(".doc-parent-div-p"+id_s).removeClass("additional-label-div-st-p");
+			$(".stock-add-fields-adaos"+id_s).addClass("hidden");
+			if (product.pr_type != 0) {
+				$(".gestiune_area:not(.not-hidden)").addClass("hidden"); // hide gestiune
+				$(".pl_area").removeClass("hidden");
+			}
+			if (id != "") { // inter doc id
+				$("#b-catDropdownID"+id_s).removeClass("disabled");
+			} else {
+				$("#b-catDropdown"+id).removeClass("disabled");
+			}
+			//$(".expense-category").css("width", "50%");
+		}
+		$("#ap_"+id+"cat_id").data("is-vandabil", (product.is_vandabil ? 1 : 0));
+		products.elongateCategory(product.is_category, id_s);
+		if (product.pr_type == 76 || product.is_vandabil) {
+			$(".stock-add-fields-m"+id_s).removeClass("hidden");
+			$(".doc-parent-div-p"+id_s).addClass("additional-label-div-st-p");
+		} else {
+			$(".stock-add-fields-m"+id_s).addClass("hidden");
+			$(".doc-parent-div-p"+id_s).removeClass("additional-label-div-st-p");
+		}
+		// no type defined -> show type select
+		//console.log(product);
+		if (product.pr_type == 0) {
+			if (window.hasOwnProperty("show_product_type")) {
+				show_product_type();
+			}
+		} else { //console.log("h1");
+			if (window.hasOwnProperty("hide_product_type")) { //console.log("h2");
+				hide_product_type();
+			}
+		}
+		$("#ap_"+id+"product_type_id").val(product.pr_type);
+		$("#ap_"+id+"has_issued2").val(product.has_issued2);
+		if (product.has_issued2) {
+			$("#ap_"+id+"um").prop("disabled", true);
+			//$("#ap_"+id+"cod_produs").prop("disabled", true);
+		} else {
+			$("#ap_"+id+"um").prop("disabled", false);
+			//$("#ap_"+id+"cod_produs").prop("disabled", false);
+		}
+	} else {
+		$("#product_description").val(product.description);
+		$("#product_cod_produs").val(product.cod_produs);
+		$("#product_cod_produs").data("old-code", product.cod_produs);
+		$("#product_um").val(product.um);
+		$("#product_cod_nc").val(product.cod_nc);
+		$("#product_cod_nc_id").val(product.cod_nc_id);
+		$("#product_sgr").val(product.sgr).filter('[type="checkbox"]').prop('checked', parseInt(product.sgr) === 1);
+		$("#product_gross_weight").val(product.gross_weight);
+		$("#product_net_weight").val(product.net_weight);
+		if (!$("#product_cota_tva").hasClass("disabled")) {
+			if (!products.isExpense() && !skip_price) {
+				$("#product_cota_tva").val(product.cota_tva_option);
+				$("#product_tva_inclus").val(product.tva_inclus);
+			}
+		}
+		if (product.is_category) { // product type <-> expense category
+			//console.log("is category");
+			$("#product_"+id+"cat_id").val(product.pr_type);
+			$("#product_"+id+"cat_id").data("is-stoc", "1");
+			$("#product_"+id+"cat_id").data("is-expense", "");
+			$("#product_"+id+"cat").html(product.pr_type_text);
+			$(".stock-add-fields").removeClass("hidden");
+			//$(".doc-parent-div"+id_s).addClass("additional-label-div-st");
+			//$(".doc-parent-div-p"+id_s).addClass("additional-label-div-st-p");
+			$(".stock-add-fields-adaos").removeClass("hidden");
+			$(".gestiune_area").removeClass("hidden"); // showgestiune
+			$(".pl_area").addClass("hidden"); // hide punct_lucru
+			$("#b-catDropdownP").addClass("disabled");
+		} else {
+			//console.log("not category");
+			$("#product_"+id+"cat_id").val("");
+			$("#product_"+id+"cat_id").data("is-stoc", "");
+			$("#product_"+id+"cat_id").data("is-expense", "1");
+			$("#product_"+id+"cat").html(language.choose_category);
+			$(".stock-add-fields").addClass("hidden");
+			//$(".doc-parent-div"+id_s).removeClass("additional-label-div-st");
+			//$(".doc-parent-div-p"+id_s).removeClass("additional-label-div-st-p");
+			$(".stock-add-fields-adaos").addClass("hidden");
+			if (product.pr_type != 0) {
+				$(".gestiune_area:not(.not-hidden)").addClass("hidden"); // hide gestiune
+				$(".pl_area").removeClass("hidden");
+			}
+			$("#b-catDropdownP").removeClass("disabled");
+		}
+		$("#product_"+id+"cat_id").data("is-vandabil", (product.is_vandabil ? 1 : 0));
+		$("#product_"+id+"name_id").data("is-stoc", (product.is_category ? 1 : 0));
+		if (product.pr_type == 76 || product.is_vandabil) {
+			$(".stock-add-fields-m").removeClass("hidden");
+			//$(".doc-parent-div-p").addClass("additional-label-div-st-p");
+		} else {
+			$(".stock-add-fields-m").addClass("hidden");
+			//$(".doc-parent-div-p"+id_s).removeClass("additional-label-div-st-p");
+		}
+		if (!products.isExpense() && !skip_price) { //console.log("not expense");
+			if (product.price) { //console.log(product.price, product.tva_inclus);
+				if(product.tva_inclus == "1") {
+					$("#product_pret_cu_tva").val(number_format(product.price, precision));
+				} else {
+					$("#product_pret_fara_tva1").val(number_format(product.price, precision));
+				}
+			} else { //console.log(product.price, product.tva_inclus);
+				if(product.tva_inclus == "1") {
+					$("#product_pret_cu_tva").val("");
+				} else {
+					$("#product_pret_fara_tva1").val("");
+				}
+			}
+		}
+		var trans = product.translations;
+		if (trans) {
+			$("#product_name_translation").val(trans[$("#language").val()]);
+		}
+		if (!products.isExpense()) {
+			recalc_prices_product();
+		} else {
+			//recalc_prices_product("product_pret_fara_tva");
+		}
+		$("#product_product_type_id").val(product.pr_type);
+		if (!product.pr_type || product.pr_type == "0") {
+			$("#product_pr_type").val("0");
+			$("#product_pr_type").selectpicker("refresh");
+		}
+		$("#product_has_issued2").val(product.has_issued2);
+		if (product.has_issued2) {
+			$("#product_um").prop("disabled", true);
+			//$("#product_cod_produs").prop("disabled", true);
+		} else {
+			$("#product_um").prop("disabled", false);
+			//$("#product_cod_produs").prop("disabled", false);
+		}
+	}
+	//$("#issued2_gids").val(product.issued2_gids);
+}
+function complete_product_details_tr_1(product, id) { //console.log(product, id);
+	if ($.isEmptyObject(product)) return;
+	if ($.trim($("#entry_id").val()) == "") { //console.log("ap product tr 1=","|"+id+"|", product);
+		$("#ap_um").val(product.um);
+		$("#ap_quantity").val(1);
+		$("#ap_name1_is_vandabil").val(product.is_vandabil ? "1" : "0");
+		$("#ap_name1_is_transferable").val(product.is_transferable ? "1" : "0");
+		if (!product.pr_type || product.pr_type == "0") {
+			$("#ap1_pr_type").prop("disabled", false);
+		} else {
+			$("#ap1_pr_type").val(product.pr_type);
+			$("#ap_name1_pr_type").val(product.pr_type);
+			$("#ap_name_pr_type").val(product.pr_type);
+		}
+		$("#ap_cod_produs").val(product.cod_produs);// consumption
+		$("#ap_cod_produs1").val(product.cod_produs);
+		$("#ap_cod_produs2").val(product.cod_produs);
+		//$("#ap_pr_type").val(product.pr_type);
+	} else { //console.log("product#product=",product);
+		$("#product_um").val(product.um);
+		$("#product_name1_is_vandabil").val(product.is_vandabil ? "1" : "0");
+		$("#product_name1_is_transferable").val(product.is_transferable ? "1" : "0");
+		$("#product_name1_pr_type").val(product.pr_type);
+		$("#product_name2_pr_type").val(product.pr_type);
+		$("#product_name_pr_type").val(product.pr_type);
+		$("#product_cod_produs").val(product.cod_produs);// consumption
+		$("#product_cod_produs1").val(product.cod_produs);
+		$("#product_cod_produs2").val(product.cod_produs);
+	}
+}
+function complete_product_details_tr_2(product, id) { //console.log(product, id);
+	if ($.isEmptyObject(product)) return;
+	if ($.trim($("#entry_id").val()) == "") { //console.log("ap product tr 1=","|"+id+"|", product);
+		$("#ap_pr_type").val(product.pr_type);
+		//$("#ap_pr_type").prop("disabled", true);
+	} else { //console.log("product#product=",product);
+		$("#product_name2_pr_type").val(product.pr_type);
+	}
+}
+function complete_product_details_product_recipe(product, id, alt) {// console.log(id);
+	if ($.isEmptyObject(product)) return; //console.log(product, id);
+	if (typeof alt === 'undefined') {
+		alt = "";
+	}
+	$("#recipe_product_code"+alt).val(product.cod_produs);
+	$("#recipe_product_um"+alt).val(product.um);
+	$("#recipe_product_pr_type"+alt).val(product.pr_type);
+	$("#recipe_product_name_is_only_cv"+alt).val(product.is_only_cv ? "1" : "0");
+}
+function complete_product_details_production(product, id) {// console.log(id);
+	if ($.isEmptyObject(product)) return; //console.log(product, id);
+	$("#pp_cod_produs").val(product.cod_produs);
+	$("#pp_um").val(product.um);
+	$("#um-addon").html(product.um);
+	$(".um_placeholder").html("/ "+product.um);
+	$("#pp_quantity").val(formatPrice(product.recipe_quantity, get_precision(product.recipe_quantity), true));
+	$("#pp_cod_nc").val(product.cod_nc);
+	$("#pp_cod_nc_id").val(product.cod_nc_id);
+	//$("#recipe_product_pr_type"+alt).val(product.pr_type);
+}
+function complete_product_details_inventory(product, id) {// console.log(id);
+	if ($.isEmptyObject(product)) return;
+	complete_product_details(product, id);//console.log("selected", product);
+	$("#ap_quantity").val("");
+	$("#ap_quantity_2").val($("#ap_name_id").data("stoc"));
+	$("#ap_name_no_cost").val(product.no_cost);
+	$("#ap_name_another_inv").val(product.in_another_inventory);
+	$("#ap_name_pr_type").val(product.pr_type);
+}
+function calculate_currencies_exchange(currency, price, pp, values, force_update) { 
+	if (!$.isNumeric(price) || currency == $("#currency").val() || price <= 0) {  //invalid price, or < 0, or same currencies
+		$(".pr-exchange").addClass("hidden");
+		$("#vr_div").removeClass("form-inline");
+		return;
+	}
+	if (typeof pp === 'undefined') { // ap from issue is default
+		pp = "ap";
+	}
+	if (typeof force_update === "undefined") {
+		force_update = true;
+	}
+	var date = "";
+	if ($("#date").length > 0) {
+		date = $("#date").val();
+	}
+	var jqxhr = getjqxhr("/utils/get_exchange_rate_currencies/", {"currency": currency, "reff_currency": $("#currency").val(), "date": date}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		//console.log(data);
+		if (data.type == "err") {
+			$(".pr-exchange").addClass("hidden");
+			$("#vr_div").removeClass("form-inline");
+		} else {
+			if (force_update) {
+				$("#"+pp+"_exchange_rate").val(data.message);
+			}
+			var ex_price = parseFloat(data.message*price);
+			if (force_update) {
+				if (products.isEfacturaPrecision()) {
+					$("#"+pp+"_price_ex").val(number_format(ex_price, 4));
+				} else {
+					$("#"+pp+"_price_ex").val(number_format(ex_price, get_user_precision()));
+				}
+			}
+			if (pp == "product" && force_update) {
+				var tva = number_format((values["cota_tva"]/100)*ex_price, values["precision"]);
+				$("#product_tva_unitar").val(tva);
+				$("#product_pret_cu_tva").val(number_format(ex_price + parseFloat(tva), values["precision"]));
+			}
+			$(".pr-exchange").removeClass("hidden");
+			$("#vr_div").addClass("form-inline");
+			var with_vat = false;
+			if ($("#product_with_vat").val()) {
+				with_vat = true;
+			}//console.log("vv:", values);
+			if (with_vat) {
+				$("#product_price_ex").prop("readonly", true);
+				$("#product_pret_fara_tva").prop("readonly", true);
+				$("#product_pret_cu_tva").prop("readonly", false);
+			} else {
+				$("#product_price_ex").prop("readonly", false);
+				$("#product_pret_fara_tva").prop("readonly", true);
+				$("#product_pret_cu_tva").prop("readonly", true);
+			}
+			
+			if (!products.isExpense() && values) {//console.log("prdct=",product);
+				if (!is_service(values["pr_type"]) && values["gestiune_type"] == "2") { // override
+					$("#product_price_ex").prop("readonly", true);
+					$("#product_pret_cu_tva").prop("readonly", true);
+					$("#product_pret_fara_tva1").prop("readonly", false);
+				}
+			}
+			recalc_prices_product();
+		}
+		wait_cursor(false);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function complete_delegat_details(items) {
+	if ($.isEmptyObject(items)) return;
+	$("#delegat_buletin").val(items.delegat_buletin);
+	$("#delegat_auto").val(items.delegat_auto);
+}
+function complete_intocmit_de_details(items) {
+	if ($.isEmptyObject(items)) return;
+	$("#intocmit_cnp").val(items.intocmit_cnp);
+	//$("#intocmit_aviz_insotire").val(items.intocmit_aviz_insotire);
+}
+function set_autocomplete_client(id, from_uri, minL, fn, appTo, doc_name) {
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	if (typeof doc_name === 'undefined') {
+		doc_name = language.add_client;
+	}
+	set_autocomplete_custom(id, from_uri, "client", minL, appTo, fn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (item.value == "custom") {
+			return $( "<li>" )
+		.append('<button type="submit" id="add-client-button" class="btn btn-warning btn-xs" data-toggle="modal" onclick="show_dialog_client(\''+id+'\');"><i class="fas fa-plus"></i> <span class="modal-name">'+doc_name+'</span></button>')
+        //.append("<a href=\"javascript:;\" onclick=\"show_dialog_client_issue();\">"+language.add_client+"</a>" )
+        .appendTo( ul );
+		}
+      return $( "<li>" )
+        .append( item.label )
+        .appendTo( ul );
+    };
+}
+function set_autocomplete_produs(id, from_uri, minL, fn, appTo, extra_params, hide_stoc, tip, renderFn, show_pr_type) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	if (typeof tip === 'undefined') {
+		tip = "produs";
+	}
+	if (typeof hide_stoc === 'undefined') {
+		hide_stoc = false;
+	}
+	if (typeof show_pr_type === 'undefined') {
+		show_pr_type = true;
+	}
+    var th = $('#' + id);
+    function sourceFn(request, response) {
+		var dt = { q: escapeHtml(unEscapeHtml(th.val())) };
+        if (typeof extra_params === 'object') {
+            for (var index in extra_params) {
+                if (extra_params[index].search("inventory_added_ids") != -1) { // custom -> get data-stoc
+                    dt[extra_params[index]] = products.getAllProdsIds(true);	
+                } else {
+                    dt[extra_params[index]] = $("#"+extra_params[index]).val();
+                }
+            }
+        }
+        var jqxhr = getjqxhr(from_uri, dt, "POST", "json", undefined, undefined, false);
+		jqxhr.done(function(data) {
+            check_login(data);
+            response(data);
+        }).fail(function() {
+            show_error_page();
+        });
+    }
+    if (typeof renderFn !== 'function') {
+        renderFn = function(ul, item) {
+            var label = '';
+            if (!hide_stoc && item.all.hasOwnProperty("stock")) {
+                item.label += ' ('+item.all.stock+' '+item.all.um+')';
+            }
+			if (show_pr_type) {
+				label += '<span class="au-right">'+item.all.pr_type_text+'</span>';
+			}
+            label += '<span class="ui-ac-label">' + item.label + '</span>';
+            return $( "<li>" )
+                .append( label )
+                .appendTo( ul );
+        };
+    }
+	set_autocomplete_custom(id, from_uri, tip, minL, appTo, fn, false, extra_params, sourceFn);
+	if (th.length > 0) th.autocomplete( "instance" )._renderItem = renderFn;
+}
+function set_autocomplete_ibans(id, from_uri, minL, fn, appTo, extra_params) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	var tip = "ibans";
+	var th = $('#' + id);
+    function sourceFn(request, response) {
+		var dt = { q: escapeHtml(unEscapeHtml(th.val())) };
+        if (typeof extra_params === 'object') {
+            for (var index in extra_params) {
+                dt[extra_params[index]] = $("#"+extra_params[index]).val();
+            }
+        }
+        var jqxhr = getjqxhr(from_uri, dt, "POST", "json", undefined, undefined, false);
+		jqxhr.done(function(data) {
+            check_login(data);
+            response(data);
+        }).fail(function() {
+            show_error_page();
+        });
+    }
+    set_autocomplete_custom(id, from_uri, tip, minL, appTo, fn, false, extra_params, sourceFn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		//if (ulmax !== 'undefined') {
+		//	ul.css('max-width', ulmax);
+		//}
+		var ll = item.label;
+		var item_ll = $( "<li>" );
+		return item_ll
+			.append( ll )
+			.appendTo( ul );
+    };
+}
+function toogle_iban(shw) { // show
+	if (typeof shw === "undefined") {
+		shw = false;
+	}
+	if (shw) {
+		$(".iban-div").removeClass("hidden");
+	} else {
+		$(".iban-div").addClass("hidden");
+	}
+}
+function set_autocomplete_cod_nc(id, from_uri, minL, fn, appTo, ulmax) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "cod_nc", minL, appTo, fn, false);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (ulmax !== 'undefined') {
+			ul.css('max-width', ulmax);
+		}
+		var ll = item.label;
+		var item_ll = $( "<li>" );
+		return item_ll
+			.append( ll )
+			.appendTo( ul );
+    };
+}
+function set_autocomplete_cod_cpv(id, from_uri, minL, fn, appTo, ulmax) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "cod_cpv", minL, appTo, fn, false);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (ulmax !== 'undefined') {
+			ul.css('max-width', ulmax);
+		}
+		var ll = item.label;
+		var item_ll = $( "<li>" );
+		return item_ll
+			.append( ll )
+			.appendTo( ul );
+    };
+}
+function set_autocomplete_scop_operatiune(id, from_uri, minL, fn, appTo, ulmax, extra_params) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "scop_operatiune", minL, appTo, fn, false, extra_params);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (ulmax !== 'undefined') {
+			ul.css('max-width', ulmax);
+		}
+		var ll = item.label;
+		var item_ll = $( "<li>" );
+		return item_ll
+			.append( ll )
+			.appendTo( ul );
+    };
+}
+function set_autocomplete_etr_loc(id, from_uri, minL, fn, appTo, doc_name, type) {
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	if (typeof doc_name === 'undefined') {
+		doc_name = language.add_address;
+	}
+	set_autocomplete_custom(id, from_uri, "address", minL, appTo, fn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (item.value == "custom") {
+			return $( "<li>" )
+		.append('<button type="submit" class="btn btn-warning btn-xs add-address-button" data-type="'+type+'"><i class="fas fa-plus"></i> <span class="modal-name">'+doc_name+'</span></button>')
+        .appendTo( ul );
+		}
+      return $( "<li>" )
+        .append( item.label )
+        .appendTo( ul );
+    };
+}
+function set_autocomplete_gestiune(id, from_uri, minL, fn, appTo, extra_params, filter_type) { 
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	//if (typeof filter_type === 'undefined') {
+	//	filter_type = 0;
+	//}
+	set_autocomplete_custom(id, from_uri, "gestiune", minL, appTo, fn, false, extra_params);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		var ll = item.label;
+		if (item.hasOwnProperty("is_pl")) {
+			ll = "<strong>"+ll+"</strong>";
+		}
+		//item.label += '<span class="au-right">'+item.all.pr_type_text+'</span>'; 
+		if (item.value == "custom") {
+			return $( "<li>" )
+		.append('<button type="submit" id="add-gestiune-button" class="btn btn-warning btn-xs add-gestiune-btn" data-toggle="modal" onclick="show_dialog_gestiune(\''+id+'\', \''+filter_type+'\');" style="width:100%;text-align:left;"><i class="fas fa-plus"></i> <span class="modal-name">'+language.gestiune+'</span></button>')
+        .appendTo( ul );
+		}
+		var item_ll = $( "<li>" );
+		if (!item.hasOwnProperty("single_pl") && !item.hasOwnProperty("is_pl")) {
+			item_ll.addClass("subcategory");
+		}
+		return item_ll
+			.append( ll )
+			.appendTo( ul );
+    };
+}
+function set_autocomplete_pl(id, from_uri, minL, fn, appTo) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "punct_lucru", minL, appTo, fn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		if (item.value == "custom") {
+			var text_button = language.add_punct_lucru;
+			return $( "<li>" )
+				.append('<button type="submit" id="add-punct-lucru-button" class="btn btn-warning btn-xs add-punct-lucru-btn" data-toggle="modal" onclick="show_dialog_punct_lucru();"><i class="fas fa-plus"></i> <span class="modal-name pl-name-autocomplete">'+text_button+'</span></button>')
+				.appendTo( ul );
+		} 
+      return $( "<li>" )
+        .append( item.label )
+        .appendTo( ul );
+    };
+}
+function set_autocomplete_cities(id, from_uri, minL, fn, appTo, extra_params) { //console.log("here");
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "cities", minL, appTo, fn, false, extra_params);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+		
+      return $( "<li>" )
+        .append( item.label )
+        .appendTo( ul );
+    };
+}
+function show_dialog_gestiune(id, filter_type) {
+	if (typeof filter_type !== 'undefined') {
+		var sci = $("#"+id.replace("gestiune","")+"cat_id").val();// selected cat id
+		if (sci == "74" || sci == "86" || sci == "77" || sci == "96") {
+			gestiune_type_custom_dialog_issue = true;
+			$("#gestiune_type1").prop("checked", true);
+		} else { // reset
+			gestiune_type_custom_dialog_issue = false;
+		}
+		//console.log($("#"+id.replace("gestiune","")+"cat_id").val());
+	}
+	//console.log(filter_type);
+	//console.log("show_dialog_gestiune", id);
+	$("#gestiune_name").val($("#"+id).val());
+	$("#au_gid").val(id);
+	$("#modal-add-gestiune").modal('show');
+}
+function show_dialog_punct_lucru() {
+	$("#pl_name").val($("#gestiune_pl").val());
+	$("#gestiune_pl_id").val("");
+	db_pl_name = "";
+	$("#modal-add-punct-lucru").modal('show');
+}
+function show_dialog_client(id) { //console.log(id, client_name_autocomplete_results, $.trim($("#client_name").val()), first_autocomplete_client );
+	if (client_name_autocomplete_results == 2 && is_cif($.trim($("#client_name").val())) && 
+		$.trim($("#client_name").val()) == first_autocomplete_client.all.cif) {
+		$("#"+id).val( first_autocomplete_client.label_show );
+		$("#"+id+"_id").val( first_autocomplete_client.value );
+		autocomplete_custom_select("client", first_autocomplete_client.all);
+		checkCredits(first_autocomplete_client.value);
+		if (show_help) {
+			help.forwardLite();//console.log("should focus");
+			//$("#ap_name").focus();$("#ap_name").focus();
+		}
+		return;
+	}
+		
+	var vv = $("#"+id).val();
+	if(is_cif(vv)) {
+		$("#cif").val(vv);
+		$("#cif").focus();
+	} else {
+		$("#company").val(vv);
+		$("#company").focus();
+	}
+	$("#fk_multiple_id").val(id);
+	$("#modal-add-client").modal('show');
+	if (window.hasOwnProperty("help")) {
+		help.hide();
+	}
+	autocheck_cif(true);
+}
+function set_autocomplete_clientf(id, from_uri, minL, fn, auto_focus, appTo) {
+	set_autocomplete_custom(id, from_uri, "clientf", minL, appTo, fn, auto_focus);
+}
+function set_autocomplete_produs_old(id, from_uri, minL, appTo) {
+	set_autocomplete_custom(id, from_uri, "produs", minL, appTo);
+}
+function set_autocomplete_group(id, from_uri, minL, appTo) {
+    var input = $('#' + id), fn = function(item) {
+		input.data('item', item);
+	};
+    set_autocomplete_custom(id, from_uri, "group", minL, appTo, fn);
+    input.focus(function(event) {
+        input.autocomplete('search', input.val());
+    });
+}
+function set_autocomplete_intocmit_de(id, from_uri, minL, appTo) {
+	set_autocomplete_custom(id, from_uri, "intocmit_de", minL, appTo);
+    $("#" + id).autocomplete( "instance" )._renderItem = function (ul, item) {
+        var li = $("<li></li>")
+            .data("item.autocomplete", item)
+            .append('<span>' + item.label + '</span><i class="fas fa-times-circle text-primary pe-0 action-delete" data-type="' + item.value + '"></i>')
+            .appendTo(ul);
+        li.find('.action-delete').click(function(e) {
+            e.stopPropagation();
+            var self = $(this);
+            $('.ok-confirm-modal')
+                .data('params', {'label':self.parent().find('span').text(), 'type':self.data('type')})
+                .data('funct_to_exe', function(sendData) {
+                var jqxhr = getjqxhr("/nomenclator/delete_field/", sendData, "POST", "json");
+                jqxhr.done(function(data) {
+                    check_login(data);
+                    wait_cursor(false);
+                    show_message(data);
+                }).fail(function() {
+                    show_error_page();
+                });
+            });
+            show_confirm(language.alert_delete_action);
+        });
+        return li;
+    };
+}
+function set_autocomplete_delegat(id, from_uri, minL, appTo) {
+	set_autocomplete_custom(id, from_uri, "delegat", minL, appTo);
+    $("#" + id).autocomplete( "instance" )._renderItem = function (ul, item) {
+        var li = $("<li></li>")
+            .data("item.autocomplete", item)
+            .append('<span>' + item.label + '</span><i class="fas fa-times-circle text-primary pe-0 action-delete" data-type="' + item.value + '"></i>')
+            .appendTo(ul);
+        li.find('.action-delete').click(function(e) {
+            e.stopPropagation();
+            var self = $(this);
+            $('.ok-confirm-modal')
+                .data('params', {'label':self.parent().find('span').text(), 'type':self.data('type')})
+                .data('funct_to_exe', function(sendData) {
+                var jqxhr = getjqxhr("/nomenclator/delete_delegat/", sendData, "POST", "json");
+                jqxhr.done(function(data) {
+                    check_login(data);
+                    wait_cursor(false);
+                    show_message(data);
+                }).fail(function() {
+                    show_error_page();
+                });
+            });
+            show_confirm(language.alert_delete_delegate);
+        });
+        return li;
+    };
+}
+function set_autocomplete_reception_committee(id, from_uri, minL, appTo) {
+	set_autocomplete_custom(id, from_uri, "reception_committee", minL, appTo);
+    $("#" + id).autocomplete( "instance" )._renderItem = function (ul, item) {
+        var li = $("<li></li>")
+            .data("item.autocomplete", item)
+            .append('<span>' + item.label + '</span><i class="fas fa-times-circle text-primary pe-0 action-delete" data-type="' + item.value + '"></i>')
+            .appendTo(ul);
+        li.find('.action-delete').click(function(e) {
+            e.stopPropagation();
+            var self = $(this);
+            $('.ok-confirm-modal')
+                .data('params', {'label':self.parent().find('span').text(), 'type':self.data('type')})
+                .data('funct_to_exe', function(sendData) {
+                var jqxhr = getjqxhr("/nomenclator/delete_reception_committee/", sendData, "POST", "json");
+                jqxhr.done(function(data) {
+                    check_login(data);
+                    wait_cursor(false);
+                    show_message(data);
+                }).fail(function() {
+                    show_error_page();
+                });
+            });
+            show_confirm(language.alert_delete_reception_committee);
+        });
+        return li;
+    };
+}
+function set_autocomplete_sales_agent(id, from_uri, minL, appTo) {
+	set_autocomplete_custom(id, from_uri, "sales_agent", minL, appTo);
+    $("#" + id).autocomplete( "instance" )._renderItem = function (ul, item) {
+        var li = $("<li></li>")
+            .data("item.autocomplete", item)
+            .append('<span>' + item.label + '</span><i class="fas fa-times-circle text-primary pe-0 action-delete" data-type="' + item.value + '"></i>')
+            .appendTo(ul);
+        li.find('.action-delete').click(function(e) {
+            e.stopPropagation();
+            var self = $(this);
+            $('.ok-confirm-modal')
+                .data('params', {'label':self.parent().find('span').text(), 'type':self.data('type')})
+                .data('funct_to_exe', function(sendData) {
+                var jqxhr = getjqxhr("/nomenclator/delete_field/", sendData, "POST", "json");
+                jqxhr.done(function(data) {
+                    check_login(data);
+                    wait_cursor(false);
+                    show_message(data);
+                }).fail(function() {
+                    show_error_page();
+                });
+            });
+            show_confirm(language.alert_delete_action);
+        });
+        return li;
+    };
+}
+function set_autocomplete_gestiunef(id, from_uri, minL, fn, auto_focus) {
+	set_autocomplete_custom(id, from_uri, "gestiunef", minL,  undefined, fn, auto_focus);
+}
+function set_autocomplete_supplier(id, from_uri, minL, fn, appTo, transportator) {
+	if (typeof appTo === 'undefined') {
+		appTo = undefined;
+	}
+	set_autocomplete_custom(id, from_uri, "supplier", minL, appTo, fn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {
+		if (item.value == "custom") {
+			return $( "<li>" )
+		.append('<button type="submit" id="add-supplier-button" class="btn btn-warning btn-xs" data-toggle="modal" onclick="show_dialog_supplier(\''+id+'\', '+transportator+');"><i class="fas fa-plus"></i> <span class="modal-name">'+language.add_supplier+'</span></button>')
+        .appendTo( ul );
+		}
+      return $( "<li>" )
+        .append( item.label )
+        .appendTo( ul );
+    };
+}
+function show_dialog_supplier(id, transportator) {
+	var vv = $("#"+id).val();
+	if(is_cif(vv)) {
+		$("#cif_s").val(vv);
+		$("#cif_s").focus();
+	} else {
+		$("#company_s").val(vv);
+		$("#company_s").focus();
+	}
+	$("#fk_multiple_id_s").val(id);
+	if (typeof transportator === "undefined") {
+		transportator = "0";
+	}
+	$("#supplier-transportator").val(transportator);
+	$("#modal-add-supplier").modal('toggle');
+	autocheck_cif_s(true);
+}
+function set_autocomplete_supplierf(id, from_uri, minL, fn) {
+	set_autocomplete_custom(id, from_uri, "supplierf", minL, undefined, fn);
+}
+function set_autocomplete_category(id, from_uri, minL, appTo, fn) {
+	set_autocomplete_custom(id, from_uri, "category", minL, appTo, fn);
+	$("#"+id).autocomplete( "instance" )._renderItem = function( ul, item ) {//console.log(item);
+	var stoc_class = "";
+	var ll = item.label;
+	if (item.all.parent == 0) {
+		ll = "<strong>"+ll+"</strong>";
+	} else {
+		ll = "<span class='subcategory'>"+ll+"</span>";
+	}
+	var item_ll = $( "<li>" );
+	if (item.stoc) {
+		item_ll.addClass("subcategory-stoc");
+	}
+	return item_ll
+        .append( ll )
+        .appendTo( ul );
+    };
+}
+function show_calendar(id, context) {
+	if (typeof context === 'undefined'){
+    	//context = document.body;
+		context = window.document;
+	}
+	var ff = $("#"+id, context)[0]._flatpickr.open();
+}
+function validateDate(id, force_validation) {
+	/*if(typeof force_validation === 'undefined'){
+    	force_validation = true;
+	};
+	var day = $("#"+id+"_day").val();
+	var month = $("#"+id+"_month").val();
+	var year = $("#"+id+"_year").val();
+	if (!isValidDate(day, month, year, force_validation)) {
+	*/
+	if (!validateDateForm(id, force_validation)) {
+		var c_date = new Date();
+		$("#"+id).datepicker("setDate", c_date);
+		$("#"+id+"_day").val(niceDateChunk(c_date.getDate()));
+		$("#"+id+"_month").val(niceDateChunk(c_date.getMonth()+1));
+		$("#"+id+"_year").val(c_date.getFullYear());
+		show_message("err|"+language.invalid_date_use_calendar);
+	}
+}
+function validateDateForm(id, force_validation, context) {
+	if(typeof force_validation === 'undefined'){
+    	force_validation = true;
+	};
+    if (typeof context === 'undefined'){
+    	context = document.body;
+	}
+	var date = $("#"+id, context).val();
+	var day = $.trim(date.substr(0, 2));
+	var month = $.trim(date.substr(3, 2));
+	var year = $.trim(date.substr(6, 4));//console.log(day, month, year);
+	if (day == "" && month == "" && year == "" && !force_validation) {
+		return true;
+	}
+	month = parseInt(month);
+	month -= 1;
+	return isValidDate(day, month, year);
+}
+function dateIsAtLeastToday(date) {
+	var dd = moment(date, "DD/MM/YYYY");
+	var today = moment(); 
+	if (today.diff(dd, 'days') <= 0) {
+		return true;
+	}
+	return false;
+}
+function etrDateIsValid(date) {
+	var dd = moment(date, "DD/MM/YYYY");
+	var today = moment(); 
+	var days = dd.diff(today, 'days'); 
+	if (days >= 0 && days <= 2) {
+		return true;
+	}
+	return false;
+}
+function show_exchange_rate(currency, fn, force_update, context, exchangeRateDate) {
+	if (typeof fn == 'undefined') {
+		fn = function() {}
+	}
+	if (typeof force_update === 'undefined') {
+		force_update = false;
+	}
+	if (typeof exchangeRateDate === 'undefined') {
+		exchangeRateDate = null;
+	}
+    if (typeof context === 'undefined') {
+        context = document.body;
+    }
+    if (currency == 99) {
+		if (window.hasOwnProperty("curs_holder_hide")) {
+			curs_holder_hide();
+		} else {
+			$("#curs_holder", context).hide();
+		}
+        $("#curs", context).val("");
+        return true;
+    }
+	var jqxhr = getjqxhr("/utils/get_exchange_rate/", {"currency": currency, "date": exchangeRateDate}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		//console.log(data, fn);
+		if (data.type == "err") {
+			if (window.hasOwnProperty("curs_holder_hide")) {
+				curs_holder_hide();
+			} else {
+				$("#curs_holder", context).hide();
+			}
+			$("#curs", context).val("");
+			fn(true);
+		} else {
+			if ($("#curs", context).val() == "" || force_update) {
+                $("#curs", context).val(data.message);
+            }
+			if (window.hasOwnProperty("curs_holder_show")) {
+				curs_holder_show();
+			} else {
+				$("#curs_holder", context).show();
+			}
+			fn(false);
+		}
+		wait_cursor(false);
+	}).fail(function() {
+		show_error_page();
+	});
+    return true;
+}
+function get_exchange_rate(currency, fn) {
+	if (typeof fn == 'undefined') {
+		fn = function() {}
+	}
+	var jqxhr = getjqxhr("/utils/get_exchange_rate/", {"currency": currency}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if (data.type == "ok") {
+			fn(data.message);
+		}
+		wait_cursor(false);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function show_language_translations(){
+	if ($("#language").val() == "RO") {
+		$(".pr_translation").addClass('hidden');
+		$("#ap_name_translation").val("");
+		$("#ap_um_translation").val("");
+		return;
+	}
+	// get current product translation, if any
+	var jqxhr = getjqxhr("/nomenclator/get_produs_values/", {"id": $("#ap_name_id").val()}, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);
+				for (var key in data) {
+					if (data.hasOwnProperty(key)) {
+						if (key == "translations") {
+							$("#ap_name_translation").val(data[key][$("#language").val()]);
+						}
+					}
+				}
+				wait_cursor(false);
+			}).fail(function() {
+				show_error_page();
+			});
+	$(".pr_translation").removeClass('hidden');
+	$("#ap_name_translation").attr("placeholder", language.product_name+" "+$("#language").val());
+	$("#ap_um_translation").attr("placeholder", $("#language").val());
+}
+var nr_crt_prod = 1;
+function add_product2doc(skip_insert, idp, collapse_action, custom_crt) {
+	if (typeof skip_insert === 'undefined') {
+		skip_insert = false;
+	}
+	if (typeof idp === 'undefined') {
+		idp = "ap";
+	}
+	var prod_to_add = products.createProduct2Add(idp);
+	if (!prod_to_add) {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		return false;
+	}
+	if (window.hasOwnProperty('triggerProductEvent') && triggerProductEvent('adding', {skip_insert, idp, collapse_action, custom_crt, prod_to_add}) === false) {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		return false;
+	}
+	if ($.trim($("#"+idp+"_name_id").val()) == "") { // no id, ie is not a selected product
+		if (!skip_insert) {
+			if (products.isExpense()) {
+				prod_to_add.is_expense = 1;
+			}
+			check_add_in_nomenclator(prod_to_add, function(){
+				add_product2doc(true, idp, collapse_action);
+			}, idp);
+			return false;
+		}
+	}
+	if (typeof custom_crt !== "undefined") {
+		products.addProduct(custom_crt, prod_to_add);//return;
+	} else {
+		products.addProduct(nr_crt_prod, prod_to_add);//return;
+		nr_crt_prod++;
+	} 
+	show_etransport_weight_message(prod_to_add);
+	if (window.hasOwnProperty('triggerProductEvent') && triggerProductEvent('added', {skip_insert, idp, collapse_action, custom_crt, prod_to_add}) === false) {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		return false;
+	}
+	// reinit
+	$("#ap_name_id").val("");
+	$("#ap_product_type_id").val("");
+	$("#ap_cod_produs").val("");
+	$("#ap_name_note").html("");
+	$("#product_2_add_remember").prop("checked", false);
+	$("#ap_name").val("");
+	$("#ap_description").val("");
+	$("#ap_cod_nc").val("");
+	$("#ap_cod_nc_id").val("");
+	$("#ap_sgr").val("");//.filter('[type="checkbox"]').prop('checked', false);
+	$("#ap_scop_operatiune").val("");
+	$("#ap_scop_operatiune_id").val("");
+	$("#ap_gross_weight").val("");
+	$("#ap_net_weight").val("");
+	$("#ap_has_tax").val("");
+	$("#ap_tax_name").val("");
+	$("#ap_tax_type").val("");
+	$("#ap_tax_value").val("");
+	$("#ap_tax_cota").val("");
+	$("#ap_tax_cota_percent").val("");
+	$("#ap_tax_tva_inclus").val("");
+	$("#ap_tax_cont_contabil").val("");
+	$("#spcpl").val("");
+	if($("#ap_name_translation").is(":visible")) {
+		$("#ap_name_translation").val("");
+		$("#ap_um_translation").val("");
+	}
+	$("#ap_price").tooltip("dispose");
+	//$("#ap_um").val("");
+	$("#ap_price").val("");
+	if (!products.isExpense()) {
+		//$("#ap_currency").prop("selectedIndex", 0).change();
+	} //console.log("idp",idp);return false;
+	if (products.isExpense()) {
+		if (!products.isInterDocMode()) {
+			reset_ap_fields_expense();
+		} else {
+			expense_additional_fields();
+		}
+	} else {
+		$(".gestiune_area:not(.not-hidden)").removeClass("hidden"); // hide gestiune
+		$(".pl_area").addClass("hidden");
+	} 
+	$("#ap_quantity").val(1);
+	$("#ap_tva_inclus").val(0);
+	$("#ap_has_issued2").val("");
+	$("#ap_um").prop("disabled", false);
+	$("#variables-example-ap_description").html("");
+	$(".additional-label-var-ap_description").addClass("hidden");
+	if ($("#ap_pr_type").hasClass("selectpicker")) {
+		$("#ap_pr_type").val(0).selectpicker('refresh');
+	} 
+	if (window.hasOwnProperty('handleCategory')) {
+		if (products.isExpense() && products.isInterDocMode()) {
+			handleCategory(0, null, null, idp);
+		} else {
+			handleCategory(0);
+		}
+	} 
+	if (!products.isExpense()) {
+		if (prod_to_add.punct_lucru && prod_to_add.punct_lucru != '0') {
+			$("#ap_pl").val(prod_to_add.punct_lucru);
+		}
+	}
+	if (products.isExpense() && products.isInterDocMode()) {
+		$("#add_product_"+idp).remove();
+		//console.log("remove idp ", idp);
+	} 
+	if (window.hasOwnProperty("hide_product_type")) {
+		hide_product_type();
+	} 
+	$(".pr_type_area").addClass("hidden");//console.log("hide pr type");
+	//calculate_currencies_exchange($('#ap_currency').val(), $('#ap_price').val());
+    if (typeof isVouchers === 'function') {
+        isVouchers($("#b-catDropdown"));
+    }  
+	if (typeof collapse_action === "undefined") {
+		collapse_action = true;
+	}
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+	var btn_add_product = $("#btnadd_product");
+	if (collapse_action && !products.isInterDocMode()) {
+		$(".collapse").collapse("hide");
+		btn_add_product.prop("checked", false);
+	}
+	if (btn_add_product && btn_add_product.length > 0 && !btn_add_product.hasClass('skip-animate-scroll')) {
+		if (!isElementInViewport(btn_add_product)) {
+			if ('scrollIntoView' in btn_add_product[0]) {
+				btn_add_product[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+			} else {
+				$('html').animate({
+					scrollTop: btn_add_product.offset().top-200
+				}, 1000);
+			}
+		}
+	} //console.log(products.prods);
+	// recalc distribute on doc_supplier
+	if (products.getApplyDistribute(prod_to_add, prod_to_add["fk_cat_id"])) { 
+		products.distributeVerify(prod_to_add["id"]);
+	} //console.log(prod_to_add);return false;
+	if (products.isExpense() && (prod_to_add["is_expense"] == "1") ) { //console.log("prod_to_add=",prod_to_add);
+		if (products.canApplyDistribute(prod_to_add["fk_cat_id"])) {
+			show_dialog_expense_issue(prod_to_add["id"]);
+		}
+	} 
+	if (window.hasOwnProperty("checkCredits")) {
+		credits.setPunctLucru(products.getWorkstation());
+		checkCredits();
+	}
+	// if facturare autocomplete product attributes if necessary
+	/*
+	var jqxhr = getjqxhr("/nomenclator/check_product_prices/", {"product": prod_to_add}, "POST", "json");
+		jqxhr.done(function(data) { //console.log(data);
+			check_login(data);
+			wait_cursor(false);
+		}).fail(function() {
+			//show_error_page();
+		}); 
+	*/
+	return true;
+}
+/*
+    "um": "BUC",
+    "gross_weight": "10.0000",
+    "net_weight": "10.0000",
+   "quantity": 1,
+   */
+function show_etransport_weight_message(p) {
+	if ($("#show_is_etransport").is(":checked")) {
+		var msg_transport = "";
+		if (p.gross_weight && p.gross_weight != "0.0000") {
+			msg_transport += "<b>Greutatea Bruta</b> va fi:\r\n"+
+							formatPrice(p.gross_weight, 4, true)+"x"+
+							formatPrice(p.quantity, 4, true)+"="+
+							formatPrice(parseFloat(p.gross_weight)*parseFloat(p.quantity), 2, true)+"kg";
+		}
+		if (p.net_weight && p.net_weight != "0.0000") {
+			if (msg_transport) {
+				msg_transport += "\r\n\r\n";
+			}
+			msg_transport += "<b>Greutatea Neta</b> va fi:\r\n"+
+							formatPrice(p.net_weight, 4, true)+"x"+
+							formatPrice(p.quantity, 4, true)+"="+
+							formatPrice(parseFloat(p.net_weight)*parseFloat(p.quantity), 2, true)+"kg";
+		}
+		if (msg_transport) {
+			msg_transport = "<b>Greutatile pe nota e-Transport</b> se calculeaza dupa formula:\r\n"+
+							"Greutatea (kg/"+p.um+") x Cantitate("+p.um+")\r\n\r\n"+
+							msg_transport;
+			show_message(msg_transport);
+		}
+	}
+}
+function change_add_new_product(params) { //params.fn(params.params);
+	//console.log(params); //if (testing) return;
+	var prms = {"prod_to_add": params.prod_to_add, "change": params.change};//params.params;
+		prms.is_expense = products.isExpense() ? 1 : 0;
+	var jqxhr = getjqxhr("/nomenclator/add_change_product/", prms, "POST", "json");
+		jqxhr.done(function(data) { //console.log(data);
+			check_login(data);
+			wait_cursor(false);//console.log(data);
+			if (data.type == 'err') {
+				show_message(data);
+				if ($("#entry_id").val()) { // is in modal edit product -> reset name
+					var entries = products.getEntries($("#entry_id").val());
+					if (entries) {
+						$("#product_name").val(entries["name"]);
+					}
+				} else {
+					delete_autocomplete('ap_name');
+				}
+			} else {
+				if (data.hasOwnProperty("inserted_id")) {
+					$("#"+params.idp+"_name_id").val(data.inserted_id);
+					$("#b-catDropdown").removeClass("disabled");
+					$("#b-catDropdownP").removeClass("disabled");//console.log(params.params); 
+					if (params.params.hasOwnProperty("cat_id")) { //console.log(params.params);//console.log("b-catDropdown"+params.params.cat_id);
+						$("#b-catDropdown"+params.params.cat_id).removeClass("disabled");
+					}
+					// for docs = exits
+					//$(".pr_type_area").removeClass("hidden");
+					//console.log(params);
+					if(!$("#"+params.idp+"_pr_type").is(":visible")) {
+						$("#"+params.idp+"_pr_type").val($("#"+params.idp+"_product_type_id").val());
+					}
+					$("#"+params.idp+"_name_id").data("stoc", "0");
+					$("#"+params.idp+"_name_note").html("");
+					$("#"+params.idp+"_um").prop("disabled", false);
+					if ((!$("#"+params.idp+"_product_type_id").val() || $("#"+params.idp+"_product_type_id").val() == "0") && window.hasOwnProperty("show_product_type")) {
+						show_product_type();
+					}
+					$("#"+params.idp+"_has_issued2").val("0");
+				}
+			}
+			$(".btn-edit-product").removeClass("disable-add-product");
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		}).fail(function() {
+			//show_error_page();
+		});
+}
+function product_changes_hide() { //console.log("pch", params);
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+}
+function product_changes_hide_x(params) {
+	//console.log("reset product field", params);
+	if (params.idp == "product") {
+		var old_val = $("#product_name").data("old-name");
+		$("#product_name").val(old_val);
+		var old_code = $("#product_cod_produs").data("old-code");
+		$("#product_cod_produs").val(old_code);
+		$(".select-pr-type").selectpicker('refresh');
+	} else {
+		delete_autocomplete(params.idp+"_name", params.cat_id);
+	}
+}
+function check_for_product_changes(params, fn) { //console.log(params);
+	var idp = params.idp;
+	if (typeof idp === 'undefined') {
+		idp = "ap";
+	}
+	if (typeof fn === 'undefined') {
+		fn = function(){};
+	}
+	//$(".btn-add-product-on-doc").addClass("disable-add-product");//console.log(fn, $(".btn-add-product-on-doc").hasClass("disable-add-product"));
+	var prod_to_add = products.createProduct2Add(idp);//console.log(prod_to_add);
+	if (!prod_to_add) {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		$(".btn-edit-product").removeClass("disable-add-product");
+		return false;
+	} //console.log("idp", idp);
+	if($("#"+idp+"_pr_type").is(":visible")) { //console.log("skip check product changes");
+		if ($("#"+idp+"_pr_type").val() == "0") {
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			$(".btn-edit-product").removeClass("disable-add-product");
+			$("#btn-edit-product-modal").removeClass("disabled");
+			return false;
+		}
+	}
+	// for expense also
+	if($("#"+idp+"_cat").is(":visible")) { //console.log("skip check product changes");
+		if (!$("#"+idp+"_cat_id").val() || $("#"+idp+"_cat_id").val() == "0") {
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			$(".btn-edit-product").removeClass("disable-add-product");
+			$("#btn-edit-product-modal").removeClass("disabled");
+			return false;
+		}
+	}
+	$(".btn-add-product-on-doc").addClass("disable-add-product");
+	$(".btn-edit-product").addClass("disable-add-product");
+	$("#btn-edit-product-modal").addClass("disabled"); //console.log(idp, $("#"+idp+"_name").val());
+	if ($.trim($("#"+idp+"_name_id").val()) != "") {
+		var jqxhr = getjqxhr("/nomenclator/check_for_product_changes/", {"product": prod_to_add, is_expense: (products.isExpense() ? 1 : 0)}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);//console.log(data);
+			wait_cursor(false);
+			if (data.type == "err") { //console.log("idp=",idp);
+				//if (idp == "product") { // no need to ask, we try to update product
+				//	change_add_new_product({"params": params, "prod_to_add": prod_to_add, "idp": idp, change: 1, "fn": fn});
+				//} else {
+					$(".ok-confirm-modal").html(language.add_new_product);
+					$(".cancel-confirm-modal").html(language.product_change_name);
+					$('.ok-confirm-modal').data('funct_to_exe', 'change_add_new_product');
+					$('.cancel-confirm-modal').data('funct_to_exe', 'change_add_new_product');
+					$('.cancel-confirm-modal').data('funct_to_exe_on_hide', 'product_changes_hide');
+					$(".cancel-confirm-modal").data('funcExecuted', false);
+					$('.ok-confirm-modal').data('params', {"params": params, "prod_to_add": prod_to_add, "idp": idp, "fn": fn});
+					$('.cancel-confirm-modal').data('params', {"params": params, "prod_to_add": prod_to_add, "idp": idp, change: 1, "fn": fn});
+					$('#modal-confirm').data("backdrop", "static");
+					$('#modal-confirm').data("keyboard", false);
+					//$('#confirm-close').prop("disabled", true);
+					$('#confirm-close').data('on_hide_func', 'product_changes_hide_x');
+					$('#confirm-close').data('param', params);
+					/*if (products.getUseCode() && products.getUseStock()) {
+						$('.ok-confirm-modal').addClass("hidden");
+					}*/
+					if (data.hasOwnProperty("old_name")) {
+						$("#"+idp+"_name").data("old-name", data.old_name);
+					}
+					if (data.hasOwnProperty("old_code")) {
+						$("#"+idp+"_cod_produs").data("old-code", data.old_code);
+					}
+					show_confirm(data.message);
+				//}
+			} else { //console.log("ok + fn");
+				fn();
+			}
+			$(".btn-edit-product").removeClass("disable-add-product");
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			$("#btn-edit-product-modal").removeClass("disabled");
+			//console.log(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	} else {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		$(".btn-edit-product").removeClass("disable-add-product");
+		$("#btn-edit-product-modal").removeClass("disabled");
+		fn();
+	}
+}
+function reset_ap_fields_expense() {
+	if (products.isInterDocMode()) {
+		return false;
+	}
+	$("#ap_name_id").val("");
+	$("#ap_cat_id").val("");
+	$("#ap_cat_id").data("is-stoc", "");
+	$("#ap_cat_id").data("is-vandabil", "");
+	$("#ap_cat").html(language.choose_category);
+	$("#b-catDropdown").removeClass("disabled");
+	//$(".expense-category").css("width", "50%");
+	$("#ap_gestiune_id").val("");
+	$("#ap_gestiune").val("");
+	$(".stock-add-fields").addClass("hidden");
+	$(".stock-add-fields-adaos").addClass("hidden");
+	//$(".gestiune_area").addClass("hidden");
+	$(".doc-parent-div").removeClass("additional-label-div-st");
+	$("#ap_addition").val("");
+	$("#ap_quantity_2").val("1");
+	//$("#ap_price").val("");
+	$("#ap_price_2").val("");
+	if (products.isPlatitorTva() && !products.isInterDocMode()) { 
+		$(".ap_tva_inclus").prop("disabled", false);
+		$(".ap_cota_tva").removeClass("disabled");
+		$(".ap_cota_tva_b").removeClass("disabled");
+		$(".ap_cota_tva").val("21%");
+		$(".ap_cota_tva_id").val("d1");
+		$(".product_tva_inclus").prop("disabled", false);
+		$(".product_cota_tva").prop("disabled", false);
+	} 
+	$(".doc-parent-div-p").removeClass("additional-label-div-st-p");
+	expense_additional_fields();
+}
+function modify_product_issue(entry_id, product) {
+	if (!entry_id || !product) {
+		entry_id = $("#entry_id").val();
+		product = products.createProduct2Add("product");
+		$("#entry_id").val("");
+	}
+	if (!product) {
+		return false;
+	} //console.log("modify_product_issue: ",product);
+	var product = products.setIdToProduct(entry_id, product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product);
+	if (product.has_tax != '1' && products.hasTaxCustomById(entry_id)) {
+		products.removeProduct(entry_id+"t");
+	}
+	if (product.sgr != '1' && products.hasSgrCustomById(entry_id)) {
+		products.removeProduct(entry_id+"s");
+	}
+	products.recalcTotals();
+	recalc_discounts(entry_id);
+	hide_product_type();
+	show_etransport_weight_message(product);
+	if (window.hasOwnProperty("checkCredits")) {
+		credits.setPunctLucru(products.getWorkstation());
+		checkCredits();
+	}
+	return true;
+}
+function modify_expense_issue() {
+	var entry_id = $("#entry_id").val();
+	var product = products.createProduct2Add("product");//console.log(product, entry_id);
+	//return false;
+	if (!product) {
+		return false;
+	} 
+	product = products.setIdToProduct(entry_id, product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product);
+	if (product.sgr != '1' && products.hasSgrCustomById(entry_id)) {
+		products.removeProduct(entry_id+"s");
+	}
+	products.recalcTotals();
+	products.checkCorrection();
+	recalc_discounts(entry_id);
+	$("#entry_id").val("");
+	reset_ap_fields_expense();
+	// recalc distribute on doc_supplier
+	if (products.getApplyDistribute(product)) {
+		products.distributeVerify(product["id"], true);
+	}
+	show_etransport_weight_message(product);
+	if (window.hasOwnProperty("checkCredits")) {
+		credits.setPunctLucru(products.getWorkstation());
+		checkCredits();
+	} //console.log(products.getAllProds());
+	//expense_additional_fields();
+	return true;
+}
+function modify_transfer_issue() {
+	var entry_id = $("#entry_id").val();
+	var product = products.createProduct2Add("product");//console.log(product);
+	//return false;
+	if (!product) {
+		return false;
+	}
+	var product = products.setIdToProduct(entry_id, product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product); //console.log(products.getAllProds());
+	products.recalcTotals();
+	$("#entry_id").val("");//console.log(products.getAllProds());
+	return true;
+}
+function modify_inv_issue() {
+	var entry_id = $("#entry_id").val();
+	var product = products.createProduct2Add("product");//console.log(entry_id, product);
+	//return false;
+	if (!product) {
+		return false;
+	}
+	var product = products.setIdToProduct(entry_id, product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product); //console.log(products.getAllProds());
+	//products.recalcTotals();
+	products.createEvents(entry_id);
+	products.createPager();
+	//products.loadLast();
+	products.updateBackendSingle(entry_id);
+	$("#entry_id").val("");//console.log(products.getAllProds());
+	return true;
+}
+function modify_bc_issue() {
+	var entry_id = $("#entry_id").val();
+	var product = products.createProduct2Add("product");//console.log(product);
+	//return false;
+	if (!product) {
+		return false;
+	}
+	var product = products.setIdToProduct(entry_id, product);
+	var new_line = products.createProductRow(entry_id, product);
+	$("#entry_item_"+entry_id).html(new_line);
+	products.replaceItem(product);
+	products.recalcTotals();
+	$("#entry_id").val("");
+	return true;
+}
+function expense_cancel_distribute(id) {
+	products.deleteDistribute(id);
+}
+function delete_product(id) {
+	products.deleteProduct(id);
+	expense_additional_fields();
+	if (window.hasOwnProperty("checkCredits")) {
+		if (products.getAllProds().length == 0) {
+			credits.resetAll();
+		}
+	}
+}
+function delete_product_tr(id) {
+	/*var entries = products.getEntries(id);//console.log(entries);
+	if (!products.checkQuantityMin(entries["name2_id"], id, 0 )) {
+		show_message("err|"+sprintf(language.insufficient_expense_annul, (language.delete).toLowerCase(), entries["name2"],
+									language.the_gestiune, $("#gestiune2").find(":selected").text()), false);
+		return false;
+	}*/
+	products.deleteProduct(id);
+	expense_additional_fields();
+}
+function delete_product_expense(id) {
+	var entries = products.getEntries(id);//console.log(entries);
+	if (products.getApplyDistribute(entries)) { // only for stockable
+		if (products.distributeCheckDeleteOnCustom(entries["id"], entries["name"])) {
+			return false;
+		}
+	} 
+	products.deleteProduct(id);
+	if (products.getApplyDistribute(entries)) { // only for stockable
+		products.distributeDelete(entries["id"]);
+	}
+	expense_additional_fields();
+	if (window.hasOwnProperty("checkCredits")) {
+		if (products.getAllProds().length == 0) {
+			credits.resetAll();
+		}
+	}
+}
+function expense_additional_fields() {
+	if (products.hasStock()) { 
+		$(".has-stock-add-fields").removeClass("hidden");
+		//console.log("show additional fields");
+	} else {
+		$(".has-stock-add-fields").addClass("hidden");
+		//console.log("hide additional fields");
+	}
+}
+function show_dialog_produs_issue(entry_id, set_only_values) {
+	$("#pid").val("");
+	$("#entry_id").val(entry_id);
+	var values = products.getEntries(entry_id);
+	$("#pfk_doc_id").val(values["fk_doc_id"]);//console.log("dialog issue: ", values);
+	$("#spcpl_modal").val(values["spcpl"]);
+	$("#product_name_id").val(values["ref_id"]);
+	if (values.hasOwnProperty("name_new")) {
+		$("#product_name").val(values["name_new"]);
+	} else {
+		$("#product_name").val(values["name"]);
+	}
+	if (values.is_stoc == "1") {
+		$("#product_name_note").html(language.stock_simple+": "+values.stoc+" "+values.um);
+	} else {
+		$("#product_name_note").html("");
+	}
+	$("#product_name_id").data("stoc", values.stoc);
+	$("#product_name_id").data("is-stoc", values["is_stoc"]);
+	$("#product_name_id").data("is-expense", values["is_expense"]);
+	if (values.hasOwnProperty("cod_produs_new")) {
+		$("#product_cod_produs").val(values["cod_produs_new"]);
+	} else {
+		$("#product_cod_produs").val(values["cod_produs"]);
+	}
+	$("#product_cod_produs").data("old-code", $("#product_cod_produs").val());
+	$("#product_description").val(values["description"]);
+	$("#product_um").val(values["um"]);
+	$("#product_name_translation").val(values["name_translation"]);
+	$("#product_um_translation").val(values["um_translation"]);
+	$("#product_quantity").val(values["quantity"]);
+	$("#product_cota_tva").val(values["cota_tva_option"]);
+	$("#product_gestiune").val(values["fk_gestiune_id"]);
+	$("#product_pl").val(values["punct_lucru"]);
+	$("#product_product_type_id").val(values["pr_type"]);
+	$("#product_sgr").val(values.sgr).filter('[type="checkbox"]').prop('checked', parseInt(values.sgr) === 1);
+	$('#form-add-product').data('item', values).trigger('product.fill');
+	if (window.hasOwnProperty('handleCategory')) {
+		handleCategory(values.pr_type, null, $("#product_sgr"));
+	}
+	if (window.hasOwnProperty("check_products_fields_etransport")) {
+		check_products_fields_etransport(values["pr_type"]);
+	}
+	if (window.hasOwnProperty("check_products_cod_nc")) {
+		check_products_cod_nc(values["pr_type"]);
+	}
+	$("#product_has_issued2").val(values["has_issued2"]);
+	if (values["has_issued2"] == "1") {
+		$("#product_um").prop("disabled", true);
+		//$("#product_cod_produs").prop("disabled", true);
+	}
+	if (values["fk_gestiune_id"] && products.isStockType(values["pr_type"])) {
+		$(".gestiune_area").removeClass("hidden");
+		$(".pl_area").addClass("hidden");
+	} else if (values["punct_lucru"]) {
+		$(".pl_area").removeClass("hidden");
+		$(".gestiune_area:not(.not-hidden)").addClass("hidden");
+	} else { // hide both, ie not stock and only one pl
+		$(".pl_area").addClass("hidden");
+		$(".gestiune_area:not(.not-hidden)").addClass("hidden");
+	}
+	if (values["tva_inclus"]) {
+		$("#product_tva_inclus1").prop("checked", true);
+	} else {
+		$("#product_tva_inclus0").prop("checked", true);
+	}
+	$("#product_currency").val(values["currency"]);console.log(values);
+	var price = values["pret_fara_tva"];
+	if (values["init_price"] > 0) {
+		price = values["init_price"];
+		$("#product_exchange_rate").val(values["exchange_rate"]);
+		if (products.isEfacturaPrecision()) {
+			$("#product_price_ex").val( number_format(values["pret_fara_tva"], 4));
+		} else {
+			$("#product_price_ex").val( number_format(values["pret_fara_tva"], values["precision"]));
+		}
+		$(".price_currency_holder").html("("+($("#currency option:selected").text()).substr(0, 3)+")"); 
+	} 
+	$("#product_pret_fara_tva1").val(number_format(price, 4));//values["precision"]));
+	$("#product_pret_fara_tva").val(price);
+	$("#product_tva_unitar1").val(number_format(values["tva_unitar"]/values["quantity"], values["precision"], ".", "", true));
+	$("#product_tva_unitar").val(values["tva_unitar"]);
+	//var special_gvi = false;
+	if (values["tva_inclus"]) { //console.log("here");
+		if (values["init_price"] > 0) {
+			ppct = number_format(values["init_total"]/values["quantity"], values["precision"], ".", "", true);
+		} else {
+			if (values.hasOwnProperty("user_price")) {
+				var ppct = values["user_price"];
+			} else {
+				var ppct = number_format(values["init_total"]/values["quantity"], values["precision"], ".", "", true);
+			}
+		}
+		$("#product_with_vat").val("1");
+		//$("#product_init_price_tvai").val(values["init_price_tvai"]);
+	} else {
+		var ppct = number_format(parseFloat(values["pret_fara_tva"])+parseFloat(values["pret_fara_tva"]*(parseFloat(values["cota_tva"])/100)), values["precision"], ".", "", true);
+	} //console.log("ppct", ppct);
+	
+	var has_pr_exchange = false;
+	$("#product_pret_cu_tva").val(Math.abs(ppct));
+	if (values["doc_currency"] == $("#currency").val()) {
+		if (values["has_pr_exchange"]) {
+			$(".pr-exchange").removeClass("hidden");
+			$("#vr_div").addClass("form-inline");
+			has_pr_exchange = true;
+		} else {
+            $(".pr-exchange").addClass("hidden");
+			$("#vr_div").removeClass("form-inline");
+        }
+	} else { // different doc currency
+		// new doc or edit draft ... get er from backend
+		calculate_currencies_exchange(values["currency"], price, "product", values, !$("#currency").prop("disabled"));
+	}
+	if ($("#language").val() == "RO") {
+		$("#translation_issue").hide();
+	} else {
+		$("#translation_issue").show();
+	}
+	$("#pstorno").val((values["storno"]) ? "1" : "");
+	modify_tva_mode();
+	$('#form-add-product').find('button[data-type="submit"]').html(language.modify_product);
+	$('#form-add-product').find('.modal-title-text').html(language.modify_product);
+	if ($("#variables-example-product_name").length > 0) {
+		variables_ap_name("product_name");
+	}
+	if (values["tva_inclus"]) { //
+		$("#product_pret_cu_tva").prop("readonly", false);
+		$("#product_pret_fara_tva1").prop("readonly", true);
+		if (has_pr_exchange && values["tva_inclus"]) {
+			$("#product_price_ex").prop("readonly", true);
+		}
+		//$(".product_price_ex_holder").addClass("hidden");
+		//$(".price_with_vat_vlt_holder").removeClass("hidden");
+		//$(".price_currency_holder_prd").html("("+($("#product_currency option:selected").text()).substr(0, 3)+")"); 
+		/*if (special_gvi) {
+			$("#product_pret_cu_tva").prop("readonly", true);
+			$("#product_pret_fara_tva1").prop("readonly", false);
+		}*/
+	} else {
+		if (has_pr_exchange) {
+			$("#product_price_ex").prop("readonly", false);
+			$("#product_pret_fara_tva1").prop("readonly", true);
+			$("#product_pret_cu_tva").prop("readonly", true);
+		} else {
+			$("#product_pret_cu_tva").prop("readonly", true);
+			$("#product_pret_fara_tva1").prop("readonly", false);
+		}
+	} 
+	edit_product_tax($('#form-add-product'), values, true);
+	edit_product_others($('#form-add-product'), values, true);
+	if (products.isStornoByStock() ||  
+		(values.hasOwnProperty("aq_price_3") && values["aq_price_3"] && values["aq_price_3"] != "0") ) {//values["aq_price_3"]) {
+		$("#aq_price_3").val(values["aq_price_3"]);
+		if (values.hasOwnProperty("aq3_tva_inclus")) {
+			$("#aq3_tva_inclus").val(values["aq3_tva_inclus"]);
+		} else {
+			$("#aq3_tva_inclus").val(0);
+		}
+		if (values.hasOwnProperty("aq3_cota_tva_option")) {
+			$("#aq3_cota_tva").val(values["aq3_cota_tva_option"]);
+		} else {
+			$("#aq3_cota_tva").val("d1");
+		}
+		if (!is_service(values["pr_type"])) {
+			$(".aq3-price-div").removeClass("hidden");
+		}
+		if (!values.hasOwnProperty("pr_type") || !values["pr_type"] || values["pr_type"] == "0") {
+			show_product_type();
+		}
+	} else if (products.isDocFromFacturare()) {
+		if (!values.hasOwnProperty("pr_type") || !values["pr_type"] || values["pr_type"] == "0") {
+			show_product_type();
+		}
+	} else if (products.getUseStock()) {
+		if (!values["has_issued2"] || values["has_issued2"] == "0") {
+			$("#product_pr_type").val(values["pr_type"]);
+			$("#product_pr_type").selectpicker('refresh');
+			show_product_type();
+		}
+	}
+	if ($("#show_is_etransport").is(":checked")) {
+		$("#product_cod_nc_id").val(values["cod_nc_id"]);
+		$("#product_cod_nc").val(values["cod_nc"]);
+		$("#product_scop_operatiune_id").val(values["scop_operatiune_id"]);
+		$("#product_scop_operatiune").val(values["scop_operatiune"]);
+		$("#product_gross_weight").val(values["gross_weight"]);
+		$("#product_net_weight").val(values["net_weight"]);
+	}
+    if (typeof set_only_values === 'undefined' || !set_only_values) {
+        $('#modal-add-product').modal('toggle');
+    }
+	recalc_prices_product();
+	if (!products.isExpense()) {//console.log("prdct=",product);
+		if (!is_service(values["pr_type"]) && values["gestiune_type"] == "2") { // override
+			$("#product_currency").val(99).prop("disabled", true);
+			if (has_pr_exchange) {
+				$("#product_price_ex").prop("readonly", true);//console.log(has_pr_exchange, values);
+				$("#product_pret_fara_tva1").prop("readonly", false);
+				$("#product_pret_cu_tva").prop("readonly", true);
+			}
+			//values["currency"] = 99;
+		} else { //console.log("here");
+			$("#product_currency").prop("disabled", false);
+		}
+	} //console.log(values);
+	//show_dialog("modal_dialog_produse", language.modify_product, 1000, "auto", false, true, false,'','','', true);
+}
+function show_dialog_produs_issue_tr(entry_id) {
+	var values = products.getEntries(entry_id);//console.log(values);
+	if (values.hasOwnProperty("name1_new")) {
+		$("#product_name1").val(values["name1_new"]);
+	} else {
+		$("#product_name1").val(values["name1"]);
+	}
+	$("#product_name1_id").val(values["name1_id"]);
+	if (values.hasOwnProperty("name2_new")) {
+		$("#product_name2").val(values["name2_new"]);
+	} else {
+		$("#product_name2").val(values["name2"]);
+	}
+	$("#product_name2_id").val(values["name2_id"]);
+	$("#product_name1_note").html(language.stock_simple+": "+values.stoc+" "+values.um);
+	$("#product_name1_id").data("stoc", values.stoc);
+	$("#product_name1_pr_type").val(values["type1"]);
+	$("#product_name2_pr_type").val(values["type2"]);
+	$("#product_cod_produs1").val(values["cod_produs1"]);
+	$("#product_cod_produs2").val(values["cod_produs2"]);
+	show_dialog_expense_issue(entry_id);
+	// overwrite default
+	if (values["pret_fara_tva_2"] === "undefined" || isNaN(values["pret_fara_tva_2"])) {
+		values["pret_fara_tva_2"] = "";
+	}
+	$("#product_pret_fara_tva_2").val(values["pret_fara_tva_2"]);
+	if (values.hasOwnProperty("aq_prices")) {
+		set_tooltip_sale_price(values.aq_prices);
+	}
+}
+function show_dialog_produs_issue_inv(entry_id) {
+	var values = products.getEntries(entry_id);//console.log(values);
+	$("#product_name").val(values["name"]);
+	$("#product_name_id").val(values["name_id"]);
+	$("#product_name_note").html(language.scriptic+": "+values.stoc+" "+values.um);
+	$("#product_name_id").data("stoc", values.stoc);
+	$("#product_name_pr_type").val(values["pr_type"]);
+	if (values.no_cost == "1") {
+		$(".no-cost-div").removeClass("hidden");
+		if (products.isCV()) {
+			$(".no-cost-div-cv").removeClass("hidden");
+			$(".no-cost-div-gv").addClass("hidden");
+		} else {
+			$(".no-cost-div-gv").removeClass("hidden");
+			$(".no-cost-div-cv").addClass("hidden");
+		}
+	} else {
+		$(".no-cost-div").addClass("hidden");
+		$(".no-cost-div-cv").addClass("hidden");
+		$(".no-cost-div-gv").addClass("hidden");
+	}
+	show_dialog_expense_issue(entry_id);
+	if (!values.hasOwnProperty("tva_inclus")) {
+		$("#product_tva_inclus").val("0");
+	}
+	if (!values.hasOwnProperty("tva_inclus_2")) {
+		$("#product_tva_inclus_2").val("0");
+	}
+	if (!values.hasOwnProperty("cota_tva") || !values["cota_tva"]) {
+		$("#product_cota_tva").val("d1");
+	}
+	if (values.hasOwnProperty("pret_fara_tva") && values["pret_fara_tva"] > 0) {
+		$("#product_pret_fara_tva").val(values["pret_fara_tva"]);
+	} else {
+		$("#product_pret_fara_tva").val("");
+	}
+	if (values.hasOwnProperty("pret_fara_tva_2") && values["pret_fara_tva_2"] > 0) {
+		$("#product_pret_fara_tva_2").val(values["pret_fara_tva_2"]);
+	} else {
+		$("#product_pret_fara_tva_2").val("");
+	}
+}
+function show_dialog_produs_issue_bc(entry_id) {
+	var values = products.getEntries(entry_id);console.log(values);
+	$("#product_name").val(values["name"]);
+	$("#product_name_id").val(values["name_id"]);
+	$("#product_name_note").html(language.stock_simple+": "+values.stoc+" "+values.um);
+	$("#product_name_id").data("stoc", values.stoc);
+	$("#product_name_pr_type").val(values["type"]);
+	show_dialog_expense_issue(entry_id);
+	$("#product_name_id").val(values["name_id"]); // set it here because below function reset's it
+}
+function show_dialog_expense_issue(entry_id) {
+	$("#pid").val("");
+	$("#entry_id").val(entry_id);
+	var values = products.getEntries(entry_id);
+	$("#pfk_doc_id").val(values["fk_doc_id"]);//console.log(values);
+	$("#spcpl_modal").val(values["spcpl"]);
+	$("#product_name_id").val(values["ref_id"]);
+	$("#product_exchange_ratex_2").val(values["exch_b"]);
+	$("#product_cat_id").val(values["fk_cat_id"]);
+	$("#product_cat_id").data("is-stoc", values["is_stoc"]);
+	$("#product_cat_id").data("is-expense", values["is_expense"]);
+	$("#product_cat_id").data("is-vandabil", values["is_vandabil"]);
+	$("#product_has_issued2").val(values["has_issued2"]);
+	$("#product_sgr").val(values.sgr).filter('[type="checkbox"]').prop('checked', parseInt(values.sgr) === 1);
+	if (window.hasOwnProperty('handleCategory')) {
+		handleCategory(values.fk_cat_id, null, $("#product_sgr"));
+	}
+	if (window.hasOwnProperty("check_products_fields_etransport")) {
+		check_products_fields_etransport(values["fk_cat_id"]);
+	}
+	if (window.hasOwnProperty("check_products_cod_nc")) {
+		check_products_cod_nc(values["fk_cat_id"]);
+	}
+	if (values["has_issued2"] == "1") {
+		$("#product_um").prop("disabled", true);
+		$("#b-catDropdownP").addClass("disabled");
+		//$("#product_cod_produs").prop("disabled", true);
+	} else {
+		$("#product_um").prop("disabled", false);
+		$("#b-catDropdownP").removeClass("disabled");
+		//$("#product_cod_produs").prop("disabled", false);
+	}
+	if (values.hasOwnProperty("name_new")) {
+		$("#product_name").val(values["name_new"]);
+	} else {
+		$("#product_name").val(values["name"]);
+	}
+	if (values["description"]) {
+		$("#product_cat").html(values["description"]);
+	}
+	//$("#product_description").val(values["description"]);
+	if (values.hasOwnProperty("cod_produs_new")) {
+		$("#product_cod_produs").val(values["cod_produs_new"]);
+	} else {
+		$("#product_cod_produs").val(values["cod_produs"]);
+	}
+	$("#product_cod_produs").data("old-code", $("#product_cod_produs").val());
+	if (values["fk_gestiune_id"] && products.isStockType(values["fk_cat_id"])) {//values["is_stoc"]) {
+		$("#product_gestiune_id").val(values["fk_gestiune_id"]);
+		$("#product_gestiune").val(values["gestiune_name"]);
+		$("#product_gestiune_id").data("punct_lucru", values["punct_lucru"]);
+		$("#product_gestiune_id").data("type", values["gestiune_type"]);
+	} else if (values["punct_lucru"]) {
+		$("#product_pl_id").val(values["punct_lucru"]);
+		$("#product_pl").val(values["pl_name"]);
+	}
+	$("#product_um").val(values["um"]);
+	//$("#product_name_translation").val(values["name_translation"]);
+	//$("#product_um_translation").val(values["um_translation"]);
+	$("#product_quantity").val(values["quantity"]);
+	$("#product_quantity_2").val(values["quantity_2"]);
+	// modal
+	var gestiune_class = "gestiune_area"; //console.log(values);return false;
+	if (values["is_stoc"]) {
+		$(".stock-add-fields").removeClass("hidden");
+		$(".has-additional-labels").addClass("form-inline");
+		//$(".modal-product-name").removeClass("col-sm-12").removeClass("col-md-12").removeClass("col-lg-12");
+		//$(".modal-product-name").addClass("col-sm-6").addClass("col-md-6").addClass("col-lg-6");
+		//$("."+gestiune_class).removeClass("hidden");
+	} else {
+		$("#modal-add-expense .stock-add-fields").addClass("hidden");
+		//if (products.isInterDocMode()) {
+		//	$(".stock-add-fields-m").removeClass("hidden");
+		//}
+		$(".has-additional-labels").removeClass("form-inline");
+		//$(".modal-product-name").removeClass("col-sm-6").removeClass("col-md-6").removeClass("col-lg-6");
+		//$(".modal-product-name").addClass("col-sm-12").addClass("col-md-12").addClass("col-lg-12");
+		//$("."+gestiune_class).addClass("hidden");
+	}
+	products.elongateCategory(values["is_stoc"]);
+	if (values["fk_cat_id"] == 76 || values["is_vandabil"] == "1") { // marfa or vandabil
+		$(".stock-add-fields-m").removeClass("hidden");
+		//$(".doc-parent-div-p").addClass("additional-label-div-st-p");
+	} else {
+		$("#modal-add-expense .stock-add-fields-m").addClass("hidden");
+		//if (products.isInterDocMode()) {
+		//	$(".stock-add-fields-m").removeClass("hidden");
+		//}
+		//$(".doc-parent-div-p").removeClass("additional-label-div-st-p");
+	} //console.log("tva_inclus_2", parseInt(values["tva_inclus_2"]));
+	if (typeof values["tva_inclus"] === 'boolean') {
+		values["tva_inclus"] = values["tva_inclus"] ? 1 : 0;
+	}
+	if (typeof values["tva_inclus_2"] === 'boolean') {
+		values["tva_inclus_2"] = values["tva_inclus_2"] ? 1 : 0;
+	}
+	$("#product_cota_tva").val(values["cota_tva_option"]);
+	$("#product_tva_inclus").val(values["tva_inclus"]);
+	$("#product_cota_tva_2").val(values["cota_tva_option_2"]);
+	$("#product_tva_inclus_2").val(values["tva_inclus_2"]);
+	//$("#product_pret_fara_tva").val(values["pret_fara_tva"]);
+	//$("#product_pret_fara_tva_2").val(values["pret_fara_tva_2"]);
+	// new prices
+	var ppp;
+	if(values.hasOwnProperty("user_price_1")) {
+		ppp = values["user_price_1"];
+	} else {
+		ppp = values["init_total"]/values["quantity"];
+		ppp = number_format(ppp, get_precision(ppp));
+	}
+	$("#product_pret_fara_tva").val(ppp);//pret_fara_tva"]);
+	var pret_2;
+	if(values.hasOwnProperty("user_price")) { // values["tva_inclus_2"] && 
+		pret_2 = values["user_price"];
+	} else {
+		pret_2 = values["init_total_2"]/values["quantity"];
+		pret_2 = number_format(pret_2, get_precision(pret_2));
+	}
+	if (pret_2 == "0") {
+		pret_2 = "";
+	}
+	$("#product_pret_fara_tva_2").val(pret_2);//pret_fara_tva_2"]);
+	if (isNaN(values["addition"])) {
+		values["addition"] = 0;
+	}
+	if (values["addition"] == "0") {
+		values["addition"] = "";
+	}
+	$("#product_addition").val(values["addition"]);
+	$("#product_pret_fara_tva").prop("readonly", false);
+	$("#product_currency").val(values["currency"]);
+	$("#product_currency_2").val(values["currency_2"]);
+	$("#product_currency_2").data("old-value", values["currency_2"]);
+	if (values["gestiune_type"] == "2") {
+		$("#product_currency_2").prop("disabled", true);
+	}
+	var custom_text = language.modify_product;
+	var distribute_placeholder = "";
+	if (values["is_expense"] == "1") {
+		custom_text = language.edit;
+		if (products.isImpoziteTaxe(values["fk_cat_id"])) {
+			custom_text += " "+language.tax;
+			distribute_placeholder = language.tax;
+		} else {
+			custom_text += " "+language.expense;
+			distribute_placeholder = language.expense;
+		}
+		if (products.canApplyDistribute(values["fk_cat_id"])) {
+			$("#distribute-table").removeClass("hidden");
+		} else {
+			$("#distribute-table").addClass("hidden");
+		}
+		products.distributeRefineLocation(values["fk_cat_id"]);
+	}
+	$(".distribute_placeholder").html(distribute_placeholder);
+	$('#modal-add-expense').find('.modal-title-text').html(custom_text);
+	$('#modal-add-expense').find('button[data-type="submit"]').html(custom_text);
+		
+	if (values["has_distribute"] == "1") { // already has distribute -> init it
+		$("#distribute-type").val(values["distribute_type"]);
+		$("#distribute-type-location").val(values["distribute_type_location"]);
+		$(".doc_name_plh").html(values["distribute_doc_name"]); 
+		$(".distribute-second").removeClass("hidden");
+		if (values["distribute_type_location"] == "2") {
+			$(".distribute-third").removeClass("hidden");
+			$(".cdd_label").html(language.delete_doc_txt);
+		}
+		products.initDistribute(values);
+	}
+	products.checkModalExpenseFields(values["fk_cat_id"]);
+	if (values["cod_nc_id"]) {
+		$("#product_cod_nc_id").val(values["cod_nc_id"]);
+		$("#product_cod_nc").val(values["cod_nc"]);
+	}
+	if ($("#show_is_etransport").is(":checked")) {
+		$("#product_scop_operatiune_id").val(values["scop_operatiune_id"]);
+		$("#product_scop_operatiune").val(values["scop_operatiune"]);
+		$("#product_gross_weight").val(values["gross_weight"]);
+		$("#product_net_weight").val(values["net_weight"]);
+	}
+	$('#modal-add-expense').modal('toggle');
+}
+function modify_tva_mode() {
+	/*
+	if ($("#product_tva_inclus1").prop('checked')) {
+		$("#product_pret_fara_tva").prop("readonly", true).addClass("disabled");
+		$("#product_pret_cu_tva").prop("readonly", false).removeClass("disabled");
+	} else {
+		$("#product_pret_fara_tva").prop("readonly", false).removeClass("disabled");
+		$("#product_pret_cu_tva").prop("readonly", true).addClass("disabled");
+	}*/
+}
+function recalc_prices_product(el) {//console.log("recalc");
+	if (typeof el === 'undefined') {
+		el = "product_price_ex";
+	}
+	var with_vat = false;
+	if ($("#product_with_vat").val() && $("#product_pret_cu_tva").val() !== undefined) {
+		with_vat = true;
+	}
+	var cota = $("#product_cota_tva option:selected").text();
+		cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+	if (!products.isExpense() && products.isCotaTi($("#product_cota_tva").val())) {
+		cota = 0;
+	}
+	var precision = get_user_precision();
+	var has_pr_exchange = false; 
+	if (!$(".pr-exchange").hasClass('hidden')) {
+		has_pr_exchange = true;
+	}
+	var pret;
+	if (with_vat) {
+		pret = parseFloat($("#product_pret_cu_tva").val());
+	} else {
+		if (has_pr_exchange) {
+			if (el == "product_pret_fara_tva1") {
+				pret = parseFloat($("#product_pret_fara_tva1").val()) * parseFloat($("#product_exchange_rate").val());
+			} else {
+				pret = parseFloat($("#product_price_ex").val());
+			}
+		} else {
+			pret = parseFloat($("#product_pret_fara_tva1").val());
+		}
+	}
+	pret = number_format(pret, precision, ".", "", true);
+	var quantity = Math.abs($("#product_quantity").val());
+	//console.log("pret=",pret, "with_vat", with_vat);
+	//var pret_total = parseFloat(pret);//*parseFloat(quantity);
+	//console.log(pret_total);
+	var quantity = number_format($("#product_quantity").val(), precision, ".", "", true);
+	var tva, pret_fara_tva, pret_cu_tva;
+	if (with_vat) { //console.log(pret, cota, precision);
+		pret_fara_tva = pret/(1+cota/100);//number_format(pret/(1+cota/100), precision, ".", "", true);console.log("pft",pret_fara_tva);
+		tva = number_format(pret-pret_fara_tva, precision, ".", "", true);
+		pret_cu_tva = pret;
+		$("#product_tva_unitar").val(number_format((pret-pret_fara_tva)*quantity,precision));
+		if (has_pr_exchange) {
+			$("#product_pret_fara_tva1").val(number_format(pret_fara_tva/parseFloat($("#product_exchange_rate").val()), precision));
+			$("#product_pret_fara_tva").val(pret_fara_tva/parseFloat($("#product_exchange_rate").val()));
+			$("#product_price_ex").val(number_format(pret_fara_tva, precision));
+		} else {
+			$("#product_pret_fara_tva1").val(number_format(pret_fara_tva, precision));
+			$("#product_pret_fara_tva").val(pret_fara_tva);
+		}
+	} else {
+		pret_fara_tva = pret;
+		tva = number_format((cota/100)*pret, precision);
+		pret_cu_tva = pret_fara_tva + tva;
+		$("#product_tva_unitar").val(number_format((pret_fara_tva*quantity)*(cota/100),precision));
+		if (has_pr_exchange) {
+			$("#product_pret_fara_tva1").val(number_format(pret_fara_tva/parseFloat($("#product_exchange_rate").val()), precision));
+			$("#product_pret_fara_tva").val(pret_fara_tva/parseFloat($("#product_exchange_rate").val()));
+			if (el == "product_pret_fara_tva1") {
+				$("#product_price_ex").val(number_format(pret, precision));
+			}
+		} 
+		$("#product_pret_cu_tva").val(number_format(pret_cu_tva, precision));
+	}
+	//console.log("final: ",pret, pret_fara_tva, tva);
+	//var tva = number_format((cota/100)*pret, precision);
+	if (!has_pr_exchange) {
+		//$("#product_pret_fara_tva").val(number_format(pret_fara_tva, precision));
+	}
+	$("#product_tva_unitar1").val(number_format(tva, precision));
+	//$("#product_pret_cu_tva").val(number_format(pret_cu_tva, precision));
+}
+function show_dialog_produs_discount(entry_id) {
+	$("#discount_percent").prop('checked', true);
+	$("#discount_valoare").val("");
+	change_discount_mode();
+	discount_currency_text = ($("#currency option:selected").text()).substr(0, 3);
+	$("#discount_entry_id").val(entry_id);
+	$('#discount_modal').modal('toggle');
+}
+function show_dialog_discount_total() {
+    var canAddTotalDiscount = products.canAddTotalDiscount();
+	if (!canAddTotalDiscount) {
+        if (canAddTotalDiscount === false) {
+            show_message(language.discount_last_is_discount);
+        }
+		return;
+	}
+	if (!products.hasSameCoteTVA()) {
+		show_message(language.discount_different_vat);
+		return;
+	}
+	show_dialog_produs_discount("");
+}
+function apply_discount() {
+	if (!update_discount()) {
+		show_message(language.discount_invalid);
+		//alert(language.discount_invalid);
+		return false;
+	}
+	// add discount
+	products.applyDiscount();
+	$('#discount_modal').modal('toggle')
+	
+	return true;
+}
+function recalc_discounts(entry_id) {
+	//console.log(entry_id);return;
+	if ($("#entry_item_"+entry_id+"d").length > 0) {
+		var product = products.setIdToProduct(entry_id+"d", products.getProductForDiscount("single", entry_id));
+		//console.log("product1:", product);
+		$("#entry_item_"+entry_id+"d").html(products.createProductRow(entry_id+"d", product));
+		products.replaceItem(product);
+	} 
+	if (products.hasDiscount(entry_id)) {
+		var gr_id = products.getGroupIdByProductId(entry_id);
+		var product = products.setIdToProduct(gr_id, products.getProductForDiscount("total", entry_id));
+		//console.log(gr_id, product);
+		$("#entry_item_"+gr_id).html(products.createProductRow(gr_id, product));
+		products.replaceItem(product);
+	}
+	products.recalcTotals(false);
+	products.checkCorrection();
+	return true;
+}
+function activate_collect() {
+	var creditsSelected = $('#credits').val() != '',
+		creditsHolder = $('#credits-holder');
+	if ($("#collect").prop('checked')) {
+		if (creditsSelected) {
+			creditsHolder.removeClass('hidden');
+		} else {
+			creditsHolder.addClass('hidden');
+		}
+		$("#collect-holder").show();
+	} else {
+		creditsHolder.removeClass('hidden');
+		$("#collect-holder").hide();
+	}
+	modify_collect_type();
+}
+function modify_collect_type() {
+	var type = $("#collect_type").val();//console.log(type);
+	// if is chitanta show/hide series+next
+	if (type == 1) {
+		$("#collect_type_aux").removeClass('hidden');
+		$(".doc-series-label").removeClass('hidden');
+		$("#bon-holder-aux").addClass('hidden');
+		$(".collect-bon-label").addClass('hidden');
+		$("#other-holder-aux").addClass('hidden');
+		$(".collect-other-label").addClass('hidden');
+	} else if (type == 3) {
+		$("#collect_type_aux").addClass('hidden');
+		$(".doc-series-label").addClass('hidden');
+		$("#bon-holder-aux").removeClass('hidden');
+		$(".collect-bon-label").removeClass('hidden');
+		$("#other-holder-aux").addClass('hidden');
+		$(".collect-other-label").addClass('hidden');
+	} else {
+		$("#collect_type_aux").addClass('hidden');
+		$(".doc-series-label").addClass('hidden');
+		$("#bon-holder-aux").addClass('hidden');
+		$(".collect-bon-label").addClass('hidden');
+		$("#other-holder-aux").removeClass('hidden');
+		$(".collect-other-label").removeClass('hidden');
+	}
+}
+function modify_payment_type() {
+	var type = $("#payment_type").val();//console.log(type);
+	// if is chitanta show/hide series+next
+	if (type == 3) {
+		$(".doc-series").addClass('hidden');
+		$("#bon-holder-aux").removeClass('hidden');
+		$(".payment-bon-label").removeClass('hidden');
+	} else {
+		$(".doc-series").removeClass('hidden');
+		$("#bon-holder-aux").addClass('hidden');
+		$(".payment-bon-label").addClass('hidden');
+	}
+}
+function check_collect_issue() {
+	var message = "";
+	if($("#operation-holder").is(":visible")) {
+		if ($.trim($("#collect_value").val()) == "" || !$.isNumeric($("#collect_value").val())) {
+			message += language.fill_collect_valid_value+"<br>";
+		} else {
+			var collect = parseFloat($("#collect_value").val());
+			if (collect <= 0) {
+				message += language.fill_collect_positive+"<br>";
+			}
+			var total = parseFloat($("#total").val());
+			if (collect > total) {
+				if (!confirm(language.fill_collect_bigger_total+"?")) {
+					return "confirm";
+				}
+			}
+			var collect_type = $("#collect_type").val();
+			if (collect_type == 3) {
+				if (collect != total) {
+					message += language.fill_collect_all+"<br>";
+				}
+				if (get_user_precision() > 2) {
+					message += language.fill_collect_precision+"<br>";
+				}
+				if (products.hasDiscountFix()) {
+					message += language.fill_collect_fix_value+"<br>";
+				}
+			}
+		}
+		if ($("#collect_type").val() != 1 && $("#collect_type").val() != 3 && $.trim($("#doc_number_aux").val()) == "") {
+			message += language.fill_document_number+"<br>";
+		}
+		if ($.trim($("#mentions_receipt").val()) == "") {
+			message += language.fill_mentions + "<br>";
+		}
+	}
+	return message;
+}
+function show_date_aditionale() {
+	if($("#date-aditionale").is(":visible")) {
+		$("#date-aditionale").hide();
+		$("#has_aditionale").val(0);
+	} else {
+		$("#date-aditionale").show();
+		$("#has_aditionale").val(1);
+	}
+}
+function show_client_details_edit(client, hide_edit) {
+	if ($.isEmptyObject(client)) return;
+	client["client_id"] = client["fk_client_id"];
+	$("#client_name").val(client["company"]);
+	$("#client_name_id").val(client["fk_client_id"]);
+	show_client_details(client, client["fk_doc_id"], hide_edit);
+	if (window.hasOwnProperty("prev_client_selected")) {
+		prev_client_selected.platitor_tva = client.platitor_tva;
+	}
+	//console.log(client);
+}
+function show_supplier_details_edit(supplier, hide_edit) {
+	if ($.isEmptyObject(supplier)) return;
+	supplier["supplier_id"] = supplier["fk_supplier_id"];
+	$("#supplier_name").val(supplier["company"]);
+	$("#supplier_name_id").val(supplier["fk_supplier_id"]);
+	//show_client_details(client, client["fk_doc_id"], hide_edit);
+	//console.log(client);
+}
+function show_doc_preview() {
+	var doc_id = $("#doc_id").val(),
+		doc_model = $("#doc_model").val(),
+		doc_color = $("#doc_color").val(),
+		doc_format = $("#doc_format").val();
+	var jqxhr = getjqxhr("/docs/get_preview/"+$("#doc").val()+"/"+doc_id, {"doc_model": doc_model, "doc_color": doc_color, "doc_format": doc_format});
+		jqxhr.done(function(data) {
+			check_login(data);//console.log(data);
+			$("#preview_holder").html(data);
+			wait_cursor(false);
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function change_doc_model(model, docType) { // change selected model
+	if (typeof docType === 'undefined') {
+		docType = 'invoice';
+	}
+	var jqxhr = getjqxhr("/docs/do_set_model/" + docType + "/"+$("#preview_doc_id").val(), {"model": model}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log(data);
+		//location.reload();
+		$('.invoice_frame')[0].contentWindow.location.reload(true);
+		$('.invoice_frame').on('load', function() {
+			wait_cursor(false);
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function change_doc_nr(nr, docType) { // change selected nrs
+	if (typeof docType === 'undefined') {
+		docType = 'receipt';
+	}
+	var jqxhr = getjqxhr("/docs/do_set_nr/" + docType + "/"+$("#preview_doc_id").val(), {"nr": nr}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log(data);
+		//location.reload();
+		$('.invoice_frame')[0].contentWindow.location.reload(true);
+		$('.invoice_frame').on('load', function() {
+			wait_cursor(false);
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function change_doc_color(color, docType) { // change selected color
+	if (typeof docType === 'undefined') {
+		docType = 'invoice';
+	}
+	var jqxhr = getjqxhr("/docs/do_set_color/" + docType + "/"+$("#preview_doc_id").val(), {"color": color}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);//console.log(data);
+			//location.reload();
+			$('.invoice_frame')[0].contentWindow.location.reload(true);
+			$('.invoice_frame').on('load', function() {
+				wait_cursor(false);
+			});
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function change_doc_format(format, docType) { // change selected format
+	if (typeof docType === 'undefined') {
+		docType = 'invoice';
+	} //console.log(format);return;
+	var jqxhr = getjqxhr("/docs/do_set_format/" + docType + "/"+$("#preview_doc_id").val(), {"format": format}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log(data);
+		location.reload();
+		//$('.invoice_frame')[0].contentWindow.location.reload(true);
+		//$('.invoice_frame').on('load', function() {
+		//	wait_cursor(false);
+		//});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function change_doc_color_xml(color) { // change selected color
+	if (typeof docType === 'undefined') {
+		docType = 'invoice';
+	}
+	var jqxhr = getjqxhr("/expenses/do_set_color_model/"+$("#preview_doc_id").val(), {"color": color}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);//console.log(data);
+			//location.reload();
+			$('.invoice_frame')[0].contentWindow.location.reload(true);
+			$('.invoice_frame').on('load', function() {
+				wait_cursor(false);
+			});
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function change_doc_model_xml(model) { // change selected model
+	if (typeof docType === 'undefined') {
+		docType = 'invoice';
+	} //console.log(format);return;
+	var jqxhr = getjqxhr("/expenses/do_set_color_model/"+$("#preview_doc_id").val(), {"model": model}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log(data);
+		location.reload();
+		//$('.invoice_frame')[0].contentWindow.location.reload(true);
+		//$('.invoice_frame').on('load', function() {
+		//	wait_cursor(false);
+		//});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function print_doc(url) { // show iframe_print_id for printing
+	$("#iframe_print_id").attr("src", url);
+
+	/*var iframe = document.frames ? window.frames.frames["iframe_print_id"] : document.getElementById("iframe_print_id");
+	var ifWin = iframe;//.contentWindow || iframe;//console.log(ifWin);
+	try { // chrome printing
+		ifWin.focus();
+		ifWin.print();
+	} catch(e) { //console.log(e);console.log(ifWin);
+		window.print(false);
+		//or when you get Invalid calling object error for IE9 and above
+		//set the browser into IE8 compatibility mode will work
+	}//*/
+
+	//return false;
+	//$("#iframe_print_id").attr("src", url);
+	//console.log(window.frames.iframe_print_id);
+	//window.frames.iframe_print_id.focus();
+	//console.log(window.frames["iframe_print_id"]);
+	//document.getElementById('iframe_print_id').contentWindow.printDoc();
+	//window.frames.iframe_print_id.print();
+	//window.frames.iframe_print_id.printDoc();
+	//$("#iframe_print_id")[0].focus();
+	//$("#iframe_print_id")[0].contentWindow.print();
+}
+function collectDoc(docIds, in_frame, has_bf, doc_nr) {
+	if (typeof in_frame === 'undefined'){
+    	in_frame = false;
+	}
+	if (typeof has_bf === "undefined") {
+		has_bf = false;
+	}
+	if (has_bf) {
+		$("#has_bfs").val(has_bf);
+		$("#has_bfs_doc_nr").val(doc_nr);
+		//show_message("err|"+sprintf(language.new_collect_for_bf_invoice, doc_nr, has_bf), false);
+		//return;
+	}
+	var form = $('#collect-form'),
+		collectType = $('#collect_type', form);
+	$('#fk_invoice_ids', form).val(docIds);
+	$('#total', form).val('0');
+	$('#collect_id', form).val('');// reset in case some collect has been modified
+	set_date_picker_value("date", new Date(), in_frame);
+	docIds = docIds.split(',');
+
+	var jqxhr = getjqxhr("/nomenclator/get_client_values/", {fk_doc_id: docIds[0]}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		wait_cursor(false);
+		$('#client_name_id').val(data.fk_client_id);
+		$('#client_name').val(data.company);
+	}).fail(function() {
+		show_error_page();
+	});//*/
+
+	for (var i in docIds) {
+		jqxhr = getjqxhr("/utils/get_doc/", {id: docIds[i], formated: 1, produse: 1}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			var total = parseFloat(data.more_to_collect);
+            if (data.produse) {
+                for (var index in data.produse) {
+                    data.produse[index]["id"] = data.produse[index]["id_item"];
+                    data.produse[index]["ref_id"] = data.produse[index]["fk_produs_id"];
+                    //data.produse[index]["fk_dummy_pr"] = data.produse[index]["dummy_pr"];
+                }
+            }
+			$('#total', form).data("total", total).val(number_format(total, data.user_precision));
+			$('#total', form).data("partial", (data.partialy_collected > 0) ? 1 : 0);
+			$('#curs', form).val(data.exchange_rate);
+			$('#currency', form).prop('disabled', false).val(data.currency_id).change().prop('disabled', true);
+			$('#language_id', form).val(data.language);
+			$('#language', form).val(data.language);
+			$('#mentions', form).val(data.c_dialog_mentions);
+			$('#user_precision', form).val(data.user_precision);
+			$('input[name="invoice_name"]', form).val(data.series_ao);
+			$('*[name="punct_lucru"]', form).val(data.punct_lucru).prop('disabled', true);
+			$('#all_products', form).val(JSON.stringify(data.produse));
+            
+            if (Math.abs($('#total', form).data('total')) < 0.0001) {
+                show_message({
+                    'type':'err',
+                    'message':language.invoice_was_collected
+                });
+                return false;
+            }
+            if (in_frame) {
+                $("#cash_now_modal", window.parent.document).modal({backdrop:false}).modal('show');
+            } else {
+                $("#cash_now_modal").modal('show');
+            }
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+
+	form.submit(function() {
+		return false;
+	});
+}
+function onChangeCurrency(th, force_update, exchangeRateDate, show_mm) {
+	show_exchange_rate(th.val(), undefined, force_update, undefined, exchangeRateDate);
+	if (th.val() != 99) {
+		$(".price_currency_holder").html("("+($("#currency option:selected").text()).substr(0, 3)+")");
+		$(".price_currency_holder_1").html(($("#currency option:selected").text()).substr(0, 3)); 
+	} else {
+		$(".price_currency_holder").html("");
+		$(".price_currency_holder_1").html("RON");
+	}
+	// recalc product price
+	calculate_currencies_exchange($('#ap_currency').val(), $('#ap_price').val());
+	if (typeof show_mm === 'undefined') {
+		show_mm = false;
+	}
+	// recalc totals
+	if (typeof products !== 'undefined') {
+		products.recalcTotals();
+		// show message
+		if (show_mm && products.hasProducts()) {
+			if (products.isExpense()) {
+				show_message("err|"+language.alert_change_expense_currency);
+			} else {
+				show_message("err|"+language.alert_change_doc_currency);
+			}
+		}
+	}
+}
+function payExpences(docIds, in_frame) {
+	if (typeof in_frame === 'undefined'){
+    	in_frame = false;
+	}
+	var form = $('#expence-form'),
+		collectType = $('#expence_type', form);
+	$('#fk_expense_ids', form).val(docIds);
+	$('#total', form).val('0');
+	$('#payment_id', form).val('');// reset in case some payment has been modified
+	set_date_picker_value("pay_date", new Date(), in_frame);
+	docIds = docIds.split(',');
+
+	var jqxhr = getjqxhr("/nomenclator/get_supplier_values/", {fk_doc_id: docIds[0]}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		wait_cursor(false);
+		$('#supplier_name_id').val(data.fk_supplier_id);
+		$('#supplier_name').val(data.company);
+	}).fail(function() {
+		show_error_page();
+	});
+
+	for (var i in docIds) {
+		jqxhr = getjqxhr("/utils/get_doc_expence/", {id: docIds[i], formated: 1}, "POST", "json");
+		jqxhr.done(function(data) {
+			var total = parseFloat(data.more_to_pay);
+			check_login(data);
+			wait_cursor(false);
+			$('#total', form).data('total', total).val(number_format(total, data.user_precision));
+			$('#curs', form).val(data.exchange_rate);
+			$('#currency', form).prop('disabled', false).val(data.currency_id).change().prop('disabled', true);
+			$('#language_id', form).val(data.language);
+			$('*[name="punct_lucru"]', form).val(data.punct_lucru).prop('disabled', true);
+            
+            if (Math.abs($('#total', form).data('total')) < 0.0001) {
+                show_message({
+                    'type':'err',
+                    'message':language.expense_was_payed
+                });
+                return false;
+            }
+            if (in_frame) {
+                $("#pay_now_modal", window.parent.document).modal({backdrop:false}).modal('show');
+            } else {
+                $("#pay_now_modal").modal('show');
+            }
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+    
+	form.submit(function() {
+		return false;
+	});
+}
+function deleteExpense(id, in_frame) {
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	var message = language.delete_expense+"?";
+	if (confirm(message)) {
+		var jqxhr = getjqxhr("/expenses/delete/"+id, {}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			if (in_frame) {
+				//parent.refreshReportDelete();
+			} else {
+				if (typeof window["refreshReport"] === "function") {
+					refreshReport();
+				} else {
+					location.href = "/report/expenses";
+				}
+			}
+			show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+	}
+}
+function activateDocAdmin(id, active, in_frame) {
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	var dataf = {
+		"id": id,
+		"active": active
+	    };
+	var jqxhr = getjqxhr("/admin/activate_subscription", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login_admin(data);
+		if (in_frame) {
+			window.opener.location.reload();
+		} else {
+			location.reload();
+		}
+		show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function deleteDocAdmin(id, user_id, no_docs, in_frame) {
+	if(typeof no_docs === 'undefined'){
+    	no_docs = 0;
+	};
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if (confirm("Confirmati stergerea?")) {
+		var dataf = {
+			"id": id,
+			"user_id": user_id,
+			"no_docs": no_docs
+			};
+		var jqxhr = getjqxhr("/admin/delete_user_subscription", dataf, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);
+				if (data.type == "err") {
+					show_message(data);
+				} else {
+					if (in_frame) {
+						window.opener.location.reload();
+					} else {
+						location.reload();
+					}
+				}
+				//show_message(data);
+			}).fail(function() {
+				show_error_page();
+			});
+	}
+}
+function changeStatusSubscription(id, user_id, status, invoice_id, in_frame) {
+	if(typeof in_frame === 'undefined'){
+    	in_frame = false;
+	};
+	if(typeof invoice_id === 'undefined'){
+    	invoice_id = 0;
+	};
+	var dataf = {
+		"id": id,
+		"user_id": user_id,
+		"status": status,
+		"invoice_id": invoice_id
+	    };
+	var jqxhr = getjqxhr("/admin/change_status_subscription", dataf, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login_admin(data);
+		if (data.type == "err") {
+			show_message(data);
+		} else {
+			if (in_frame) {
+				window.opener.location.reload();
+			} else {
+				location.reload();
+			}
+		}
+		//show_message(data);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function change_user_billing_data(comp, user) {
+	if (!$("#billing_data_" + comp).prop('checked')) {
+		$("#billing_data_" + comp).prop('checked', true);
+		return;
+	}
+	var dataf = {
+		"comp": comp,
+		"user": user
+	    };
+	var jqxhr = getjqxhr("/admin/change_user_billing_data", dataf, "POST", "json");
+	jqxhr.done(function(data) { //console.log(data);
+		check_login_admin(data);
+		if (data.type == "err") {
+			$("#billing_data_" + comp).prop('checked', false);
+		} else { // ok
+			$(".billing_data").prop('checked', false);
+			$(".billing_data").removeClass("billing_data");
+			$("#billing_data_" + comp).addClass("billing_data");
+			if (data.hasOwnProperty("show_regenerate")) {
+				$('.ok-confirm-modal').data('funct_to_exe', 'regenerate_prf_admin');
+				show_confirm(data.message);
+			} else {
+				show_message(data);
+			}
+		}
+		
+	}).fail(function() {
+		show_error_page();
+	});
+}
+
+function change_trez_admin(prf_id) {
+	var jqxhr = getjqxhr("/admin/regenerate_proforma_trez", {"prf_id": prf_id}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login_admin(data);
+			wait_cursor(false);
+			//$("#show_document_iframe").reload();
+			document.getElementById('show_document_iframe').contentWindow.location.reload();
+			//show_message(data);
+		}).fail(function() {
+			show_error_page();
+		});
+}
+// show pay with credits modal
+function showCreditsExpense(doc_id, in_frame, custom_message, only_selected) {
+	var show_custom_message = false;
+	if (typeof custom_message !== 'undefined') {
+		show_custom_message = true;
+	}
+	if (typeof only_selected === "undefined") {
+		only_selected = false;
+	}
+	credits.setOnlySelected(only_selected);
+	if (only_selected) {
+		$("#credits-add-invoice").html(language.confirm_payment+' <i class="fas fa-check ms-2"></i>');
+	} else {
+		$("#credits-add-invoice").html(language.add_to_invoice+' <i class="fas fa-plus ms-2"></i>');
+	}
+	var jqxhr = getjqxhr("/utils/get_expense", {id: doc_id, formated: 1}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if ($.isEmptyObject(data)) {
+			show_message(language.error_saving_working_on_problem);
+			return;
+		} //console.log(data);
+		// init credits modal
+		//var credits = new Credits("payment", doc_id);
+		credits.setDocId(doc_id);
+        credits.setPunctLucru(data.punct_lucru);
+		var op_ids = [];
+		for(k in data.paidIds) {
+			op_ids.push(parseInt(data.paidIds[k]));
+		}
+		credits.setOperationIds(op_ids);
+		credits.checkCredits(data.supplier_id, data.currency_id, function () {
+			credits.setTotalDoc(data.total);
+			credits.setOnlyCredits(true);
+			//credits.setTotalCreditsSelected(0);
+			if (show_custom_message) {
+				$(".alert-warning-credits-inner").html(custom_message);
+				$(".alert-warning-credits").removeClass("hidden");
+			}
+			if (only_selected) {
+				credits.checkOnlySelected();
+			}
+			$('#modal_credits').modal('show');
+			//credits.log();
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function show_add_operation_storno_bf(doc_id) {
+	var jqxhr = getjqxhr("/utils/get_doc", {id: doc_id, formated: 1}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if ($.isEmptyObject(data)) {
+			show_message(language.error_saving_working_on_problem);
+			return;
+		}
+		var form = $('#add-operation');
+		$('#add-operation').find('button[data-type="submit"]').html(language.return_payment);
+		$('#add-operation').find('.modal-title').html(language.return_payment);
+		$("#mao_client_name").val(data.client);
+		$("#mao_client_id").val(data.client_id);
+		$("#mao_invoice_id").val(doc_id);
+		$("#mao_client").removeClass("hidden");
+		form.find("#operation_type").val(2).change();
+		$(".mao-category").addClass("hidden");
+		form.find("#payment_operation_type").val(11).change();
+		var val_to_return = Math.abs(data.total-data.more_to_collect);
+		if (!$.isEmptyObject(data.collected_s) && data.collected_s) {
+			val_to_return += data.collected_s.collected;
+		} else if (!$.isEmptyObject(data.collected_multiple) && data.collected_multiple) {
+			for(kk in data.collected_multiple) {
+				val_to_return += data.collected_multiple[kk].collected;
+			}
+		}
+		form.find("#doc_value").val(number_format(val_to_return, data.user_precision));
+		form.find("#operation_currency_id").val(data.currency_id).change();
+		form.find("#operation_type").attr("disabled", true);
+		form.find("#operation_punct_lucru").val(data.punct_lucru).attr("disabled", true);
+		form.find("#payment_operation_type").attr("disabled", true);
+		form.find("#doc_value").attr("disabled", true);
+		form.find("#operation_currency_id").attr("disabled", true);
+		vsb_modal = false;
+		$('#modal-add-operation').modal('show');
+	}).fail(function() {
+		show_error_page();
+	});
+}
+// show collect with credits modal
+function showCreditsDoc(doc_id, in_frame, has_bf, doc_nr, custom_message, only_selected) {
+	var show_custom_message = false;
+	if (typeof custom_message !== 'undefined') {
+		show_custom_message = true;
+	}
+	if (typeof has_bf === "undefined") {
+		has_bf = false;
+	}
+	if (typeof only_selected === "undefined") {
+		only_selected = false;
+	}
+	if (has_bf) {
+		credits.setBf(has_bf, doc_nr);
+	} else {
+		credits.setBf(false, "");
+	}
+	credits.setOnlySelected(only_selected);
+	if (only_selected) {
+		$("#credits-add-invoice").html(language.confirm_collect+' <i class="fas fa-check ms-2">');
+	} else {
+		$("#credits-add-invoice").html(language.add_to_invoice+' <i class="fas fa-plus ms-2"></i>');
+	}
+	var jqxhr = getjqxhr("/utils/get_doc", {id: doc_id, formated: 1}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);
+		if ($.isEmptyObject(data)) {
+			show_message(language.error_saving_working_on_problem);
+			return;
+		} //console.log(data);
+		// init credits modal
+		//var credits = new Credits("payment", doc_id);
+		credits.setDocId(doc_id);
+		credits.setPunctLucru(data.punct_lucru);
+		var op_ids = [];
+		for(k in data.collectedIds) {
+			op_ids.push(parseInt(data.collectedIds[k]));
+		}
+		credits.setOperationIds(op_ids);
+		credits.checkCredits(data.client_id, data.currency_id, function () {
+			credits.setTotalDoc(data.total_after_storno);//total);//more_to_collect);
+			credits.setOnlyCredits(true);
+			//credits.setTotalCreditsSelected(0);
+			if (show_custom_message) {
+				$(".alert-warning-credits-inner").html(custom_message);
+				$(".alert-warning-credits").removeClass("hidden");
+			}
+			if (only_selected) {
+				credits.checkOnlySelected();
+			}
+			$('#modal_credits').modal('show');
+			//credits.log();
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+// show invoices in modal to relink with current collect(id)
+function showCreditsInvoicesDoc(data) { //$('#modal_credits_invoices').modal('show');
+	var jqxhr = getjqxhr("/utils/get_collect", {"id": data.collect_id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log("data",data);
+		creditsInvoices.setDocId(data.id);//collect_id
+		creditsInvoices.setPunctLucru(data.punct_lucru);
+		creditsInvoices.setTotalDoc(data.collect_value);// - data.collected);//data.total);//total);//more_to_collect);
+		creditsInvoices.setOnlyCredits(true);
+		var op_ids = []; // fk_invoice_ids
+		for(k in data.invoices) {
+			op_ids.push(parseInt(data.invoices[k]["id"]));
+		} //console.log(op_ids);
+		creditsInvoices.setOperationIds(op_ids);
+		$(".alert-warning-credits-i-inner").html( nl2br(sprintf(language.after_edit_credits_collect, $.trim(data.collect+' <b>'+(data.receipt_name ? data.receipt_name : data.doc_number)+'</b>'))) );
+		$(".alert-warning-credits-i").removeClass("hidden");
+		creditsInvoices.checkCredits(data.fk_client_id, data.currency_id, function () { // client_name_id 
+			//creditsInvoices.log();
+			creditsInvoices.checkOnlySelected();
+			$('#modal_credits_invoices').modal('show');
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+// show docs in modal to relink with current payment(id)
+function showCreditsInvoicesExpense(data) { //$('#modal_credits_invoices').modal('show');
+	var jqxhr = getjqxhr("/utils/get_payment", {"id": data.payment_id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log("data",data);
+		$(".client-placeholder").html(language.supplier);
+		$(".mtp-placeholder").html(language.more_to_pay);
+		creditsInvoices.setDocId(data.id);//collect_id
+		creditsInvoices.setPunctLucru(data.punct_lucru);
+		creditsInvoices.setTotalDoc(data.payment_value);// - data.collected);//data.total);//total);//more_to_collect);
+		creditsInvoices.setOnlyCredits(true);
+		var op_ids = []; // fk_invoice_ids
+		for(k in data.docs) {
+			op_ids.push(parseInt(data.docs[k]["id"]));
+		} //console.log(op_ids);
+		creditsInvoices.setOperationIds(op_ids);
+		$(".alert-warning-credits-i-inner").html( nl2br(sprintf(language.after_edit_credits_payment, $.trim(data.payment+' <b>'+data.doc_number+'</b>'))) );
+		$(".alert-warning-credits-i").removeClass("hidden");
+		creditsInvoices.checkCredits(data.fk_supplier_id, data.currency_id, function () { // client_name_id 
+			//creditsInvoices.log();
+			creditsInvoices.checkOnlySelected();
+			$('#modal_credits_invoices').modal('show');
+		});
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function refresh_doc_notes(doc, doc_id) {
+	var data = {};
+	var jqxhr = getjqxhr("/docs/get_notes/"+doc+"/"+doc_id, data, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			if (data.type == "err") {
+				show_message(data);
+			} else if (data.type == "ok") {
+				$("#preview_doc_notes").html(data.message);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function refresh_stock_notes(doc, doc_id) {
+	var data = {};
+	var jqxhr = getjqxhr("/stock/get_notes/?doc="+doc+"&doc_id="+doc_id, data, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			if (data.type == "err") {
+				show_message(data);
+			} else if (data.type == "ok") {
+				$("#preview_doc_notes").html(data.message);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function refresh_expense_notes(doc_id) {
+	var data = {};
+	var jqxhr = getjqxhr("/expenses/get_notes/?id="+doc_id, data, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			if (data.type == "err") {
+				show_message(data);
+			} else if (data.type == "ok") {
+				$("#preview_doc_notes").html(data.message);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function check_product_by_code(c_obj, i, f_name, exits, type, name) { //console.log("f_name",f_name);
+	var c = c_obj.val();
+	if (c == "" && f_name != "product") {
+		//return;
+	}
+	if (typeof exits === "undefined") {
+		exits = "1";
+	}
+	if (typeof name === "undefined") {
+		name = "";
+	}
+	var skp = false;
+	if (products.isStornoByStock()) {
+		skp = true;
+	}
+	/*if ($("#entry_id").val()) { // is in modal edit product & nothing changed -> skip
+		var entries = products.getEntries($("#entry_id").val());
+		if (entries) {
+			old_code = entries["cod_produs"];
+			if ((!c && !old_code) || (c == old_code)) {
+				return false;
+			}
+		}
+	}*/
+	$(".btn-add-product-on-doc").addClass("disable-add-product");
+	$("#btn-edit-product-modal").addClass("disabled");
+	$(".btn-edit-product").addClass("disable-add-product");
+	var dd = {"code": c, "id": i, 'gestiune': $("#"+f_name+"_gestiune").val(), "exits": exits, "pr_type": type, "skp": (skp ? 1 : 0), "name": name};
+		var jqxhr = getjqxhr("/nomenclator/check_product_for_code", dd, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			c_obj.removeClass("code-check");
+			if (data.type == "err") { // autocomplete with found product
+				$('.ok-confirm-modal').data('funct_to_exe', 'check_product_autocomplete_ok');
+				$('.ok-confirm-modal').data('params', {items: data.message, field_name: f_name, f_params: {"skip_price": skp}});
+				$('.cancel-confirm-modal').data('funct_to_exe', 'check_product_autocomplete_cancel');
+				$('.cancel-confirm-modal').data('params', f_name);
+				$('#modal-confirm').data("backdrop", "static");
+				$('#modal-confirm').data("keyboard", false);
+				//$('#confirm-close').prop("disabled", true);
+				$('#confirm-close').data('on_hide_func', 'check_product_autocomplete_cancel');
+				$('#confirm-close').data('param', f_name);
+				show_confirm(language.product_exists_autocomplete);
+			} else { // ok
+				$(".btn-add-product-on-doc").removeClass("disable-add-product");
+				$("#btn-edit-product-modal").removeClass("disabled");
+				$(".btn-edit-product").removeClass("disable-add-product");
+				var params = {"idp": f_name}; // check for product changes
+				check_for_product_changes(params, function() {
+					//check_hide_show_pr_on_blur(input_id);
+				});
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function check_product_by_name_and_type(name, id, type, code, f_name, tt, params, exits) {
+	name = $.trim(name);
+	id = $.trim(id);
+	type = $.trim(type);
+	code = $.trim(code);
+	if (id || code) { //has selected product from list or code is present
+		//f_name(params);
+		//return;
+	} 
+	if (typeof tt === "undefined") {
+		tt = "ap";
+	}
+	if (typeof exits === "undefined") {
+		exits = "1";
+	}
+	if (products.isStornoByStock()) {
+		if (typeof params === "undefined") {
+			params = {};
+		}
+		params.skip_price = true;
+	}
+	$(".btn-add-product-on-doc").addClass("disable-add-product");
+	$("#btn-edit-product-modal").addClass("disabled");
+	var dd = {"name": name, "type": type, 'gestiune': $("#"+tt+"_gestiune").val(), "exits": exits, "pid": id, "cod_produs": code, "tt": tt};
+		var jqxhr = getjqxhr("/nomenclator/check_product_for_name_and_type", dd, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);   
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			$("#btn-edit-product-modal").removeClass("disabled");
+			if (data.type == "err") { // autocomplete with found product
+				if (data.hasOwnProperty("custom_error")) {
+					show_message(data, false);
+				} else {
+					$('.ok-confirm-modal').data('funct_to_exe', 'check_product_autocomplete_ok');
+					$('.ok-confirm-modal').data('params', {items: data.message, field_name: tt, fcall: f_name, "f_params": params});
+					$('.cancel-confirm-modal').data('funct_to_exe', 'check_product_nt_autocomplete_cancel');
+					$('#modal-confirm').data("backdrop", "static");
+					$('#modal-confirm').data("keyboard", false);
+					//$('.cancel-confirm-modal').data('params', tt);
+					show_confirm(language.product_already_exists_ovw);
+				}
+			} else { // ok
+				if (data.hasOwnProperty("new_product")) {
+					if (code) { // if add code to existing product
+						$(".ok-confirm-modal").html(language.add_new_product);
+						$(".cancel-confirm-modal").html(language.product_change_name);
+						$('.ok-confirm-modal').data('funct_to_exe', 'change_add_new_product_code');
+						$('.cancel-confirm-modal').data('funct_to_exe', 'change_add_new_product_code');
+						//$('.cancel-confirm-modal').data('funct_to_exe_on_hide', 'product_changes_hide');
+						$(".cancel-confirm-modal").data('funcExecuted', false);
+						$('.ok-confirm-modal').data('params', {"params": params,  "tt": tt, "fn": f_name});
+						$('.cancel-confirm-modal').data('params', {"params": params, "tt": tt, "change": 1, "fn": f_name, "pid": id, "cod_produs": code});
+						$('#modal-confirm').data("backdrop", "static");
+						$('#modal-confirm').data("keyboard", false);
+						$('#confirm-close').prop("disabled", true);
+						$('#confirm-close').data('on_hide_func', 'product_changes_hide_x');
+						$('#confirm-close').data('param', params);
+						show_confirm(sprintf(language.change_product_name_code, name+"(cod:"+code+")"));
+						return false;
+					}
+					$("#"+tt+"_name_id").val("");
+					$("#"+tt+"_name_id").data("stoc", "");
+					$("#"+tt+"_name_note").html("");
+				} else {
+					if (data.hasOwnProperty("oid")) { // product transfered to another
+						$("#"+tt+"_name_id").val(data.oid);
+					}
+					$("#"+tt+"_product_type_id").val(type);
+				}
+				$(".btn-add-product-on-doc").removeClass("disable-add-product");
+				$("#btn-edit-product-modal").removeClass("disabled");
+				f_name(params);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function change_add_new_product_code(pp) { // {"params": params, "idp": tt, "change": 1, "fn": f_name}
+	if (pp.hasOwnProperty("change")) {
+		var jqxhr = getjqxhr("/nomenclator/update_product_code", {"id": pp.pid, "code": pp.cod_produs}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);   
+			$(".btn-add-product-on-doc").removeClass("disable-add-product");
+			$("#btn-edit-product-modal").removeClass("disabled");
+			$(".btn-edit-product").removeClass("disable-add-product");
+			pp["fn"](pp.params);
+		}).fail(function() {
+			show_error_page();
+		});
+	} else { // add a new product
+		$("#"+pp.tt+"_name_id").val("");
+		$("#"+pp.tt+"_name_id").data("stoc", "");
+		$("#"+pp.tt+"_name_note").html("");
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		$("#btn-edit-product-modal").removeClass("disabled");
+		$(".btn-edit-product").removeClass("disable-add-product");
+		pp["fn"](pp.params);
+	}
+}
+function check_product_nt_autocomplete_cancel(field_name) { // name and type
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+}
+function check_product_autocomplete_cancel(field_name) { //console.log("field_name=",field_name);
+	var old_val = "";
+	if ($("#entry_id").val()) { // is in modal edit product -> reset name
+		var old_val = $("#product_cod_produs").data("old-code");
+		//var entries = products.getEntries($("#entry_id").val());
+		//if (entries) {
+		//	old_val = entries["cod_produs"];
+		//}
+	} else {
+		delete_autocomplete(field_name+"_name");
+	}
+	$("#"+field_name+"_cod_produs").val(old_val);
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+	$("#btn-edit-product-modal").removeClass("disabled");
+	$(".btn-edit-product").removeClass("disable-add-product");
+}
+function check_product_autocomplete_ok(params) {
+	var itm = params.items; //console.log(params);
+	var skip_price = false;
+	if (params.hasOwnProperty("f_params")) {
+		if (params.f_params && params.f_params.hasOwnProperty("skip_price")) {
+			if (params.f_params.skip_price) {
+				skip_price = true;
+			}
+		}
+	}
+	if (params.field_name == "ap" || params.field_name == "product") {
+		complete_product_details(itm, undefined, skip_price);
+	} else {
+		complete_product_details(itm, params.field_name+"_name", skip_price);//console.log(params);
+	}
+	var umc = itm.um;
+	var is_code = true;
+	if (params.hasOwnProperty("fcall")) {
+		is_code = false;
+	}
+	$("#"+params.field_name+"_name_id").data("stoc", itm.stock);
+	if (itm.stock == "0") {
+		ucm = "";
+	}
+	if (typeof itm.stock === 'undefined') {
+		$("#"+params.field_name+"_name_note").html("");
+	} else {
+		$("#"+params.field_name+"_name_note").html(language.stock_simple+": "+itm.stock+" "+umc);
+	}
+	if (!itm.is_category) {
+		$("#"+params.field_name+"_name_note").html("");
+	}
+	$("#"+params.field_name+"_name").val(params.items.name);
+	$("#"+params.field_name+"_name_id").val(params.items.produs_id);//console.log("itm=",itm, "params=", params);
+	if (products.getUseStock()) {
+		if (!itm.pr_type || itm.pr_type == "0") {
+			if (window.hasOwnProperty("show_product_type")) {
+				show_product_type();
+			}
+		} else if (params.field_name == "product") {
+			if (window.hasOwnProperty("hide_product_type")) {
+				hide_product_type();
+			}
+		}
+	}
+	$(".btn-add-product-on-doc").removeClass("disable-add-product");
+	$("#btn-edit-product-modal").removeClass("disabled");
+	$(".btn-edit-product").removeClass("disable-add-product");
+	$("#ap_cod_produs").removeClass("code-check");
+	if (!is_code) {
+		setTimeout(function(){params["fcall"](params.f_params);},300);
+	}
+}
+// validate issue date. if there is another doc with same series older than this date
+function validate_issue_date(d, s) {
+	//console.log(d, s);
+	var jqxhr = getjqxhr("/docs/validate_date/invoice", {date: d, series: s}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			if (data.type == "err") {
+				//console.log("show confirm");
+				$('.ok-confirm-modal').data('funct_to_exe', 'submit_form_doc_final');
+				$('.ok-confirm-modal').data('params', '');
+				show_confirm(data.message);
+				$("#invoice_preview_btn").removeClass("disabled");
+				//return false;
+			} else {
+				//submit_form_doc_final();
+				validate_negative_stock();
+				//return true;
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function user_can_change_sale_price(gid, pid, pp, cc, tv, ctv, er, ps, fn, params, c_id, in_modal, is_expense, modal_product, is_transfer, fpp, ptvai, show_modal, date, added, is_production, from_bf, from_params) {
+    if (typeof gid === "object") { // extract vars
+        var validFunctionArguments = ["gid", "pid", "pp", "cc", "tv", "ctv", "er", "ps", "fn", "params", "c_id", "in_modal", "is_expense", "modal_product", "is_transfer", "fpp", "ptvai", "show_modal", "date", "added", "is_production", "from_bf", "from_params"];
+        var options = gid;
+        for (var index in options) {
+            if ($.inArray(index, validFunctionArguments) > -1 && typeof options[index] !== "undefined") {
+                eval(index + ' = options[index];\r\n');
+            }
+        }
+    }
+	if (typeof in_modal === 'undefined') {
+		in_modal = false;
+	}
+	if (typeof is_expense === 'undefined') {
+		is_expense = false;
+	}
+	if (typeof params === 'undefined') {
+		params = {};
+	}
+	if (in_modal) {
+		params["is_expense"] = is_expense;
+	}
+	if (typeof modal_product === 'undefined') {
+		modal_product = false;
+	}
+	if (typeof is_transfer === 'undefined') {
+		is_transfer = false;
+	}
+	if (typeof show_modal === 'undefined') {
+		show_modal = true;
+	}
+	if (typeof from_bf === 'undefined') {
+		from_bf = 0;
+	}
+	params["is_transfer"] = is_transfer;
+	if (typeof is_production === 'undefined') {
+		is_production = false;
+	}
+	params["is_production"] = is_production;
+	if (!params.hasOwnProperty("is_gv")) { //console.log("is_gv not set");
+		params.is_gv = false;
+	}
+    if (typeof fpp === 'undefined') {
+        fpp = 0;
+    }
+	//console.log("usccp ", "gid="+gid, "pid="+pid, params);
+	if (!pid || pid == "0") { // !gid || gid == "0" || 
+	//if (!pid || pid == "0" || !gid || gid == "0" ) {
+		if (in_modal) {
+			if (is_expense) {
+				if (is_transfer) {
+					modify_transfer_issue();
+				} else {
+					modify_expense_issue();
+				}
+				$("#modal-add-expense").modal('toggle');
+			} else if (is_production) {
+				$("#invoice_preview_btn").removeClass("disabled");
+				fn(params);
+			} else {
+				modify_product_issue();
+				$("#modal-add-product").modal('toggle');
+			}
+		} else { //console.log("uccsp - add it");
+			if ($.isEmptyObject(params)) {
+				if (is_transfer) {
+					add_product2doc_tr();
+				} else {
+					add_product2doc();
+				}
+			} else {
+				if (is_transfer) {
+					add_product2doc_tr(params.skip_insert, params.id);
+				} else {
+					add_product2doc(params.skip_insert, params.id);
+				}
+			}
+			//add_product2doc();
+		}
+	} else { //console.log("c_id: ", c_id);
+		//console.log(gid, pid, fn, params);
+        var sendData = {"gestiune_id": gid, "product_id": pid, "price": pp, "currency": cc, "tva_inclus": tv, "cota_tva": ctv, "exchange_rate": er, "precision": ps,"cat_id": c_id, "fpp": fpp, "ptvai": ptvai, "date": date, "added": added, "from_bf": from_bf};
+		var jqxhr = getjqxhr("/account/user_can_change_sale_price", sendData, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);
+				wait_cursor(false);
+				$("#btn-edit-product-modal").removeClass("disabled");
+				if (!show_modal) { //console.log("dont show modal");
+					fn(params, data);
+				} else {
+					if (data.type == "err") {
+						show_message(data);
+					} else if (data.type == "err1") {
+						if (from_params) {
+							if (typeof params.fn !== 'function') {
+								params.fn = function() {console.log('default fn()');};
+							}
+							$('.ok-confirm-modal').data('funct_to_exe', function(params) {
+								params.product.spcpl = '1';
+								modify_product_issue(params.entry_id, params.product);
+								params.fn(params);
+							});
+							$('.cancel-confirm-modal').data('funct_to_exe', function(params) {
+								params.product.spcpl = '';
+								modify_product_issue(params.entry_id, params.product);
+								params.fn(params);
+							});
+						} else {
+							if (modal_product) {
+								$('.ok-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list_product');
+								//$('.cancel-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list_cancel_modal');
+							} else {
+								if (in_modal) {
+									$('.ok-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list_modal');
+									$('.cancel-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list_cancel_modal');
+									params.price_list = data.price_list;
+								} else {
+									$('.ok-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list');
+									$('.cancel-confirm-modal').data('funct_to_exe', 'set_product_to_change_price_list_cancel');
+								}
+							}
+						}
+						$('.ok-confirm-modal').data('params', params);
+						$('.cancel-confirm-modal').data('params', params);
+						show_confirm(data.message);
+					} else {
+						fn(params, data);//add_product2doc();
+						//console.log("submit add2productdoc");
+					}
+				}
+			}).fail(function() {
+				show_error_page();
+			});
+	}
+}
+function set_product_to_change_price_list(params) { //console.log("ok",params);
+	$("#spcpl").val("1");
+	if (typeof params === 'undefined') {
+		params = {};
+	}
+	if ($.isEmptyObject(params)) {
+		if (params.is_transfer) {
+			add_product2doc_tr();
+		} else if(params.is_production) {
+			close_pr_price_modal();
+		} else {
+			add_product2doc();
+		}
+	} else {
+		if (params.is_transfer) {
+			add_product2doc_tr(params.skip_insert, params.id);
+		} else if(params.is_production) {
+			close_pr_price_modal();
+		} else {
+			add_product2doc(params.skip_insert, params.id);
+		}
+	}
+}
+function set_product_to_change_price_list_cancel(params) { //console.log("cancel",params);
+	$("#spcpl").val("");
+	if (typeof params === 'undefined') {
+		params = {};
+	}
+	if (params.hasOwnProperty("is_gv") && params.is_gv) {
+		$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		if (params.is_production) {
+			$("#invoice_preview_btn").removeClass("disabled");
+		}
+		return false;
+	}
+	if ($.isEmptyObject(params)) {
+		if (params.is_transfer) {
+			add_product2doc_tr();
+		} else if(params.is_production) {
+			close_pr_price_modal();
+		} else {
+			add_product2doc();
+		}
+	} else {
+		if (params.is_transfer) {
+			add_product2doc_tr(params.skip_insert, params.id);
+		} else if(params.is_production) {
+			close_pr_price_modal();
+		} else {
+			add_product2doc(params.skip_insert, params.id);
+		}
+	}
+}
+function set_product_to_change_price_list_modal(params) { //console.log(params);
+	$("#spcpl_modal").val("1");
+	if (params.is_expense) {
+		if (params.is_transfer) {
+			modify_transfer_issue();
+		} else {
+			modify_expense_issue();
+		}
+		$("#modal-add-expense").modal('toggle');
+	} else if(params.is_production) {
+		close_pr_price_modal();
+	} else {
+		modify_product_issue();
+		$("#modal-add-product").modal('toggle');
+	}
+}
+function set_product_to_change_price_list_cancel_modal(params) {
+	$("#spcpl_modal").val("");
+	if (params.hasOwnProperty("is_gv") && params.is_gv) {
+		if (params.is_expense) {
+			$("#product_pret_fara_tva_2").val(params.price_list.init_price);
+			$("#product_cota_tva_2").val(params.price_list.cota_tva);
+			$("#product_tva_inclus_2").val(params.price_list.tva_inclus);
+			sync_price_addition("product", "price_2");
+		} else if(params.is_transfer) {
+			$("#product_pret_fara_tva_2").val(params.price_list.init_price);
+			$("#product_cota_tva_2").val(params.price_list.cota_tva);
+			$("#product_tva_inclus_2").val(params.price_list.tva_inclus);
+		} else if (params.is_production) { console.log(params);
+			$("#pp_price").val(params.price_list.init_price);
+			$("#pp_cota_tva_2").val(params.price_list.cota_tva);
+			$("#pp_tva_inclus_2").val(params.price_list.tva_inclus);
+			//$("#invoice_preview_btn").removeClass("disabled");
+		} else { // docs
+			$("#product_pret_fara_tva1").val(params.price_list.init_price);
+			$("#product_cota_tva").val(params.price_list.cota_tva);
+			$("#product_currency").val(params.price_list.currency).trigger('change');
+			recalc_prices_product();
+		}
+		//console.log("gv and NO", params);
+		//is_expense or is_transfer else is_doc
+		//$(".btn-add-product-on-doc").removeClass("disable-add-product");
+		//return false;
+	}
+	if (params.is_expense) { // expense modal issue
+		if (params.is_transfer) {
+			modify_transfer_issue();
+		} else {
+			modify_expense_issue();
+		}
+		$("#modal-add-expense").modal('hide');
+	} else if (params.is_production) {
+		products.showSumar();
+		close_pr_price_modal();
+	} else { // doc
+		modify_product_issue();
+		$("#modal-add-product").modal('hide');
+	}
+}
+function set_product_to_change_price_list_product(params) { //console.log(params);
+	if (typeof params === 'undefined') {
+		params = {};
+	}
+	save_product_gestiune(params);
+}
+function expandCategories(cat_id) {
+	//$(".first-cat-open").addClass("in");
+    document.getElementById(cat_id).classList.toggle("show");
+	attachClickOutsideCat($("#"+cat_id));
+	return false;
+}
+$(document).ready(function() {
+	/*$(".cat-a").click(function(e){
+		$(".cat-a").removeClass("first-cat-a");
+	});*/
+	$(document).on("click", ".cat-selectable", function(e) {
+		var cat_id = $(this).data("id");
+		//if ((cat_id != 73 && cat_id != 85 && cat_id != 79) ||
+		if ($(this).hasClass("allow-select")) { // main cats cannot be selected
+			if (products.checkDistributeMessage(cat_id)) {
+				$("#"+prefix+"_cat_id").val("");
+				$("#"+prefix+"_cat").val(language.choose_category);
+				return false;
+			}			
+			var cat_name = $(this).data("name");
+			var dropdown_id = $(this).data("dropdown-id");
+			var prefix = $(this).data("prefix");
+			var js_id = $(this).data("js-id");
+			var is_stoc = $(this).data("is-stoc");
+			var is_expense = $(this).data("is-expense");
+			var is_vandabil = $(this).data("is-vandabil");
+			//console.log(cat_id, cat_name, dropdown_id, prefix, js_id, is_stoc);
+			$("#"+prefix+"_cat_id").val(cat_id);
+			$("#"+prefix+"_cat_id").data("is-stoc", is_stoc);
+			$("#"+prefix+"_cat_id").data("is-expense", is_expense);
+			$("#"+prefix+"_cat_id").data("is-vandabil", is_vandabil);
+			$("#"+prefix+"_cat").html(cat_name);
+			//products.checkDistributeCategory(cat_id, prefix);
+			show_hide_tva_fields((products.isPlatitorTva() ? 1 : 0), cat_id);
+			$("#"+dropdown_id).removeClass("show");
+			var gestiune_class = "gestiune_area";
+			if (js_id) {
+				//console.log("js_id", js_id, "change in form");
+				//products.initAutocomplete2(js_id);
+				gestiune_class += "_"+js_id;
+			} else {
+				js_id = "";
+			} //console.log($("#"+prefix+"_gestiune_id").data("type"));
+			if ((cat_id == 74 || cat_id == 86 || cat_id == 77 || cat_id == 96) &&
+				$("#"+prefix+"_gestiune_id").data("type") == "2") {
+				$("#"+prefix+"_gestiune").val("");
+				$("#"+prefix+"_gestiune_id").val("");
+			}
+			if (cat_id == 145) {
+				$(".ok-message-modal").html(language.ok+', '+(language.understood).toLowerCase());
+				//$("#message-body-div").addClass("hidden");
+				show_message("err|"+language.avans_message_s, false);
+				$("#to-do-after-close").val("reset_message_button_text");
+			}
+			//console.log($("#"+prefix+"_gestiune_id").data("type"));
+			// second row items
+			if (is_stoc == "1") { //console.log("is_stoc -> update product type", prefix);
+				//$(".modal-product-name").removeClass("col-sm-12").removeClass("col-md-12").removeClass("col-lg-12");
+				//$(".modal-product-name").addClass("col-sm-6").addClass("col-md-6").addClass("col-lg-6");
+				//$("."+gestiune_class).removeClass("hidden");
+				//$(".expense-category").css("width", "35%");
+				$(".stock-add-fields"+js_id).removeClass("hidden");
+				$(".doc-parent-div"+js_id).addClass("additional-label-div-st");
+				$(".doc-parent-div-p"+js_id).addClass("additional-label-div-st-p");
+				$(".stock-add-fields-adaos"+js_id).removeClass("hidden");
+				$(".has-additional-labels").addClass("form-inline");
+				var tst_id = prefix;
+				if (js_id) {
+					//tst_id += "_"+js_id;
+				}
+				tst_id += "_name_id";
+				var prd_to_add = {};
+				if (!$("#"+tst_id).val() || $("#"+tst_id).val() == "0") {
+					prd_to_add = products.createProduct2Add("product");
+				}
+				//console.log(tst_id, $("#"+tst_id).val(), cat_id, prd_to_add);
+				//update_product_type($("#"+tst_id).val(), cat_id, 1, prd_to_add, 1, prefix);// deactivated
+			} else {
+				//$(".modal-product-name").removeClass("col-sm-6").removeClass("col-md-6").removeClass("col-lg-6");
+				//$(".modal-product-name").addClass("col-sm-12").addClass("col-md-12").addClass("col-lg-12");
+				//$("."+gestiune_class).addClass("hidden");
+				//$(".expense-category").css("width", "50%");
+				$(".stock-add-fields"+js_id).addClass("hidden");
+				$(".doc-parent-div"+js_id).removeClass("additional-label-div-st");
+				$(".doc-parent-div-p"+js_id).removeClass("additional-label-div-st-p");
+				$(".stock-add-fields-adaos"+js_id).addClass("hidden");
+				$(".has-additional-labels").removeClass("form-inline");
+				if (prefix == "product") {
+					$("#product_name_id").val("");//data.inserted_id);
+				}
+			}
+			products.elongateCategory(is_stoc, js_id);
+			if (cat_id == 76 || is_vandabil == "1") { // marfa
+				$(".stock-add-fields-m"+js_id).removeClass("hidden");
+				$(".doc-parent-div-p"+js_id).addClass("additional-label-div-st-p");
+			} else {
+				$(".stock-add-fields-m"+js_id).addClass("hidden");
+				$(".doc-parent-div-p"+js_id).removeClass("additional-label-div-st-p");
+			}
+			products.changeExpenseTax(cat_id);
+			if (!is_expense && $("#distribute-table").is(':visible')) { //revert to edit product... just in case we were editing distribute
+				products.revertToEdit();
+			} else if (is_expense) {
+				$("#distribute-table").removeClass("hidden");
+			}
+			if (window.hasOwnProperty("check_products_fields_etransport")) {
+				check_products_fields_etransport(cat_id);
+			}
+			if (window.hasOwnProperty("check_products_cod_nc")) {
+				check_products_cod_nc(cat_id, js_id);
+			}
+		}
+	});
+	/*
+	$(document).on("change", ".select-gestiune", function(e) {
+		var g_type = $(this).find(":selected").data("type");
+		if (g_type == 2) {
+			$(".stock-add-fields-adaos").removeClass("hidden");
+		} else {
+			$(".stock-add-fields-adaos").addClass("hidden");
+		}
+		//console.log(g_type);
+	});
+	*/
+});
+function reset_message_button_text() {
+	$(".ok-message-modal").html(language.ok);		
+}
+function reset_message_button_text_2() {
+	$(".ok-message-modal").html(language.ok);
+	$(".ok-message-modal").data("custom-action", "");
+	$(".ok-message-modal").data("custom-action-params", "");	
+}
+// create category custom select
+function createCategory(prefix, id, cats2, use_stock, js_id, init_button_text) { // catDropdown
+	if (typeof js_id === 'undefined') {
+		js_id = 0;
+	}
+	if (typeof init_button_text === 'undefined') {
+		init_button_text = language.choose_category;
+	}
+	var html = '<div class="select_category w-full">'+
+		'<button type="button" id="b-'+id+'" onclick="if (!$(this).hasClass(\'disabled\')) expandCategories(\''+id+'\');" class="btn btn-sm px-2"><span class="cat_class" id="'+prefix+'_cat">'+init_button_text+'</span> <i class="fas fa-caret-down ps-1 float-end"></i></button>'+
+		'<div class="dropdown-menu" id="'+id+'">';
+			if (!$.isEmptyObject(cats2)) {
+				for (i in cats2) {
+					var cat = cats2[i];//console.log(use_stock, cat);
+					html += '<div class="group panel">';
+					html += '<div class="heading">'+
+							'<a data-bs-toggle="collapse" href="#cat-panel-'+id+'-'+cat["id"]+'" aria-expanded="false" class="cat-a ';
+							if ($.isEmptyObject(cat["children"])) {
+								html += 'no-children';
+							}
+							html += '"></a>'+
+							'<span class="main cat-selectable'+(catIsSelectable(cat["id"]) ? ' allow-select' : '')+'" data-id="'+cat["id"]+'" data-name="'+cat["name"]+'" data-dropdown-id="'+id+'" data-prefix="'+prefix+'" data-js-id="'+js_id+'" data-is-stoc="'+cat["is_stoc"]+'" data-is-expense="'+cat["is_expense"]+'" data-is-vandabil="'+cat["is_vandabil"]+'" data-bs-toggle="collapse" href="#cat-panel-'+id+'-'+cat["id"]+'" aria-expanded="false" data-traget="cat-panel-'+id+'-'+cat["id"]+'" data-parent="#'+id+'">'+cat["name"]+((cat["id"] == 73) ? ' <span class="show-on-nir">('+language.shown_on_nir+')</span>' : '')+'</span>'+
+						'</div>';
+					if (!$.isEmptyObject(cat["children"])) { // has children
+						html += '<div class="items collapse'+((cat["has_third_level"]) ? " overflow_scroll custom-scroll" : "");
+						if (use_stock && cat["id"] == 73) {// st_id
+							html += " in show";
+						} else if (!use_stock && cat["id"] == 85) { // exp_id
+							html += " in show";
+						}
+						html += '" id="cat-panel-'+id+'-'+cat["id"]+'">';//console.log(cat["children"]);
+						for(j in cat["children"]) {// as $child_id => $child_name) {
+							var child = cat["children"][j];//console.log(child_name);
+							if (cat["has_third_level"]) { // level 3 children
+								html += '<span class="'+((child.hasOwnProperty("custom_bold")) ? 'allow-select' : 'intermediar-cat')+' cat-selectable'+((child.hasOwnProperty("custom_bold")) ? ' custom_bold' : '')+'" data-id="'+child["id"]+'" data-name="'+child["name"]+'" data-dropdown-id="'+id+'" data-prefix="'+prefix+'" data-js-id="'+js_id+'" data-is-stoc="'+child["is_stoc"]+'" data-is-expense="'+child["is_expense"]+'" data-is-vandabil="'+child["is_vandabil"]+'">'+child["name"]+'</span>';
+								if (!$.isEmptyObject(child["children"])) { // has children
+									for(k in child["children"]) {
+										var c_child = child["children"][k];
+										html += '<span class="allow-select category-child cat-selectable'+((c_child.hasOwnProperty("custom_bold")) ? ' custom_bold' : '')+'" data-id="'+c_child["id"]+'" data-name="'+c_child["name"]+'" data-dropdown-id="'+id+'" data-prefix="'+prefix+'" data-js-id="'+js_id+'" data-is-stoc="'+c_child["is_stoc"]+'" data-is-expense="'+c_child["is_expense"]+'" data-is-vandabil="'+c_child["is_vandabil"]+'">'+c_child["name"]+'</span>';
+									}
+								}
+							} else {
+								html += '<span class="allow-select cat-selectable" data-id="'+child["id"]+'" data-name="'+child["name"]+'" data-dropdown-id="'+id+'" data-prefix="'+prefix+'" data-js-id="'+js_id+'" data-is-stoc="'+child["is_stoc"]+'" data-is-expense="'+child["is_expense"]+'" data-is-vandabil="'+child["is_vandabil"]+'">'+child["name"]+'</span>';
+							}
+						}
+						html += '</div>';
+					}
+					html += '</div>';
+				}
+			}
+		html += '</div>'+
+			'</div>';
+	return html;
+}
+function catIsSelectable(id) {
+	return [80, 115, 145, 146, 151].indexOf(parseInt(id)) > -1;
+}
+function update_product_type(id, type, overwrite, prd_to_add, exclude_self, prefix) { //console.log(id, type, prefix);
+	if (typeof overwrite === 'undefined') {
+		overwrite = 0;
+	}
+	if (typeof prd_to_add === 'undefined') {
+		prd_to_add = {};
+	}
+	if (typeof exclude_self === 'undefined') {
+		exclude_self = 0;
+	}
+	if (typeof prefix === 'undefined') { // doc.supplier cat
+		prefix = false;
+	}
+	if (!$.isEmptyObject(prd_to_add)) { 
+		prd_to_add["is_expense"] = 1; 
+		prd_to_add["cota_tva"] = prd_to_add["cota_tva_option"];//console.log(prd_to_add);
+		var jqxhr = getjqxhr("/nomenclator/do_add_produs/", {"from_issue": 1, "val2add": JSON.stringify(prd_to_add)}, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);//console.log(data);
+				if (data.hasOwnProperty("inserted_id")) { // product transfered to another
+					$("#product_name_id").val(data.inserted_id);
+				}
+				if (data.type == "err") {
+					show_message(data, false);
+				}
+				wait_cursor(false);
+			}).fail(function() {
+				show_error_page();
+			});
+	} else {
+		var jqxhr = getjqxhr("/nomenclator/update_product_type/", {"id": id, "type": type, "overwrite": overwrite, "exclude_self": exclude_self}, "POST", "json");
+			jqxhr.done(function(data) {
+				check_login(data);//console.log(data);
+				if (data.hasOwnProperty("oid")) { // product transfered to another
+					$("#ap_name_id").val(data.oid);
+				}
+				if (data.type == "err") {
+					show_message(data, false);
+					if (prefix) { //console.log("prefix",prefix);
+						$("#"+prefix+"_cat_id").val("");
+						$("#"+prefix+"_cat").html(language.choose_category);
+					}
+				}
+				wait_cursor(false);
+			}).fail(function() {
+				show_error_page();
+			});
+	}
+}
+// from nomen produse ... 
+function update_product_type_2(pid, ptype, skip_verif) {
+	if (typeof skip_verif === "undefined") {
+		skip_verif = 0;
+	}
+	var jqxhr = getjqxhr("/nomenclator/update_product_type/", {id: pid, type: ptype, "skip_verif": skip_verif}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			custom_apply_filters();
+			if (data.type == "err" && data.message != "err") {
+				if (data.hasOwnProperty("show_message_type_code")) {
+					show_message_type_code(data.message, data.params);//console.log(data);
+				} else {
+					if (Object.keys(data).length == 3) {
+						show_message(data, false);
+					}
+				}
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+// actual id -> add_inter_doc
+function sync_price_addition(pre_id, tf, actual_id) { // pv = pa*(1+ac)
+	//console.log("pre_id=", pre_id, actual_id);
+	var ivr_tva_id = "";
+	if (typeof actual_id !== 'undefined') { // add inter doc
+		var id_split = actual_id.split("_");
+		//console.log(id_split);
+		pre_id = id_split[0]+"_"+id_split[1];
+		ivr_tva_id = id_split[1];
+	}
+	//console.log("new pre_id=", pre_id);
+	if (!$("#"+pre_id+"_currency_2").is(":visible")) {
+		//console.log("no addition");
+		return false;
+	}
+	var price_name = "price";
+	if (pre_id == "product") {
+		price_name = "pret_fara_tva";
+	}
+	var price = $("#"+pre_id+"_"+price_name).val();
+	var price_2 = $("#"+pre_id+"_"+price_name+"_2").val();
+	var addition = $("#"+pre_id+"_addition").val();
+	var precision = 4;//get_user_precision();
+	if ($("#"+pre_id+"_currency").val() != $("#"+pre_id+"_currency_2").val()) { // different currencies
+		if ($("#"+pre_id+"_currency_2").val() != "99") { //console.log("hh",$("#"+pre_id+"_exchange_rate_2").val());
+			var exch_b = 1, exch_2 = parseFloat($("#"+pre_id+"_exchange_ratex_2").val());
+			if (exch_2 != 0) {
+				if ($("#curs").is(":visible")) {
+					exch_b = parseFloat($("#curs").val());
+				}
+				exch_b /= exch_2;
+				price *= exch_b;
+			} //console.log(exch_2,exch_b);
+		} else if ($("#"+pre_id+"_currency").val() != "99") { // doc currency is not ron -> currency_2 is ron so we change price_2
+			//console.log("currency diff", $("#"+pre_id+"_currency").val(), $("#"+pre_id+"_currency_2").val());
+			price *= parseFloat($("#curs").val());
+		}
+	}
+	//console.log(price, price_2, addition);
+	// recalculate for tva_inclus+vat_rate
+	// stop conditions
+	if (!price || price == 0) { // no price doc
+		return false;
+	}
+	if (!$(".ivr_tva"+ivr_tva_id).hasClass("hidden")) { // only if tva fields are visible
+		//console.log("vat are visible");
+		var vat_inclus1 = $("#"+pre_id+"_tva_inclus").val();
+		var vat_inclus2 = $("#"+pre_id+"_tva_inclus_2").val();//console.log(vat_inclus1, vat_inclus2, pre_id+"_tva_inclus_2");
+		if (pre_id == "product") {
+			var cota = $("#"+pre_id+"_cota_tva option:selected").text();
+			cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+			var cota2 = $("#"+pre_id+"_cota_tva_2 option:selected").text();
+			if (cota2) {
+				cota2 = parseFloat(cota2.substring(0, cota2.indexOf("%")));
+			}
+		} else { // ap
+			var cota = $("#"+pre_id+"_cota_tva").val();
+			var cota2 = $("#"+pre_id+"_cota_tva_2").val();
+			cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+			if (cota2) {
+				cota2 = parseFloat(cota2.substring(0, cota2.indexOf("%")));
+			}
+		}
+		if (!vat_inclus2) {
+			vat_inclus2 = 0;
+		}
+		var base_price = price;
+		if (vat_inclus1 == 1 && price) { // price has vat_inclus -> recalculate base price, witout vat
+			//console.log("recalc price",price,vat_inclus1,cota);
+			price  = price/(1 + cota/100);
+		}
+		if (vat_inclus2 == 1 && price_2) { // price has vat_inclus -> recalculate base price, witout vat
+			price_2  = price_2/(1 + cota2/100); 
+		} 
+		if (!products.isPlatitorTvaIssuer() && products.isPlatitorTva()) { // add vat to aquisition_price
+			if (price) {
+				if (vat_inclus1 == 1) {
+					price = base_price;
+				} else { // add vat
+					price *= (1 + cota/100);
+				} 
+			}
+		} //console.log("new prices", price, price_2);
+	} else {
+		//console.log("no ivr_tva");
+	}
+	if (tf == "price") {
+		if(price_2 != 0) {
+			$("#"+pre_id+"_addition").val(number_format((price_2/price-1)*100, precision));
+		} else if (addition != 0) {
+			var new_price_2 = price*(1+addition/100);
+			if (vat_inclus2 == 1) { // price_2 has vat inclus
+				new_price_2 += new_price_2*(cota2/100);
+			}
+			$("#"+pre_id+"_"+price_name+"_2").val( number_format(new_price_2, precision) );//format_with_precision(new_price_2, true) );
+		} 
+	} else if(tf == "price_2") {
+		if (price_2 != 0) {
+			$("#"+pre_id+"_addition").val( number_format((price_2/price-1)*100, precision));//format_with_precision((price_2/price-1)*100, true) );
+		}
+	} else if (tf == "addition") {
+		if (addition != 0) {
+			var new_price_2 = price*(1+addition/100);
+			if (vat_inclus2 == 1) { // price_2 has vat inclus
+				new_price_2 += new_price_2*(cota2/100);
+			}
+			$("#"+pre_id+"_"+price_name+"_2").val(number_format(new_price_2, precision));
+		}
+	}
+	return true;
+}
+function check_prices_add_expenses(pre_id, d_id) { 
+	var mme = "";
+	var price_name = "price";
+	if (pre_id == "product") {
+		price_name = "pret_fara_tva";
+	} 
+	var price_has_readonly = $("#"+pre_id+"_"+price_name).prop("readonly");
+	//console.log("HH: ", $("#"+pre_id+"_"+price_name).prop("readonly"));
+	//console.log("cat-is-expense",$("#"+pre_id+"_"+d_id+"cat_id").data("is-expense"));
+	if (!price_has_readonly) {
+		if ($.trim($("#"+pre_id+"_"+price_name).val()) == "" || !$.isNumeric($("#"+pre_id+"_"+price_name).val())) {
+			mme += language.fill_price+"<br>"; console.log("h1: ", $("#"+pre_id+"_"+price_name).val());
+		}
+	} //console.log("mme 1 : ", mme);
+	if (parseFloat($("#"+pre_id+"_"+price_name).val()) < 0) {
+		mme += language.aq_price_negative+"<br>";
+	} else if (!price_has_readonly) { 
+		if($("#"+pre_id+"_"+"cat_id").data("is-expense") != "1" && parseFloat($("#"+pre_id+"_"+price_name).val()) == 0) {
+			mme += language.fill_price+"<br>";
+		}
+	} //console.log("mme: ", mme);
+	if($("#"+pre_id+"_"+price_name+"_2").is(":visible")) { // price_2 is visible -> price_2 must be bigger than price, including tva_inclus and cat_rate
+		//console.log("check price_2");
+		if ($("#"+pre_id+"_gestiune_id").length > 0) {
+			var g_type = $("#"+pre_id+"_gestiune_id").data("type");
+		} else {
+			var g_type = $("#"+pre_id+"_gestiune").find(":selected").data("type");
+		} //console.log(g_type);
+		if (($.trim($("#"+pre_id+"_"+price_name+"_2").val()) == "" || !$.isNumeric($("#"+pre_id+"_"+price_name+"_2").val())) && (g_type == 2)) { // global valoric
+			mme += language.fill_price_2+"<br>";
+		} else if (parseFloat($("#"+pre_id+"_"+price_name+"_2").val()) < 0) { // sale price cannot be negative
+			mme += language.fill_price_2+"<br>";
+		}
+		var price = $("#"+pre_id+"_"+price_name).val();
+		var price_2 = $("#"+pre_id+"_"+price_name+"_2").val();
+		if ($("#"+pre_id+"_currency").val() != $("#"+pre_id+"_currency_2").val()) { // different currencies
+			if ($("#"+pre_id+"_currency_2").val() != "99") {
+				var exch_b = 1, exch_2 = parseFloat($("#"+pre_id+"_exchange_ratex_2").val());
+				if (exch_2 != 0) {
+					if ($("#curs").is(":visible")) {
+						exch_b = parseFloat($("#curs").val());
+					}
+					exch_b /= exch_2;
+					price *= exch_b;
+				} //console.log(exch_b);
+			} else if ($("#"+pre_id+"_currency").val() != "99") { // doc currency is not ron -> currency_2 is ron so we change price_2
+				//console.log("currency diff", $("#"+pre_id+"_currency").val(), $("#"+pre_id+"_currency_2").val());
+				price *= parseFloat($("#curs").val());
+			}
+		} 
+		var vat_inclus1 = $("#"+pre_id+"_tva_inclus").val();
+		var vat_inclus2 = $("#"+pre_id+"_tva_inclus_2").val();
+		var cota, cota2;
+		if (pre_id == "product") {
+			cota = $("#"+pre_id+"_cota_tva option:selected").text();
+			cota2 = $("#"+pre_id+"_cota_tva_2 option:selected").text();
+		} else {
+			cota = $("#"+pre_id+"_cota_tva").val();
+			cota2 = $("#"+pre_id+"_cota_tva_2").val();
+		} 
+		cota = parseFloat(cota.substring(0, cota.indexOf("%")));
+		if (cota2) {
+			cota2 = parseFloat(cota2.substring(0, cota2.indexOf("%")));
+		} 
+		if (!vat_inclus2) {
+			vat_inclus2 = 0;
+		}
+		var base_price = price;
+		if (vat_inclus1 == 1 && price) { // price has vat_inclus -> recalculate base price, witout vat
+			//console.log("recalc price",price,vat_inclus1,cota);
+			price  = price/(1 + cota/100);
+		} 
+		if (!products.isPlatitorTvaIssuer() && products.isPlatitorTva()) { // add vat to aquisition_price
+			if (price) {
+				if (vat_inclus1 == 1) {
+					price = base_price;
+				} else { // add vat
+					price *= (1 + cota/100);
+				} 
+			}
+		}
+		
+		if (vat_inclus2 == 1 && price_2) { // price has vat_inclus -> recalculate base price, witout vat
+			price_2  = price_2/(1 + cota2/100);
+		}
+		price  = parseFloat(price);
+		price_2  = parseFloat(price_2);//console.log(price, price_2);
+		if (price-0.01 > price_2) {
+			mme += language.sale_price_smaller+"<br>";
+		}
+	}
+	return mme;
+}
+function delete_autocomplete_basic(id) {
+	$("#"+id).val("");
+	$("#"+id+"_id").val("");
+	$("#"+id+"_note").html("");
+	$("#"+id+"_id").data("stoc", "");
+}
+function move_inter_doc_name(id, value, cod, cod_nc_id, cod_nc){
+	if (typeof cod === "undefined") {
+		cod = "";
+	}
+	var old_val = $("#ap_"+id+"_name").val();
+	$("#ap_"+id+"_name").val(value);
+	if (cod && cod != "null") {
+		$("#ap_"+id+"_cod_produs").val(cod);
+	}
+	if (cod_nc_id && cod_nc_id != "undefined") {
+		$("#ap_"+id+"_cod_nc_id").val(cod_nc_id);
+	}
+	if (cod_nc && cod_nc != "undefined") {
+		$("#ap_"+id+"_cod_nc").val(cod_nc);
+	}
+	if (value != old_val) {
+		$("#ap_"+id+"_name_id").val("");
+		$("#ap_"+id+"_cat_id").val("");
+		$("#ap_"+id+"_cat_id").data("is-stoc", "");
+		$("#ap_"+id+"_cat_id").data("is-vandabil", "");
+		$("#ap_"+id+"_cat").html(language.choose_category);
+		$("#b-catDropdownID"+id).removeClass("disabled");
+		$("#ap_"+id+"_um").prop("disabled", false);
+	}
+}
+function get_product_gestiune_values(pid, gid, id, gid2) {
+	if (typeof id === "undefined") {
+		id = "ap";
+	}
+	if (typeof gid2 === "undefined") {
+		gid2 = false;
+	} //console.log(pid, gid, gid2, id, products.isExpense());
+	var jqxhr = getjqxhr("/nomenclator/get_produs_gestiune_values/", {"pid": pid, "gid": gid, "gid2": gid2}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			if (data && data !== null && data != 'null') { // fill fields
+				//console.log(gid2, data);
+				if (gid2) {
+					$("#"+id+"_currency_2").val(data.currency);
+				} else {
+					if (products.isExpense()) { // doc-supplier page
+						if ($("#"+id+"_gestiune_id").data("type") == "1") {
+							$("#"+id+"_currency_2").val(data.currency);
+							$("#"+id+"_currency_2").data("old-value", data.currency);
+						}
+					} else if (data.currency == $("#"+id+"_currency").val() || (data.currency == "99")) { // selected currency or ron
+						$("#"+id+"_currency_2").val(data.currency);
+						$("#"+id+"_currency_2").data("old-value", data.currency);
+					}
+					
+				} 
+				if ($("#ap_exchange_ratex_2").length > 0 && data.hasOwnProperty("exchange_rate")) { // add supplier doc
+					$("#ap_exchange_ratex_2").val(data.exchange_rate);
+				}
+				if (data.price == "0") {
+					data.price = "";
+				}
+				if (id.search("ap") != -1) {
+					$("#"+id+"_price_2").val(data.price);
+					if (data.cota_tva) {
+						$("#"+id+"_cota_tva_2_id").val(data.cota_tva);
+						$("#"+id+"_cota_tva_2").val(data.cota_tva_percent+"%");
+					}
+				} else if (id.search("pp") != -1) { // production
+					$("#"+id+"_price").val(data.price);
+					if (data.cota_tva) {
+						$("#"+id+"_cota_tva_2").val(data.cota_tva);
+					}
+				} else {
+					$("#"+id+"_pret_fara_tva_2").val(data.price);
+					if (data.cota_tva) {
+						$("#"+id+"_cota_tva_2").val(data.cota_tva);
+					}
+				}
+				$("#"+id+"_tva_inclus_2").val(data.tva_inclus);
+				if (id.search("ap") != -1) {
+					if ($("#"+id+"_price").val()) {
+						sync_price_addition(id, "price_2");
+					}
+				} else if (id.search("pp") != -1) {
+					products.showSumar();
+				} else {
+					if ($("#"+id+"_pret_fara_tva").val()) {
+						sync_price_addition(id, "price_2");
+					}
+				}
+			} else if (id.search("pp") != -1) {
+				products.showSumar();
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function refresh_product_gestiune_expense(pid, gid, id) {
+	if (products.isExpense()) { // only for expense
+		if (!pid || pid == "0" || !gid || gid == "0") {
+			return;
+		}
+		get_product_gestiune_values(pid, gid, id);
+	}
+	return;
+}
+function get_product_aq_prices(pid, gid, gid2, q, id, is_doc, callback) {
+	/*if (typeof id === "undefined") {
+		id = "ap";
+	}*/
+	if (typeof is_doc === 'undefined') {
+		is_doc = false;
+	}
+	if (typeof callback !== "function") {
+		callback = function(data, options) {
+			var selector = options.id === "product" ? '#product_pret_fara_tva_2' : '#ap_price_2';
+			if (options.is_doc) {
+				selector = options.id === "product" ? '#product_pret_fara_tvai' : '#ap_price';
+			}
+			$(selector).attr("title", options.title);
+			
+			if (options.title) {
+				products.setAqPrices(data);
+			}
+			$(selector).tooltip("dispose").tooltip({html: true, 
+													placement: "bottom",
+													sanitizeFn:function(c){return c;}});
+		};
+	}
+	var jqxhr = getjqxhr("/stock/get_produs_aq_prices/", {"pid": pid, "gid": gid, "gid2": gid2, "q": q}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);
+			var title = "";
+			if (!$.isEmptyObject(data)) {
+				title = get_aq_prices_tooltip(data);
+				if (id == "product") {
+					products.replaceAqPrices($("#entry_id").val(), data);
+				}
+			}
+
+			callback(data, {
+				id: id,
+				is_doc: is_doc,
+				title: title
+			});
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function get_aq_prices_tooltip(data) {
+	var title = "<table><tr><td>"+language.aquisition_price+"</td><td style='padding-left:10px;'>"+language.quantity+"</td></tr>";
+	var has_title = false;	
+	for(k in data) {
+		var dd = data[k];
+		if (dd.hasOwnProperty("pret_fara_tva") && dd.hasOwnProperty("currency_text") &&
+			dd.hasOwnProperty("quantity") && dd.hasOwnProperty("um")) {
+			title += "<tr><td>";
+			if (dd.currency != "99") {
+				title += dd.base_pret_fara_tva;
+			} else {
+				title += dd.pret_fara_tva;
+			}
+			title += " "+dd.currency_text+"</td><td style='padding-left:10px;'>"+dd.quantity+" "+dd.um+"</td></tr>";
+			has_title = true;
+		}
+	}
+	title += "</table>";//console.log(title);
+	if (!has_title) {
+		title = "";
+	}
+	return title;
+}
+function set_tooltip_sale_price(data) {
+	if (!$.isEmptyObject(data)) {
+		title = get_aq_prices_tooltip(data);
+		$('#product_pret_fara_tva_2').attr("data-original-title", title);//.tooltip("show");
+		//products.replaceAqPrices($("#entry_id").val(), data);
+	} else {
+		$('#product_pret_fara_tva_2').attr("data-original-title", "");//.tooltip("show");
+	}
+}
+function update_product_stock(pid, gid, prefix_id, complete_detalis, fn, doc_id) {
+	if (typeof complete_detalis === "undefined") {
+		complete_detalis = true;
+	}
+	if (typeof prefix_id === "undefined") {
+		prefix_id = "ap_name";
+	}
+	if (typeof fn === "undefined") {
+		fn = function(){};
+	}
+	var jqxhr = getjqxhr("/nomenclator/get_product_stock/", {product_id: pid, gestiune_id: gid, "doc_id": doc_id}, "POST", "json");
+	jqxhr.done(function(data) {
+		check_login(data);//console.log("stock", data);
+		$("#"+prefix_id+"_id").data("stoc", data.stock);
+		if (data.stock == "0") {
+			data.um = "";
+		}
+		$("#"+prefix_id+"_note").html(language.stock_simple+": "+data.stock+" "+data.um);
+		// autocomplete product details
+		if (complete_detalis) {
+			complete_product_details(data.product);
+		}
+		fn();
+		wait_cursor(false);
+	}).fail(function() {
+		show_error_page();
+	});
+}
+function show_message_inventory(d) {
+	var inv = "<div class='text-sm'>";
+	for(i in d) { //console.log(d[i]);
+		inv += '<a href="'+baseurl+'stock/inventory_edit/'+d[i]["id"]+'" target="_blank"><strong>'+d[i]["inventar"]+'</strong></a> din '+d[i]["date"]+"<br>";
+	}
+	inv += '</div>';
+	//console.log(d);
+	$(".ok-message-modal").html(language.ok+', '+(language.understood).toLowerCase());
+	show_message(sprintf(language.nir_before_inventory, inv)+'<i class="fas fa-exclamation-circle text-warning ms-2"></i>', false);
+	$("#to-do-after-close").val("reset_message_button_text");
+}
+function show_message_doth_ids(d) {
+	var text_s = "";
+	for(i in d) { //console.log(d[i]);
+		text_s += d[i].nir+'<br>';//'<a href="'+baseurl+'stock/inventory_edit/'+d[i]["id"]+'" target="_blank"><strong>'+d[i]["inventar"]+'</strong></a> din '+d[i]["date"]+"<br>";
+	}
+	//console.log(d);
+	$(".ok-message-modal").html(language.ok+', '+(language.understood).toLowerCase());
+	show_message(sprintf(language.distribute_msg_prv, text_s), false);
+	$("#to-do-after-close").val("reset_message_button_text");
+}
+function show_exp_doc() {
+	$("#modal-exp-doc-dialog").modal('show');
+}
+function show_message_type_code(mess, params) {
+	$(".ok-confirm-modal").html(language.import_the_stock);
+	$(".cancel-confirm-modal").html(language.modify_the_code);
+	$('.ok-confirm-modal').data('funct_to_exe', 'show_message_type_code_ok');
+	$('.cancel-confirm-modal').data('funct_to_exe', 'show_message_type_code_cancel');
+	$(".cancel-confirm-modal").data('funcExecuted', false);
+	$('.ok-confirm-modal').data('params', params);
+	$('.cancel-confirm-modal').data('params', params);
+	//$('#modal-confirm').data("backdrop", "static");
+	//$('#modal-confirm').data("keyboard", false);
+	//$('#confirm-close').prop("disabled", true);
+	//$('#confirm-close').data('on_hide_func', 'product_changes_hide_x');
+	//$('#confirm-close').data('param', params);
+	show_confirm(mess);
+}
+function show_message_type_code_cancel(prms) { //console.log(prms);
+	edit_action_productf(prms.id, function () {
+		$("#product_pr_type").val(prms.pr_type);
+		$("#product_pr_type").selectpicker("refresh");
+		$("#upd_skv").val("1");
+	});
+}
+function show_message_type_code_ok(prms) { //console.log(prms);
+	update_product_type_2(prms.id, prms.pr_type, 1);
+}
+function strip_text_from_message(message, txt) {
+	message = message.replace(new RegExp(txt, "g"), "");
+	return $.trim(message);
+}
+function send_to_efactura(ids, rld, config, areal) {
+	if (typeof rld === "undefined") {
+		rld = false;
+	}
+	if (typeof config === "undefined") {
+		config = 0;
+	}
+	if (typeof areal === "undefined") {
+		areal = 1;
+	}
+	var jqxhr = getjqxhr("/utils/get_idp_uri", {"id": ids, "config": config, "areal": areal}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);return;
+			if (data.type == "err3") {
+				show_message(data, false);
+			} else if (data.type == "err2") {
+				$('.ok-message-modal').text("Configureaza");
+				//$("#to-do-after-close").val("gotoefactura");
+				$(".ok-message-modal").data("custom-action", "gotoefactura");
+				show_message(data, false);
+			} else if (data.type == "err") {
+				location.href = data.message;
+			} else {
+				if (rld && data.type != "err1") {
+					$("#to-do-after-close").val("reload");
+				}
+				$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+				show_message(data, false);
+			}			
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function erase_einvoice_integration(company) {
+	$('.ok-confirm-modal').data('funct_to_exe', 'erase_einvoice_integration_actual');
+	$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+	show_confirm("Esti sigur ca doresti sa stergi integrarea dintre e-Factura si firma "+company+"?\n\nIn cazul in care apesi DA, facturile nu se vor mai trimite in SPV pentru aceasta firma.");
+}
+function erase_einvoice_integration_actual() {
+	var jqxhr = getjqxhr("/utils/erase_einvoice_integration", {}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);return;
+			if (data.type == "err") {
+				location.reload();
+			} else {
+				$("#to-do-after-closex").val("reload");
+				$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+				show_message(data);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function gotoefactura() { //console.log(params);
+	location.href = baseurl+"integrari/e-factura";
+}
+function erase_etransport_integration(company) {
+	$('.ok-confirm-modal').data('funct_to_exe', 'erase_etransport_integration_actual');
+	$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+	show_confirm("Esti sigur ca doresti sa stergi integrarea dintre e-Transport si firma "+company+"?\n\nIn cazul in care apesi DA, nu vei mai putea genera coduri UIT pentru aceasta firma.");
+}
+function erase_etransport_integration_actual() {
+	var jqxhr = getjqxhr("/utils/erase_einvoice_integration", {"etransport": 1}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);return;
+			if (data.type == "err") {
+				location.reload();
+			} else {
+				$("#to-do-after-closex").val("reload");
+				$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+				show_message(data);
+			}
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function send_to_etransport(ids, rld, tip, config, operation) {
+	if (typeof rld === "undefined") {
+		rld = false;
+	}
+	if (typeof tip === "undefined") {
+		tip = 0;
+	}
+	if (typeof config === "undefined") {
+		config = 0;
+	}
+	if (typeof operation === "undefined") {
+		operation = 0;
+	}
+	
+	var jqxhr = getjqxhr("/utils/get_idpt_uri", {"id": ids, "type": tip, "config": config, "operation": operation}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);return;
+			if (data.type == "err3") {
+				show_message(data, false);
+			} else if (data.type == "err2") {
+				$('.ok-message-modal').text("Configureaza");
+				//$("#to-do-after-close").val("gotoefactura");
+				$(".ok-message-modal").data("custom-action", "gotoetransport");
+				show_message(data, false);
+			} else if (data.type == "err") {
+				location.href = data.message;
+			} else {
+				if (rld && data.type != "err1") {
+					$("#to-do-after-close").val("reload");
+				}
+				$(".modal-nn-bg").addClass("modal-nn-bg-sm");
+				show_message(data, false);
+			}			
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function gotoetransport() {
+	location.href = baseurl+"integrari/e-transport";
+}
+function mark_imported(ids) {
+	var jqxhr = getjqxhr("/utils/frmi_mark_imported", {"ids": ids}, "POST", "json");
+		jqxhr.done(function(data) {
+			check_login(data);
+			wait_cursor(false);//console.log(data);//return;
+			$("#to-do-after-close").val("reload");
+			show_message(data);			
+		}).fail(function() {
+			show_error_page();
+		});
+}
+function check_partener_etroptype(partener_id, optype, partener, prev_partener_selected, check_type) { // check_type: 1=optype, 2=client
+	if (!$("#show_is_etransport").is(":checked")) {
+		return "";
+	} 
+	if (!partener_id || partener_id == "" || partener_id == "0" || 
+		!optype || optype == "" || optype == "0") {
+		return "";
+	} 
+	if (typeof check_type === "undefined") {
+		check_type = 1;
+	}
+	switch(optype) {
+		case "1": // 10
+		case "2": // 20
+		case "10": // 60
+		case "11": // 70
+			if (prev_partener_selected["ineu"] == "1" && prev_partener_selected["isro"] == "0") { } else {
+				if (check_type == 1) {
+					var mmsg = sprintf(language.etr_client_optype_err1, partener);
+				} else if (check_type == 2) {
+					var mmsg = sprintf(language.etr_client_optype_err4, partener);
+				}
+				return mmsg;
+			}
+			return "";
+			break;
+		case "8": // 40
+		case "9": // 50
+			if (prev_partener_selected["ineu"] == "1") {
+				if (check_type == 1) {
+					var mmsg = sprintf(language.etr_client_optype_err2, partener);
+				} else if (check_type == 2) {
+					var mmsg = sprintf(language.etr_client_optype_err5, partener);
+				}
+				return mmsg;
+			}
+			return "";
+			break;
+		case "7": // 30 
+			if (prev_partener_selected["isro"] == "0") {
+				if (check_type == 1) {
+					var mmsg = sprintf(language.etr_client_optype_err3, partener);
+				} else if (check_type == 2) {
+					var mmsg = sprintf(language.etr_client_optype_err6, partener);
+				}
+				return mmsg;
+			}
+			return "";
+			break;
+	}
+	return "";
+}
+function submit_august_tva() { return "";
+	if(!products.hasProducts()) {
+		return "";
+	}  
+	var has_19 = false, has_21 = false, has_59 = false, has_11 = false;
+	var prods = products.getAllProds();//console.log(prods);
+	for(var key in prods) { //console.log(id, key, p[key]);
+		if (!prods[key].hasOwnProperty("cota_tva_option")) {
+			continue;
+		}
+		if ((prods[key]["cota_tva_option"]).match(/^d/g)) { // only for defaults
+			var cota = parseInt(prods[key]["cota_tva"]); // + cota_tva_option
+			switch (cota) {
+				case 21:
+					has_21 = true;
+					break;
+				case 19:
+					has_19 = true;
+					break;
+				case 11:
+					has_11 = true;
+					break;	
+				case 5:
+				case 9:
+					has_59 = true;
+					break;
+			} 
+			//console.log("cota:", cota);
+		} 
+	}
+	var date_selected = moment($("#date").val(), 'DD/MM/YYYY');//console.log("date_selected: ", date_selected);
+	var date_1august = moment("01/08/2025", 'DD/MM/YYYY');//console.log("august: ", date_1august);
+	if (date_selected < date_1august) { // before 1 august
+		if (has_21) {
+			return language.august_tva;
+		} else if (has_11) {
+			return language.august_tva_59;
+		}
+	} else { // after (inclusive) 1 august
+		if (has_19) {
+			return language.august_tva;
+		} else if(has_59) {
+			return language.august_tva_59;
+		}
+	}
+	return "";
+}

@@ -1,0 +1,186 @@
+function IntervalPicker(id, ranges, fn, drops, opens) { // contains and creates daterange picker
+	this.id = id;
+	if (typeof ranges === 'undefined') {
+		ranges = true;
+	}
+	this.ranges = ranges;
+	if (typeof fn === 'undefined') {
+		fn = function(){ctab1.applyFilters();};
+	}
+	this.fn = fn;
+	if (typeof drops === 'undefined') {
+		this.drops = "up";
+	}
+	this.btnElement = $('#button-dr-' + this.id);
+	this.isInModal = this.btnElement.closest('.modal-body').length !== 0;
+	if (typeof opens === 'undefined') {
+		opens = this.isInModal ? "center" : "left";
+	}
+	this.opens = opens;
+	this._mobileSize = 992;
+	this.isMobile = $(window).width() < this._mobileSize;
+	if (this.isMobile) {
+		this.drops = "down";
+	}
+	this.date_format = "DD/MM/YYYY";
+	this.init_values = {};
+	this.func_to_exec;
+	this.data_id;
+	this.initTimeOut;
+	//this.init();
+}
+IntervalPicker.prototype = {
+    constructor: IntervalPicker,
+	init:function() {
+		var th = this;
+		var obj_id = $("#"+this.id);
+		var obj_input = $("#"+this.id+"-input");
+		var init_values = {
+			"data-id": this.id,
+			"buttonClasses": "btn btn-sm",
+			"applyClass": "btn-warning",
+			"cancelClass": "orange-date",
+			"opens": th.opens,
+			"drops": th.drops,
+			"alwaysShowCalendars": !this.isMobile,
+			"showCustomRangeLabel": this.isMobile,
+			"showDropdowns": true,
+			"linkedCalendars": false,
+			"parentEl": this.btnElement,
+			"autoApply": this.isMobile,
+			"locale": {
+				"format": th.date_format,
+				"separator": " - ",
+				"applyLabel": language.apply,
+				"cancelLabel": language.cancel,
+				"daysOfWeek": [language.wd_su, language.wd_mo, language.wd_tu, language.wd_we, language.wd_th, language.wd_fr, language.wd_sa],
+				"monthNames": [
+					language.january,
+					language.february,
+					language.march,
+					language.april,
+					language.may,
+					language.june,
+					language.july,
+					language.august,
+					language.september,
+					language.october,
+					language.november,
+					language.december
+				],
+				"customRangeLabel": language.custom_interval,
+			},
+			ranges: this.ranges ? th.getRanges() : {}
+		};
+		var init_date = th.getDates(obj_input);
+		if (init_date == "") { // empty initial date
+			init_values.autoUpdateInput = false;
+		} else {
+			init_values.startDate = init_date[0];
+			init_values.endDate = init_date[1];
+			init_values.autoUpdateInput = true;
+			
+		}
+		th.initEvents(init_values);
+		obj_id.click(function() {
+			obj_input.trigger('click');
+		});
+		
+		this.init_values = init_values;
+	},
+	initEvents:function(init_values) {
+		var th = this;
+		var obj_id = $("#"+this.id);
+		var obj_input = $("#"+this.id+"-input");
+		
+		obj_id.daterangepicker(init_values).on('hide.daterangepicker', function() {
+			$('#modal-select_date').modal('hide');
+		}).on('cancel.daterangepicker', function(ev, picker) {
+			$('#modal-select_date').modal('hide');
+		}).on('apply.daterangepicker', function(ev, picker) { 
+			th.setLabel(picker.startDate.format(th.date_format), picker.endDate.format(th.date_format));
+			obj_input.val(picker.startDate.format(th.date_format)+" - "+picker.endDate.format(th.date_format));
+			if (typeof th.func_to_exec !== 'undefined') {
+				window[th.func_to_exec](th.data_id, obj_input.val());	
+			}
+			th.fn();
+		}).on('show.daterangepicker', function(ev, picker) {
+			picker.container.addClass('custom-scroll')
+		});
+		th.mobileEventTrigger();
+	},
+	getDates:function(daterange) {
+		return daterange.val().split(' - ');
+	},
+	getRangeLabel:function(start, end) {
+		var ranges = this.getRanges();
+		for(var i in ranges) {
+			var r = ranges[i];
+			if (r[0].format(this.date_format) == start &&
+				r[1].format(this.date_format) == end) {
+				return i;
+			}
+			
+		}
+		// if is custom
+		return this.getNiceDate(start)+" - "+this.getNiceDate(end);
+	},
+	getNiceDate:function(date) {
+		let [day, month, year] = date.split('/');
+		return `${day}.${month}.${year.substr(2, 4)}`;
+	},
+	getRanges:function() {
+		var ranges = {};
+		ranges[(language.today).ucfirst()] = [moment(), moment()];
+		ranges[(language.yesterday).ucfirst()] = [moment().subtract(1, 'days'), moment().subtract(1, 'days')];
+		ranges[(language.last_7_days).ucfirst()] = [moment().subtract(7, 'days'), moment()];
+		ranges[(language.last_30_days).ucfirst()] = [moment().subtract(30, 'days'), moment()];
+		ranges[(language.current_month).ucfirst()] = [moment().startOf('month'), moment().endOf('month')];
+		ranges[(language.last_month).ucfirst()] = [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')];
+		ranges[(language.current_year).ucfirst()] = [moment().startOf('year'), moment().endOf('year')];
+		ranges[(language.last_year).ucfirst()] = [moment().subtract(1, 'year').startOf('year'), moment().subtract(1, 'year').endOf('year')];
+		return ranges;
+	},
+	initLabel:function() {
+		var interval = $.trim($("#"+this.id+"-input").val());
+		if (interval == "") {
+			return;
+		}
+		interval = interval.split("-");
+		this.setLabel($.trim(interval[0]), $.trim(interval[1]));
+		
+	},
+	open:function() {
+		$("#"+this.id).data('daterangepicker').show();
+	},
+	setCustomFn:function(fn) {
+		this.custom_fn = fn;
+	},
+	setDrops:function(drops) {
+        if ($(window).width() < this._mobileSize) {
+            return;
+        }
+		clearTimeout(this.initTimeOut);
+		this.drops = drops;
+		this.initTimeOut = setTimeout(() => this.init(), 100);
+	},
+	setOpens:function(opens) {
+		clearTimeout(this.initTimeOut);
+		this.opens = opens;
+		this.initTimeOut = setTimeout(() => this.init(), 100);
+	},
+	setParent:function(pel) {
+		var init_values = this.init_values;
+		 	init_values["parentEl"] = pel;
+		this.initEvents(init_values);
+	},
+	setLabel:function(start, end) {
+		var label = this.getRangeLabel(start, end);
+		$("#"+this.id+"-text").html(label);
+	},
+	setVariables:function(fn, id) {
+		this.func_to_exec = fn;
+		this.data_id = id;
+	},
+	mobileEventTrigger:function() {}
+}

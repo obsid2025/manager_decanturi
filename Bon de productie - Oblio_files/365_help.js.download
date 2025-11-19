@@ -1,0 +1,174 @@
+class Help {
+	constructor(custom = '') {
+		this.messages = {};
+		this.messagesLength = 0;
+		this.background = false;
+		this.interactive = false;
+		this.step = 1;
+		this.obj_name = "help" + custom.replace("-", "_");
+		this.custom = custom;
+		this.isMobile = window.innerWidth < 992;
+		this.zIndex = '50';
+	}
+	addBackground() {}
+	close() {
+		this.hide();
+	}
+	back() {
+		if (this.step === 1) {
+			return;
+		}
+		this.step--;
+		this.hide();
+		this.render();
+	}
+	forward() {
+		if (this.step === this.messagesLength) {
+			return;
+		}
+		this.step++;
+		this.hide();
+		this.render();
+	}
+	createBox() {
+		var message = this.messages[this.step],
+			className = 'popover-tour-bottom';
+		message.text = html_decode(message.text);
+		if ('alignLeft' in message) {
+			className = 'popover-tour-left';
+		} else if ('alignRight' in message) {
+			className = 'popover-tour-right';
+		} else if ('arrowTop' in message) {
+			className = 'popover-tour-top';
+		}
+		if (this.isMobile) {
+			if ('arrowTopMb' in message) {
+				className = 'popover-tour-top';
+			}
+		}
+		return `<div class="position-relative help-box${this.custom ? ' help' + this.custom + '-box' : ''} ${this.interactive ? ' help-lite' : ''}" style="z-index:${this.zIndex}">
+			<div class="popover-tour ${className}" role="tooltip">
+				<div class="arrow"></div>
+				<div class="d-flex align-items-center pt-4 pb-3">
+					<h3 class="popover-tour-header py-0 title">${message.title}</h3>
+					<div class="ms-auto me-4">
+						<button type="button" class="btn-close btn-close-white m-0 opacity-80" aria-label="Close" onclick="${this.obj_name}.close();" style="font-size:10px;line-height:10px;vertical-align: top;"></button>
+					</div>
+				</div>
+				<div class="popover-tour-body message ${this.interactive ? 'pb-2' : ''}">${message.text}</div>
+				${this.interactive ? '' : this.renderButtons()}
+			</div>
+		</div>`;
+	}
+	render() {
+		let box,
+			message = this.messages[this.step],
+			parent = $(`.help${this.custom}-${this.step}`).parent(),
+			inputs = parent.find('input,textarea');
+		parent.append(this.createBox());
+
+		box = $(`.help${this.custom}-box`)
+		if ('top' in message) {
+			box.css("top", message.top);
+		}
+		if ('left' in message) {
+			box.css("left", message.left);
+		}
+		if ('alignLeft' in message) {
+			box.css("left", -box.find('.popover-tour').width() - 10);
+		}
+		if ('arrowRight' in message) {
+			box.find(".arrow").css("right", 0);
+		}
+		if (this.isMobile) {
+			if ('arrowLeftMb' in message) {
+				box.find(".arrow").css("right", '');
+			}
+			if ('leftMb' in message) {
+				box.css("left", message.leftMb);
+			}
+			if ('topMb' in message) {
+				box.css("top", message.topMb);
+			}
+		}
+
+		inputs.trigger('focus');
+
+		if (!isElementInViewport(box) || (inputs.length === 0 || this.isMobile)) {
+			if ('scrollIntoView' in box[0]) {
+				box[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+			} else {
+				$('html').animate({
+					scrollTop: box.offset().top + (this.isMobile ? 0 : -100)
+				}, 1000);
+			}
+		}
+	}
+	renderButtons() {
+		var htm = '<div class="popover-tour-navigation text-end">'+
+				'<button type="button" onclick="'+this.obj_name+'.back();" class="btn btn-sm text-xs btn-white btn-back me-2'+(this.step == 1 ? ' disabled' : '')+'" data-role="prev">&laquo; '+language.back+'</button>';
+		if (this.step == this.messagesLength) {
+				htm += '<button type="button" onclick="'+this.obj_name+'.close();" class="btn btn-sm text-xs btn-warning btn-forward">Inchide</button>';
+		} else {
+			htm += '<button type="button" onclick="'+this.obj_name+'.forward();" class="btn btn-sm text-xs btn-warning btn-forward" data-role="next">'+language.forward+' &raquo;</button>';
+		}
+		htm += '</div>';
+		return htm;
+	}
+	getStep() {
+		return this.step;
+	}
+	getCompletionPercent() {
+		return (this.step * 100) / this.messagesLength;
+	}
+	hide() {
+		$('.help' + this.custom + '-box').remove();
+	}
+	show() {
+		this.step = 1;
+		this.hide();
+		if (this.background) {
+			this.addBackground();
+		}
+		this.render();
+	}
+	init() {}
+	setBackground() {}
+	setInteractive(interactive) {
+		this.interactive = interactive;
+	}
+	setIssueDoc() {}
+	setMessages(messages) {
+		this.messages = messages;
+		this.messagesLength = Object.keys(this.messages).length;
+	}
+	forwardLite() {
+		var um_val = $.trim($("#ap_um").val());
+		var price_val = $.trim($("#ap_price").val());
+		if (this.isMobile && this.step == 1 && $('#btnadd_product').is('[aria-expanded="false"]')) {
+			$('#btnadd_product')
+				.addClass('skip-animate-scroll')
+				.trigger('click');
+		}
+		if (this.step >= 3 && um_val == '') {
+			return;
+		}
+		if (this.step == 4 && price_val == '') {
+			return;
+		}
+		this.forward();
+	}
+	showLite() {
+		if (this.interactive) {
+			this.forwardLite();
+		}
+	}
+	showStep() {
+		if (!this.initialized) {
+			this.show();
+		} else {
+			var box = $(".help"+this.custom+"-box");
+			box.show('fast');
+		}
+	}
+}
