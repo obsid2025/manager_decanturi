@@ -5,6 +5,7 @@ OBSID - Platformă de management decanturi parfumuri
 """
 
 from flask import Flask, render_template, request, jsonify, send_file
+from flask_socketio import SocketIO, emit
 import pandas as pd
 import re
 from collections import defaultdict
@@ -14,6 +15,9 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
 import logging
+import threading
+import queue
+import time
 
 # Configurare logging
 logging.basicConfig(
@@ -26,6 +30,15 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['EXPORT_FOLDER'] = 'exports'
+app.config['SECRET_KEY'] = 'obsid-selenium-automation-secret-2025'
+
+# Inițializare SocketIO pentru WebSocket live logs
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
+# Queue-uri globale pentru comunicare între threads
+automation_logs_queue = queue.Queue()
+automation_input_queue = queue.Queue()
+automation_active = False
 
 # Creare directoare dacă nu există
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -598,5 +611,169 @@ def start_automation_selenium():
         return jsonify({'error': f'Eroare la automatizare: {str(e)}'}), 500
 
 
+# ============================================================
+# WEBSOCKET HANDLERS - Live Terminal cu Interactive Input
+# ============================================================
+
+@socketio.on('connect')
+def handle_connect():
+    """Client conectat la WebSocket"""
+    logger.info(f"🔌 Client conectat la WebSocket")
+    emit('log', {'type': 'info', 'message': '✅ Conectat la terminal live!'})
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Client deconectat de la WebSocket"""
+    logger.info(f"🔌 Client deconectat de la WebSocket")
+
+
+@socketio.on('start_automation_live')
+def handle_start_automation_live(data):
+    """
+    Pornește automatizarea cu logs live și interactive input
+    """
+    global automation_active
+
+    if automation_active:
+        emit('log', {'type': 'error', 'message': '⚠️ O automatizare este deja în desfășurare!'})
+        return
+
+    bonuri = data.get('bonuri', [])
+
+    if not bonuri:
+        emit('log', {'type': 'error', 'message': '❌ Nu există bonuri de procesat'})
+        return
+
+    automation_active = True
+    emit('log', {'type': 'info', 'message': f'🚀 START AUTOMATIZARE: {len(bonuri)} bonuri'})
+
+    # Pornește automation în thread separat
+    thread = threading.Thread(
+        target=run_automation_with_live_logs,
+        args=(bonuri, request.sid),
+        daemon=True
+    )
+    thread.start()
+
+
+@socketio.on('user_input')
+def handle_user_input(data):
+    """
+    Primește input de la utilizator (email, password, 2FA code)
+    """
+    input_type = data.get('type')  # 'email', 'password', '2fa'
+    value = data.get('value')
+
+    logger.info(f"📥 Primit input de la user: type={input_type}")
+
+    # Pune input-ul în queue pentru ca Selenium să-l preia
+    automation_input_queue.put({
+        'type': input_type,
+        'value': value
+    })
+
+    emit('log', {'type': 'success', 'message': f'✅ Input primit: {input_type}'})
+
+
+def run_automation_with_live_logs(bonuri, client_sid):
+    """
+    Rulează automatizarea în background și trimite logs live
+    """
+    global automation_active
+
+    try:
+        from automatizare_oblio_selenium import OblioAutomation
+        import platform
+
+        # Emit log
+        socketio.emit('log', {
+            'type': 'info',
+            'message': '🔧 Inițializare Selenium...'
+        }, room=client_sid)
+
+        is_linux = platform.system() == 'Linux'
+
+        # Inițializare automation cu logs live
+        automation = OblioAutomation(
+            use_existing_profile=not is_linux,
+            headless=is_linux,
+            log_callback=lambda msg, level: socketio.emit('log', {
+                'type': level,
+                'message': msg
+            }, room=client_sid),
+            input_callback=lambda prompt: wait_for_user_input(prompt, client_sid)
+        )
+
+        # Setup driver
+        if not automation.setup_driver():
+            socketio.emit('log', {
+                'type': 'error',
+                'message': '❌ Nu s-a putut porni Chrome WebDriver'
+            }, room=client_sid)
+            socketio.emit('automation_complete', {
+                'success': False,
+                'error': 'ChromeDriver failed to start'
+            }, room=client_sid)
+            return
+
+        # Procesează bonuri
+        stats = automation.process_bonuri(bonuri, None, None, None)
+
+        # Închide browser
+        automation.close()
+
+        # Trimite rezultat final
+        socketio.emit('automation_complete', {
+            'success': True,
+            'stats': stats,
+            'message': f'✅ Automatizare finalizată! {stats["success"]}/{stats["total"]} bonuri create'
+        }, room=client_sid)
+
+    except Exception as e:
+        logger.error(f"❌ Eroare în automation: {e}", exc_info=True)
+        socketio.emit('log', {
+            'type': 'error',
+            'message': f'❌ Eroare: {str(e)}'
+        }, room=client_sid)
+        socketio.emit('automation_complete', {
+            'success': False,
+            'error': str(e)
+        }, room=client_sid)
+    finally:
+        automation_active = False
+
+
+def wait_for_user_input(prompt, client_sid):
+    """
+    Așteaptă input de la utilizator prin WebSocket
+
+    Args:
+        prompt (dict): {'type': 'email'/'password'/'2fa', 'message': 'Enter email...'}
+        client_sid: Socket ID pentru client
+
+    Returns:
+        str: Input-ul utilizatorului
+    """
+    # Trimite prompt către frontend
+    socketio.emit('input_required', prompt, room=client_sid)
+
+    # Așteaptă răspuns în queue (cu timeout)
+    try:
+        user_input = automation_input_queue.get(timeout=300)  # 5 minute timeout
+        return user_input.get('value')
+    except queue.Empty:
+        socketio.emit('log', {
+            'type': 'error',
+            'message': '⏱️ Timeout - nu s-a primit input de la utilizator'
+        }, room=client_sid)
+        return None
+
+
+# ============================================================
+# START APPLICATION
+# ============================================================
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    # Folosește socketio.run() în loc de app.run() pentru WebSocket support
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
