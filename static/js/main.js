@@ -586,6 +586,7 @@ function initializeSocket() {
 
     // Input required events
     socket.on('input_required', (prompt) => {
+        console.log('🔔 EVENT PRIMIT: input_required', prompt);
         showInputSection(prompt);
     });
 
@@ -712,11 +713,21 @@ function updateTerminalStatus(text, color) {
  * Afișare secțiune input când server-ul cere credențiale
  */
 function showInputSection(prompt) {
+    console.log('🔍 showInputSection CALLED with prompt:', prompt);
+
     const inputSection = document.getElementById('terminalInput');
     const promptDiv = document.getElementById('inputPrompt');
     const emailSection = document.getElementById('emailInputSection');
     const passwordSection = document.getElementById('passwordInputSection');
     const twoFASection = document.getElementById('twoFAInputSection');
+
+    console.log('📋 Elements found:', {
+        inputSection: !!inputSection,
+        promptDiv: !!promptDiv,
+        emailSection: !!emailSection,
+        passwordSection: !!passwordSection,
+        twoFASection: !!twoFASection
+    });
 
     // Ascunde toate input-urile
     emailSection.style.display = 'none';
