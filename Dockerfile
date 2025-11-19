@@ -11,12 +11,25 @@ RUN apt-get update && apt-get install -y \
     chromium-driver \
     # Dependencies pentru Chromium headless
     libnss3 \
-    libgconf-2-4 \
     libfontconfig1 \
     libxrender1 \
     libxtst6 \
     libxi6 \
     xvfb \
+    # Additional dependencies pentru stabilitate
+    ca-certificates \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libgdk-pixbuf2.0-0 \
+    libnspr4 \
+    libu2f-udev \
+    libvulkan1 \
+    xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Setează variabile de mediu pentru Chromium
