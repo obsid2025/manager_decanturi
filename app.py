@@ -686,16 +686,25 @@ def run_automation_with_live_logs(bonuri, client_sid):
     # CRITICA: socketio.emit() din thread NECESITĂ app context!
     with app.app_context():
         try:
+            socketio.emit('log', {
+                'type': 'info',
+                'message': '🔧 START THREAD - Pornire automation...'
+            }, room=client_sid)
+
             from automatizare_oblio_selenium import OblioAutomation
             import platform
 
-            # Emit log
             socketio.emit('log', {
                 'type': 'info',
-                'message': '🔧 Inițializare Selenium...'
+                'message': '📦 Import-uri OK - Inițializare Selenium...'
             }, room=client_sid)
 
             is_linux = platform.system() == 'Linux'
+
+            socketio.emit('log', {
+                'type': 'info',
+                'message': f'🖥️ Sistem detectat: {"Linux (Headless)" if is_linux else "Windows (Visual)"}'
+            }, room=client_sid)
 
             # Inițializare automation cu logs live
             automation = OblioAutomation(
