@@ -591,7 +591,9 @@ function initializeSocket() {
 
     // Log events
     socket.on('log', (data) => {
-        appendTerminalLog(data.type, data.message);
+        const timestamp = data.timestamp ? new Date(data.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+        const messageWithTime = `[${timestamp}] ${data.message}`;
+        appendTerminalLog(data.type, messageWithTime);
     });
 
     // Input required events

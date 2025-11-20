@@ -10,7 +10,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     chromium \
     chromium-driver \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Set timezone to Bucharest
+ENV TZ=Europe/Bucharest
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Setează variabile de mediu pentru Chromium
 ENV CHROME_BIN=/usr/bin/chromium

@@ -766,7 +766,8 @@ def run_automation_with_live_logs(bonuri, client_sid):
             headless=is_linux,
             log_callback=lambda msg, level: socketio.emit('log', {
                 'type': level,
-                'message': msg
+                'message': msg,
+                'timestamp': time.time()
             }, room=client_sid),
             input_callback=lambda prompt: wait_for_user_input(prompt, client_sid)
         )
