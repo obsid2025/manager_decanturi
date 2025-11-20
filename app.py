@@ -686,12 +686,12 @@ def handle_user_input(data):
 
 def send_heartbeat(client_sid, stop_event):
     """
-    Trimite heartbeat la fiecare 10 secunde pentru a menține conexiunea vie
+    Trimite heartbeat la fiecare 5 secunde pentru a menține conexiunea vie
     """
     while not stop_event.is_set():
         try:
             socketio.emit('heartbeat', {'timestamp': time.time()}, room=client_sid)
-            eventlet.sleep(10)  # Heartbeat la fiecare 10 secunde
+            eventlet.sleep(5)  # Heartbeat la fiecare 5 secunde (mai frecvent!)
         except:
             break
 
@@ -803,15 +803,14 @@ def run_automation_with_live_logs(bonuri, client_sid):
                     'nume': bon.get('nume', ''),
                     'cantitate': bon.get('cantitate', 1)
                 }, room=client_sid)
-
-                # CRITIC: Permite event loop să proceseze mesaje WebSocket
-                eventlet.sleep(0.1)
+                eventlet.sleep(0.1)  # Permite event loop să proceseze
 
                 # Procesează bonul
                 socketio.emit('log', {
                     'type': 'info',
                     'message': f'🔄 Procesare bon {i}/{len(bonuri)}: {bon.get("sku")}'
                 }, room=client_sid)
+                eventlet.sleep(0.1)  # Permite event loop să proceseze
 
                 # NU pasăm email/password pentru a forța login interactiv cu 2FA
                 success = automation.create_production_voucher(
@@ -832,6 +831,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
                         'sku': bon.get('sku'),
                         'message': f'✅ Bon {i}/{len(bonuri)} finalizat cu succes!'
                     }, room=client_sid)
+                    eventlet.sleep(0.1)  # Permite event loop să proceseze
                 else:
                     stats['failed'] += 1
                     stats['errors'].append({
@@ -845,6 +845,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
                         'sku': bon.get('sku'),
                         'message': f'❌ Bon {i}/{len(bonuri)} eșuat!'
                     }, room=client_sid)
+                    eventlet.sleep(0.1)  # Permite event loop să proceseze
 
                 # Pauză între bonuri + permite event loop
                 if i < len(bonuri):

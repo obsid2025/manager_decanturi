@@ -600,6 +600,28 @@ function initializeSocket() {
         showInputSection(prompt);
     });
 
+    // Progress events - afișare progres bon curent
+    socket.on('progress', (data) => {
+        const progressMsg = `📦 Procesare bon ${data.current}/${data.total}: ${data.sku} (${data.nume}) - Cantitate: ${data.cantitate}`;
+        appendTerminalLog('info', progressMsg);
+        console.log('📊 PROGRESS:', data);
+    });
+
+    // Bon complete events - status după fiecare bon
+    socket.on('bon_complete', (data) => {
+        if (data.success) {
+            appendTerminalLog('success', data.message || `✅ Bon ${data.index}/${data.total} finalizat!`);
+        } else {
+            appendTerminalLog('error', data.message || `❌ Bon ${data.index}/${data.total} eșuat!`);
+        }
+        console.log('✅ BON COMPLETE:', data);
+    });
+
+    // Heartbeat - menține conexiunea vie
+    socket.on('heartbeat', (data) => {
+        console.log('💓 Heartbeat:', new Date(data.timestamp * 1000).toLocaleTimeString());
+    });
+
     // Automation complete events
     socket.on('automation_complete', (data) => {
         handleAutomationComplete(data);
