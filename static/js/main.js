@@ -752,10 +752,12 @@ function showInputSection(prompt) {
 
     // Setează tipul curent de input
     currentInputType = prompt.type;
+    console.log('✅ currentInputType setat:', currentInputType);
 
     // Afișează mesajul în terminal
     const message = prompt.message || `Se așteaptă ${prompt.type}...`;
     appendTerminalLog('warning', message);
+    console.log('✅ Mesaj afișat în terminal:', message);
 
     // Setează prompt-ul CLI în funcție de tip
     if (prompt.type === 'email') {
@@ -763,21 +765,26 @@ function showInputSection(prompt) {
         cliPrompt.style.color = '#00bfff';
         cliInput.type = 'text';
         cliInput.placeholder = 'Introdu email-ul și apasă Enter...';
+        console.log('✅ Prompt setat pentru EMAIL');
     } else if (prompt.type === 'password') {
         cliPrompt.textContent = '🔑';
         cliPrompt.style.color = '#ff6b6b';
         cliInput.type = 'password';
         cliInput.placeholder = 'Introdu parola și apasă Enter...';
+        console.log('✅ Prompt setat pentru PASSWORD');
     } else if (prompt.type === '2fa') {
         cliPrompt.textContent = '🔢';
         cliPrompt.style.color = '#ffd700';
         cliInput.type = 'text';
         cliInput.placeholder = 'Introdu codul 2FA (6 cifre) și apasă Enter...';
         cliInput.maxLength = 6;
+        console.log('✅ Prompt setat pentru 2FA');
     }
 
     // Afișează CLI input section
+    console.log('🔧 Înainte de display = block');
     cliInputSection.style.display = 'block';
+    console.log('✅ Display schimbat la BLOCK! cliInputSection visible!');
 
     // Focus pe input
     setTimeout(() => {
