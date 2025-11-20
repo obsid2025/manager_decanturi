@@ -974,8 +974,36 @@ class OblioAutomation:
 
             # Click salvare (Previzualizare)
             logger.info("🖱️ Click buton salvare...")
-            save_button.click()
-            time.sleep(2)  # Optimizat: 4s → 2s
+
+            # Încearcă mai întâi click normal
+            try:
+                save_button.click()
+                time.sleep(1)
+            except Exception as e:
+                logger.warning(f"⚠️ Click normal eșuat: {e}")
+                # Fallback: JavaScript click
+                logger.info("🔄 Încerc JavaScript click...")
+                self.driver.execute_script("arguments[0].click();", save_button)
+                time.sleep(1)
+
+            # ALTERNATIVĂ: Dacă click-ul nu funcționează, trigger form submit
+            try:
+                current_url_before = self.driver.current_url
+                time.sleep(2)
+                current_url_after = self.driver.current_url
+
+                # Dacă URL-ul nu s-a schimbat după click, încearcă form submit
+                if current_url_before == current_url_after and "production/" in current_url_after:
+                    logger.warning("⚠️ URL nu s-a schimbat după click! Încerc form submit...")
+                    self.driver.execute_script("""
+                        var form = document.querySelector('form');
+                        if (form) {
+                            form.submit();
+                        }
+                    """)
+                    time.sleep(2)
+            except Exception as e:
+                logger.debug(f"ℹ️ Form submit check: {e}")
 
             # DEBUG: Verifică JavaScript errors
             try:
