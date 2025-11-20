@@ -4,6 +4,9 @@ Aplicație web pentru procesarea comenzilor de decanturi
 OBSID - Platformă de management decanturi parfumuri
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 import pandas as pd
