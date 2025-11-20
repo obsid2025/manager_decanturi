@@ -3,506 +3,237 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OBSID - Manager Decanturi Parfumuri</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20251119_3">
+    <title>root@obsid-decant:~</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=terminal_v2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;600&family=VT323&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="https://gomagcdn.ro/domains3/obsid.ro/files/company/parfumuri-arabesti8220.svg">
 </head>
 <body>
-    <!-- Header cu meniu -->
-    <header class="header">
-        <div class="container">
-            <div class="header-content">
-                <div class="logo-section">
-                    <img src="https://gomagcdn.ro/domains3/obsid.ro/files/company/parfumuri-arabesti8220.svg" alt="OBSID Logo" class="logo">
-                    <div class="brand-text">
-                        <h1>Manager Decanturi</h1>
-                    </div>
-                </div>
-                <nav class="nav-menu">
-                    <a href="https://www.obsid.ro/" target="_blank" class="nav-link">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                        </svg>
-                        Site Principal
-                    </a>
-                    <a href="https://www.obsid.ro/gomag" target="_blank" class="nav-link">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="9" y1="3" x2="9" y2="21"></line>
-                        </svg>
-                        Dashboard
-                    </a>
-                </nav>
-            </div>
+    <div class="scanline"></div>
+    <div class="crt-overlay"></div>
+    
+    <div class="terminal-wrapper">
+        <header>
+            <nav>
+                <a href="#" class="nav-cmd active" data-tab="raport-tab">/analysis_module</a>
+                <a href="#" class="nav-cmd" data-tab="voucher-tab">/production_module</a>
+                <a href="https://www.obsid.ro/" target="_blank" class="nav-cmd">/exit_system</a>
+            </nav>
+        </header>
+
+        <div class="site-title">
+            <h1>
+                <span class="prompt-user">root@obsid:~$</span> <span id="typewriter-title"></span>
+            </h1>
         </div>
-    </header>
 
-    <!-- Conținut principal -->
-    <main class="main-content">
-        <div class="container">
-            <!-- Secțiune instrucțiuni -->
-            <div class="instructions-card">
-                <h2>📋 Instrucțiuni de utilizare</h2>
-                <ol>
-                    <li>Încărcați fișierul Excel exportat din sistemul de comenzi (format: .xlsx sau .xls)</li>
-                    <li>Sistemul va procesa automat comenzile finalizate și va exclude cele anulate</li>
-                    <li>Veți vedea raportul de producție direct în browser</li>
-                    <li>Descărcați raportul în format Excel pentru arhivare sau printare</li>
-                </ol>
-                <div class="info-box">
-                    <strong>📌 Notă:</strong> Raportul arată exact câte decanturi trebuie făcute din fiecare parfum,
-                    pe fiecare cantitate (3ml, 5ml, 10ml), pentru a evita desfacerea sticlelor deja decanate.
-                </div>
-                <div class="model-download-section">
-                    <a href="/download-model" class="btn btn-download-model">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        Descarcă Model de Import (.xlsx)
-                    </a>
-                    <p class="model-description">Fișier exemplu cu format corect pentru import. Include instrucțiuni detaliate.</p>
-                </div>
-            </div>
-
-            <!-- Tab Navigation -->
-            <div class="tabs-navigation">
-                <button class="tab-btn active" data-tab="raport-tab">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <line x1="10" y1="9" x2="8" y2="9"></line>
-                    </svg>
-                    Raport Decanturi
-                </button>
-                <button class="tab-btn" data-tab="voucher-tab">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
-                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
-                    </svg>
-                    Bonuri de Producție
-                </button>
-            </div>
-
-            <!-- Tab Panel 1: Raport Decanturi -->
-            <div class="tab-content active" id="raport-tab">
-            <!-- Secțiune upload -->
-            <div class="upload-section">
-                <div class="upload-card">
-                    <div class="upload-icon">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                    </div>
-                    <h3>Încarcă fișier comenzi</h3>
-                    <p>Selectează fișierul Excel cu comenzile de procesat</p>
-
-                    <div class="upload-zone" id="uploadZone">
-                        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
-                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click();">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                <polyline points="14 2 14 8 20 8"></polyline>
-                            </svg>
-                            Selectează fișier
-                        </button>
-                        <span class="file-name" id="fileName"></span>
-                    </div>
-
-                    <button class="btn btn-success" id="processBtn" style="display: none;">
-                        Procesează comenzi
-                    </button>
-
-                    <div class="loading" id="loading" style="display: none;">
-                        <div class="spinner"></div>
-                        <p>Se procesează comenzile...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Secțiune rezultate -->
-            <div class="results-section" id="resultsSection" style="display: none;">
-                <!-- Info comenzi -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon success">✓</div>
-                        <div class="stat-content">
-                            <h4 id="comenziFinalizate">0</h4>
-                            <p>Comenzi Finalizate</p>
+        <div id="main-interface" class="container">
+            
+            <!-- Module Display Area -->
+            <div id="module-display">
+                
+                <!-- Tab 1: Analysis Module -->
+                <div class="module-content active" id="raport-tab">
+                    <div class="terminal-card">
+                        <div class="card-header">
+                            <span class="card-title">>> MODULE: ANALYSIS_PREP</span>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon warning">✕</div>
-                        <div class="stat-content">
-                            <h4 id="comenziAnulate">0</h4>
-                            <p>Comenzi Anulate</p>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon info">Σ</div>
-                        <div class="stat-content">
-                            <h4 id="totalComenzi">0</h4>
-                            <p>Total Comenzi</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tabel raport -->
-                <div class="table-card">
-                    <div class="table-header">
-                        <h3>📊 Raport de Producție</h3>
-                        <button class="btn btn-export" id="exportBtn">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            Exportă în Excel
-                        </button>
-                    </div>
-
-                    <div class="table-responsive">
-                        <table class="data-table" id="raportTable">
-                            <thead>
-                                <tr>
-                                    <th>Parfum</th>
-                                    <th>SKU</th>
-                                    <th>Cantitate</th>
-                                    <th>Bucăți</th>
-                                    <th>Total Parfum</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tableBody">
-                                <!-- Generat dinamic -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Sumar global -->
-                <div class="summary-card">
-                    <h3>📈 Sumar Global</h3>
-                    <div class="summary-grid" id="summaryGrid">
-                        <!-- Generat dinamic -->
-                    </div>
-                    <div class="total-line">
-                        <strong>TOTAL GENERAL:</strong>
-                        <span id="totalGeneral">0</span> bucăți
-                    </div>
-                </div>
-            </div>
-
-            <!-- Mesaje eroare -->
-            <div class="alert alert-error" id="errorAlert" style="display: none;">
-                <span id="errorMessage"></span>
-            </div>
-            </div>
-            <!-- End Tab Panel 1 -->
-
-            <!-- Tab Panel 2: Bonuri de Producție -->
-            <div class="tab-content" id="voucher-tab">
-                <!-- Secțiune upload pentru bonuri -->
-                <div class="upload-section">
-                    <div class="upload-card">
-                        <div class="upload-icon">
-                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="17 8 12 3 7 8"></polyline>
-                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                            </svg>
-                        </div>
-                        <h3>Încarcă fișier pentru bonuri de producție</h3>
-                        <p>Selectează fișierul Excel cu comenzile de procesat</p>
-
-                        <div class="upload-zone" id="uploadZoneVoucher">
-                            <input type="file" id="fileInputVoucher" accept=".xlsx,.xls" style="display: none;">
-                            <button class="btn btn-primary" onclick="document.getElementById('fileInputVoucher').click();">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <polyline points="14 2 14 8 20 8"></polyline>
-                                </svg>
-                                Selectează fișier
-                            </button>
-                            <span class="file-name" id="fileNameVoucher"></span>
-                        </div>
-
-                        <button class="btn btn-success" id="processBtnVoucher" style="display: none;">
-                            Procesează bonuri de producție
-                        </button>
-
-                        <div class="loading" id="loadingVoucher" style="display: none;">
-                            <div class="spinner"></div>
-                            <p>Se procesează bonurile...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Secțiune rezultate bonuri -->
-                <div class="results-section" id="resultsSectionVoucher" style="display: none;">
-                    <!-- Info bonuri -->
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon success">📦</div>
-                            <div class="stat-content">
-                                <h4 id="totalBonuri">0</h4>
-                                <p>Bonuri de Creat</p>
+                        <div class="card-body">
+                            <div class="command-prompt">
+                                <span class="path">~/modules/analysis</span>$ <span class="cursor">_</span>
                             </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-icon info">🔢</div>
-                            <div class="stat-content">
-                                <h4 id="totalBucati">0</h4>
-                                <p>Total Bucăți</p>
+                            
+                            <div class="upload-box">
+                                <p class="terminal-text">> INITIATE_UPLOAD_SEQUENCE</p>
+                                <p class="terminal-text dim">> WAITING_FOR_INPUT_STREAM (.xlsx/.xls)...</p>
+                                
+                                <div class="input-group">
+                                    <input type="file" id="fileInput" accept=".xlsx,.xls" class="hidden-input">
+                                    <button class="terminal-btn" onclick="document.getElementById('fileInput').click()">[ SELECT_SOURCE_FILE ]</button>
+                                    <span id="fileName" class="file-status">NO_FILE_SELECTED</span>
+                                </div>
+
+                                <div class="action-group">
+                                    <button class="terminal-btn action-btn" id="processBtn" style="display: none;">[ EXECUTE_ANALYSIS ]</button>
+                                    <div class="loading" id="loading" style="display: none;">
+                                        <span class="blink">>> PROCESSING_DATA...</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Results Section -->
+                            <div id="resultsSection" style="display: none;">
+                                <div class="ascii-divider">==================================================</div>
+                                <div class="stats-row">
+                                    <div class="stat-item">[ COMPLETED: <span id="comenziFinalizate" class="val-success">0</span> ]</div>
+                                    <div class="stat-item">[ CANCELED: <span id="comenziAnulate" class="val-error">0</span> ]</div>
+                                    <div class="stat-item">[ TOTAL: <span id="totalComenzi" class="val-info">0</span> ]</div>
+                                </div>
+                                <div class="ascii-divider">==================================================</div>
+
+                                <div class="table-controls">
+                                    <button class="terminal-btn" id="exportBtn">[ EXPORT_TO_EXCEL ]</button>
+                                </div>
+
+                                <div class="terminal-table-wrapper">
+                                    <table class="terminal-table" id="raportTable">
+                                        <thead>
+                                            <tr>
+                                                <th>PRODUCT_NAME</th>
+                                                <th>SKU_ID</th>
+                                                <th>QTY</th>
+                                                <th>PCS</th>
+                                                <th>TOTAL_ML</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tableBody"></tbody>
+                                    </table>
+                                </div>
+                                
+                                <div class="summary-box">
+                                    <div class="ascii-divider">--------------------------------------------------</div>
+                                    <div id="summaryGrid"></div>
+                                    <div class="total-line">>> SYSTEM_TOTAL: <span id="totalGeneral">0</span> UNITS</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Error Alert -->
+                            <div class="alert alert-error" id="errorAlert" style="display: none;">
+                                <span class="error-icon">!</span> <span id="errorMessage"></span>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Tabel bonuri -->
-                    <div class="table-card">
-                        <div class="table-header">
-                            <h3>📋 Bonuri de Producție (Agregate pe SKU)</h3>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <button class="btn btn-export" id="copyAllBtn">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                    </svg>
-                                    Copiază toate SKU-urile
-                                </button>
-                                <button class="btn btn-success" id="startAutomationBtn" style="display: none; background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polygon points="10 8 16 12 10 16 10 8"></polygon>
-                                    </svg>
-                                    🤖 START AUTOMATIZARE OBLIO
-                                </button>
-                                <button class="btn" id="helpAutomationBtn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;" title="Ghid instalare și utilizare">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                    </svg>
-                                    ❓ Cum funcționează?
-                                </button>
+                <!-- Tab 2: Production Module -->
+                <div class="module-content" id="voucher-tab">
+                    <div class="terminal-card">
+                        <div class="card-header">
+                            <span class="card-title">>> MODULE: PRODUCTION_VOUCHERS</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="command-prompt">
+                                <span class="path">~/modules/production</span>$ <span class="cursor">_</span>
+                            </div>
+
+                            <div class="upload-box">
+                                <p class="terminal-text">> INITIATE_PRODUCTION_SEQUENCE</p>
+                                <p class="terminal-text dim">> WAITING_FOR_INPUT_STREAM (.xlsx/.xls)...</p>
+                                
+                                <div class="input-group">
+                                    <input type="file" id="fileInputVoucher" accept=".xlsx,.xls" class="hidden-input">
+                                    <button class="terminal-btn" onclick="document.getElementById('fileInputVoucher').click()">[ SELECT_SOURCE_FILE ]</button>
+                                    <span id="fileNameVoucher" class="file-status">NO_FILE_SELECTED</span>
+                                </div>
+
+                                <div class="action-group">
+                                    <button class="terminal-btn action-btn" id="processBtnVoucher" style="display: none;">[ PROCESS_VOUCHERS ]</button>
+                                    <div class="loading" id="loadingVoucher" style="display: none;">
+                                        <span class="blink">>> AGGREGATING_DATA...</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Results Section -->
+                            <div id="resultsSectionVoucher" style="display: none;">
+                                <div class="ascii-divider">==================================================</div>
+                                <div class="stats-row">
+                                    <div class="stat-item">[ VOUCHERS: <span id="totalBonuri" class="val-success">0</span> ]</div>
+                                    <div class="stat-item">[ TOTAL_UNITS: <span id="totalBucati" class="val-info">0</span> ]</div>
+                                </div>
+                                <div class="ascii-divider">==================================================</div>
+
+                                <div class="table-controls">
+                                    <button class="terminal-btn" id="copyAllBtn">[ COPY_ALL_SKUS ]</button>
+                                    <button class="terminal-btn success-btn" id="startAutomationBtn" style="display: none;">[ ./RUN_OBLIO_BOT.SH ]</button>
+                                    <button class="terminal-btn danger-btn" id="stopAutomationBtn" style="display: none;">[ KILL_PROCESS ]</button>
+                                </div>
+
+                                <div class="terminal-table-wrapper">
+                                    <table class="terminal-table voucher-table" id="voucherTable">
+                                        <thead>
+                                            <tr>
+                                                <th>SKU_ID</th>
+                                                <th>PRODUCT_NAME</th>
+                                                <th>QTY</th>
+                                                <th>ORDER_REFS</th>
+                                                <th>ACTIONS</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="voucherTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Error Alert -->
+                            <div class="alert alert-error" id="errorAlertVoucher" style="display: none;">
+                                <span class="error-icon">!</span> <span id="errorMessageVoucher"></span>
                             </div>
                         </div>
-
-                        <div class="table-responsive">
-                            <table class="data-table voucher-table" id="voucherTable">
-                                <thead>
-                                    <tr>
-                                        <th>SKU</th>
-                                        <th>Nume Produs</th>
-                                        <th>Cantitate</th>
-                                        <th>Comenzi</th>
-                                        <th>Acțiuni</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="voucherTableBody">
-                                    <!-- Generat dinamic -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Info utilizare -->
-                    <div class="info-box voucher-info">
-                        <h4>📌 Cum să folosești bonurile de producție:</h4>
-                        <ol>
-                            <li>Apasă pe butonul "Copiază SKU" pentru fiecare produs</li>
-                            <li>Lipește SKU-ul în câmpul de căutare Oblio</li>
-                            <li>Selectează produsul găsit</li>
-                            <li>Introdu cantitatea afișată în coloana "Cantitate"</li>
-                            <li>Adaugă bonul la lista de producție</li>
-                        </ol>
-                        <p><strong>Cantitățile sunt deja agregate</strong> - dacă vezi cantitate 5, înseamnă că trebuie să creezi 5 bucăți din acel produs.</p>
                     </div>
                 </div>
 
-                <!-- Mesaje eroare voucher -->
-                <div class="alert alert-error" id="errorAlertVoucher" style="display: none;">
-                    <span id="errorMessageVoucher"></span>
-                </div>
-            </div>
-            <!-- End Tab Panel 2 -->
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2025 OBSID - Parfumuri Arabești Premium. Toate drepturile rezervate.</p>
-        </div>
-    </footer>
-
-    <!-- Modal Help pentru Automatizare -->
-    <div id="helpModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; overflow-y: auto;">
-        <div style="max-width: 900px; margin: 2rem auto; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem 2rem; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin: 0; font-size: 1.5rem;">🤖 Ghid Automatizare Oblio</h2>
-                <button onclick="document.getElementById('helpModal').style.display='none'" style="background: transparent; border: none; color: white; font-size: 2rem; cursor: pointer; line-height: 1; padding: 0; width: 32px; height: 32px;">&times;</button>
             </div>
 
-            <!-- Content -->
-            <div style="padding: 2rem; line-height: 1.6;">
-                <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;">
-                    <strong>📌 Ce face automatizarea?</strong><br>
-                    Creează automat bonurile de producție în Oblio, deschizând <strong>5 tab-uri în paralel</strong> pentru procesare rapidă!
+            <!-- Permanent Terminal Logs (Always Visible) -->
+            <div class="system-logs-container">
+                <div class="log-header">
+                    <span>=== SYSTEM_LOGS ===</span>
+                    <span id="terminalStatus" class="status-indicator">⚪ IDLE</span>
                 </div>
-
-                <!-- Pașii de instalare -->
-                <h3 style="color: #667eea; margin-top: 1.5rem;">⚡ Instalare (O SINGURĂ DATĂ)</h3>
-
-                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
-                    <h4 style="margin-top: 0;">1️⃣ Instalează Tampermonkey</h4>
-                    <p style="margin: 0.5rem 0;">Extensie browser pentru scripturi personalizate:</p>
-                    <ul style="margin: 0.5rem 0;">
-                        <li><strong>Edge:</strong> <a href="https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd" target="_blank" style="color: #667eea;">Descarcă Tampermonkey pentru Edge</a></li>
-                        <li><strong>Chrome:</strong> <a href="https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" style="color: #667eea;">Descarcă Tampermonkey pentru Chrome</a></li>
-                    </ul>
+                <div id="terminalLogs" class="log-content">
+                    <div class="log-entry"><span class="timestamp">[BOOT]</span> System initialized...</div>
+                    <div class="log-entry"><span class="timestamp">[BOOT]</span> Modules loaded successfully.</div>
+                    <div class="log-entry"><span class="timestamp">[INFO]</span> Waiting for user command...</div>
                 </div>
-
-                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
-                    <h4 style="margin-top: 0;">2️⃣ Instalează Scriptul OBSID</h4>
-                    <ol style="margin: 0.5rem 0; padding-left: 1.5rem;">
-                        <li>Click pe iconița <strong>Tampermonkey</strong> din browser (colț dreapta sus)</li>
-                        <li>Selectează <strong>"Dashboard"</strong></li>
-                        <li>Click pe <strong>"+"</strong> (script nou)</li>
-                        <li><strong>Copiază</strong> tot conținutul din fișierul <code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">tampermonkey_oblio_auto.js</code></li>
-                        <li><strong>Lipește</strong> în editor și <strong>Salvează</strong> (Ctrl+S)</li>
-                    </ol>
-                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.75rem; margin-top: 1rem; border-radius: 4px;">
-                        <strong>📂 Unde găsesc fișierul?</strong><br>
-                        Fișierul <code>tampermonkey_oblio_auto.js</code> se află în același folder cu această aplicație.
+                
+                <!-- CLI Input Section -->
+                <div id="cliInputSection" style="display: none;">
+                    <div class="cli-wrapper">
+                        <span id="cliPrompt" class="cli-prompt">$</span>
+                        <input type="text" id="cliInput" class="terminal-input" autocomplete="off" spellcheck="false">
                     </div>
                 </div>
+            </div>
 
-                <div style="background: #f5f5f5; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
-                    <h4 style="margin-top: 0;">3️⃣ Loghează-te în Oblio</h4>
-                    <ol style="margin: 0.5rem 0; padding-left: 1.5rem;">
-                        <li>Deschide <a href="https://www.oblio.eu" target="_blank" style="color: #667eea;">www.oblio.eu</a></li>
-                        <li>Loghează-te cu credențialele tale</li>
-                        <li><strong>Lasă tab-ul deschis!</strong> (sesiunea rămâne activă)</li>
-                    </ol>
-                </div>
+        </div>
 
-                <!-- Utilizare -->
-                <h3 style="color: #28a745; margin-top: 1.5rem;">🚀 Utilizare Zilnică</h3>
+        <footer>
+            <p>© 2025 OBSID SYSTEMS // TERMINAL_ACCESS_GRANTED // <a href="#" id="helpAutomationBtn">[ HELP ]</a></p>
+        </footer>
+    </div>
 
-                <div style="background: #f1f8ff; border-left: 4px solid #28a745; padding: 1.5rem; border-radius: 4px; margin-bottom: 1rem;">
-                    <ol style="margin: 0; padding-left: 1.5rem; line-height: 2;">
-                        <li>Tab <strong>"Raport Producție Decanturi"</strong> → Încarcă Excel → <strong>"Procesează Comenzi"</strong></li>
-                        <li>Tab <strong>"Bonuri de Producție"</strong> → Verifică datele</li>
-                        <li>Click pe <strong>"🤖 START AUTOMATIZARE OBLIO"</strong></li>
-                        <li>Confirmă în popup</li>
-                        <li><strong>GATA!</strong> Browser-ul creează bonurile automat! 🎉</li>
-                    </ol>
-                </div>
-
-                <!-- Verificare -->
-                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 1rem; margin-bottom: 1.5rem; border-radius: 4px;">
-                    <strong>✅ Prima rulare?</strong><br>
-                    Testează cu <strong>2-3 bonuri</strong> și verifică în Oblio că totul funcționează corect!
-                </div>
-
-                <!-- Troubleshooting -->
-                <h3 style="color: #f5576c; margin-top: 1.5rem;">🐛 Probleme Comune</h3>
-
-                <div style="font-size: 0.9rem;">
-                    <details style="margin-bottom: 0.5rem;">
-                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ Tab-urile se deschid dar nu fac nimic</summary>
-                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
-                            <strong>Soluție:</strong> Verifică că ești logat în Oblio și că Tampermonkey script este activ (icon verde).
-                        </div>
-                    </details>
-
-                    <details style="margin-bottom: 0.5rem;">
-                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ "Element not found" în console</summary>
-                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
-                            <strong>Soluție:</strong> Reîmprospătează pagina (Ctrl+F5) sau verifică că Oblio nu a schimbat interfața.
-                        </div>
-                    </details>
-
-                    <details style="margin-bottom: 0.5rem;">
-                        <summary style="cursor: pointer; font-weight: bold; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">❌ Browser-ul se blochează</summary>
-                        <div style="padding: 0.75rem; background: #fafafa; margin-top: 0.25rem; border-radius: 4px;">
-                            <strong>Soluție:</strong> Micșorează BATCH_SIZE la 3 în <code>main.js</code> (linia ~520).
-                        </div>
-                    </details>
-                </div>
-
-                <!-- Footer modal -->
-                <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e0e0e0; text-align: center; color: #666;">
-                    <p style="margin: 0.5rem 0;">📖 Pentru ghid complet, vezi fișierele:</p>
-                    <p style="margin: 0.5rem 0;"><code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">INSTALARE_TAMPERMONKEY.md</code> • <code style="background: #e0e0e0; padding: 2px 6px; border-radius: 3px;">QUICK_START.md</code></p>
-                </div>
-
-                <!-- Close button -->
-                <div style="text-align: center; margin-top: 1.5rem;">
-                    <button onclick="document.getElementById('helpModal').style.display='none'" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 0.75rem 2rem; font-size: 1rem; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);">
-                        Am înțeles!
-                    </button>
-                </div>
+    <!-- Help Modal (Styled as Terminal Popup) -->
+    <div id="helpModal" class="terminal-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>>> MAN_PAGE: AUTOMATION</span>
+                <button class="close-btn" onclick="document.getElementById('helpModal').style.display='none'">[X]</button>
+            </div>
+            <div class="modal-body">
+                <p>NAME</p>
+                <p class="indent">oblio_automation - automated production voucher generation</p>
+                <br>
+                <p>SYNOPSIS</p>
+                <p class="indent">./run_oblio_bot.sh [OPTIONS]</p>
+                <br>
+                <p>DESCRIPTION</p>
+                <p class="indent">Automates the creation of production vouchers in Oblio ERP.</p>
+                <p class="indent">1. Upload Excel file in Production Module.</p>
+                <p class="indent">2. Verify data integrity.</p>
+                <p class="indent">3. Execute ./RUN_OBLIO_BOT.SH</p>
+                <br>
+                <p>NOTES</p>
+                <p class="indent">Ensure no other automation processes are running.</p>
+                <p class="indent">Use [ KILL_PROCESS ] if the system hangs.</p>
             </div>
         </div>
     </div>
 
-    <!-- Terminal Modal pentru Live Logs & Interactive Input -->
-    <div id="terminalModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10000; backdrop-filter: blur(5px);">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 900px; max-height: 85vh; background: #1e1e1e; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
-
-            <!-- Header -->
-            <div style="padding: 1.5rem; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px 12px 0 0;">
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="font-size: 1.5rem;">🖥️</div>
-                    <div>
-                        <h3 style="margin: 0; color: white; font-size: 1.3rem; font-weight: bold;">Terminal Live - Selenium Automation</h3>
-                        <p style="margin: 0.25rem 0 0 0; color: rgba(255,255,255,0.8); font-size: 0.9rem;">Monitorizare în timp real + Input interactiv</p>
-                    </div>
-                </div>
-                <button onclick="closeTerminal()" style="background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
-                    ×
-                </button>
-            </div>
-
-            <!-- Console Logs -->
-            <div id="terminalLogsContainer" style="flex: 1; padding: 1.5rem; overflow-y: auto; background: #1e1e1e; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9rem; line-height: 1.6;">
-                <div id="terminalLogs"></div>
-            </div>
-
-            <!-- CLI Input Line (hidden by default, shown when input is required) -->
-            <div id="cliInputSection" style="display: none; padding: 1rem 1.5rem; border-top: 1px solid #333; background: #1e1e1e; font-family: 'Consolas', 'Monaco', monospace;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <span id="cliPrompt" style="color: #00ff00; font-weight: bold; font-size: 1rem;">$</span>
-                    <input
-                        type="text"
-                        id="cliInput"
-                        autocomplete="off"
-                        spellcheck="false"
-                        style="flex: 1; background: transparent; border: none; color: #ffffff; font-size: 0.95rem; font-family: 'Consolas', 'Monaco', monospace; outline: none; caret-color: #00ff00; padding: 0;"
-                        placeholder="Introdu valoarea și apasă Enter..."
-                    >
-                </div>
-            </div>
-
-            <!-- Status Bar -->
-            <div style="padding: 1rem 1.5rem; border-top: 1px solid #333; background: #252525; border-radius: 0 0 12px 12px; display: flex; justify-content: space-between; align-items: center;">
-                <div id="terminalStatus" style="color: #aaa; font-size: 0.85rem;">⚪ Inactiv</div>
-                <div style="color: #666; font-size: 0.75rem;">Socket.IO</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Socket.IO Client Library -->
+    <script src="https://unpkg.com/typewriter-effect@latest/dist/core.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=20251120_8"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=terminal_v2"></script>
 </body>
 </html>

@@ -43,6 +43,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 automation_logs_queue = queue.Queue()
 automation_input_queue = queue.Queue()
 automation_active = False
+stop_requested = False
 
 # Creare directoare dacă nu există
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -632,15 +633,30 @@ def handle_disconnect():
     logger.info(f"🔌 Client deconectat de la WebSocket")
 
 
+@socketio.on('stop_automation')
+def handle_stop_automation():
+    global stop_requested, automation_active
+    if automation_active:
+        stop_requested = True
+        logger.info("🛑 Cerere de oprire automatizare primită")
+        emit('log', {'type': 'warning', 'message': '⚠️ Se încearcă oprirea automatizării...'})
+    else:
+        emit('log', {'type': 'info', 'message': 'ℹ️ Nu există nicio automatizare activă.'})
+        # Force reset just in case
+        automation_active = False
+
+
 @socketio.on('start_automation_live')
 def handle_start_automation_live(data):
     """
     Pornește automatizarea cu logs live și interactive input
     """
-    global automation_active
+    global automation_active, stop_requested
+    stop_requested = False
 
     if automation_active:
         emit('log', {'type': 'error', 'message': '⚠️ O automatizare este deja în desfășurare!'})
+        emit('automation_status', {'active': True})
         return
 
     bonuri = data.get('bonuri', [])
@@ -704,7 +720,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
     Rulează automatizarea în background și trimite logs live
     FOLOSEȘTE socketio.start_background_task() care funcționează cu eventlet!
     """
-    global automation_active
+    global automation_active, stop_requested
 
     # Event pentru oprirea heartbeat
     import threading
@@ -798,6 +814,16 @@ def run_automation_with_live_logs(bonuri, client_sid):
 
         # Procesare BON cu BON cu progress live
         for i, bon in enumerate(bonuri, 1):
+            if stop_requested:
+                socketio.emit('log', {
+                    'type': 'warning',
+                    'message': '🛑 Automatizare oprită manual de utilizator!'
+                }, room=client_sid)
+                socketio.emit('automation_complete', {
+                    'success': False,
+                    'error': 'Stopped by user'
+                }, room=client_sid)
+                break
             try:
                 # Emit progress înainte de fiecare bon
                 socketio.emit('progress', {
@@ -879,7 +905,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
         # ============================================================
         successful_products = stats.get('successful_products', [])
         
-        if successful_products:
+        if successful_products and not stop_requested:
             socketio.emit('log', {
                 'type': 'info',
                 'message': f'🚚 START TRANSFER GESTIUNE pentru {len(successful_products)} produse...'
