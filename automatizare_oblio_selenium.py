@@ -921,8 +921,47 @@ class OblioAutomation:
             pp_quantity_input.send_keys(Keys.DELETE)  # Delete
             time.sleep(0.2)
             pp_quantity_input.send_keys(str(quantity))  # Introduce cantitatea
-            time.sleep(0.5)
+            time.sleep(1.5) # Așteaptă ca Oblio să calculeze rețeta
             logger.info(f"✅ Cantitate setată: {quantity}")
+
+            # --- VERIFICARE STOC (NOU) ---
+            logger.info("🔍 Verificare stoc materii prime...")
+            try:
+                # Caută input-ul de cantitate consumată (ap_1_quantity2)
+                # Acesta apare automat după ce Oblio încarcă rețeta
+                consumed_qty_input = self.wait_for_element(By.ID, "ap_1_quantity2", timeout=5)
+                
+                if consumed_qty_input:
+                    consumed_val = float(consumed_qty_input.get_attribute('value') or 0)
+                    
+                    # Caută span-ul cu stocul (ap_1_name_note)
+                    stock_span = self.driver.find_element(By.ID, "ap_1_name_note")
+                    stock_text = stock_span.text # Ex: "Stoc: 0.02 buc"
+                    
+                    # Parsează stocul
+                    import re
+                    match_stock = re.search(r'Stoc:\s*([\d\.]+)', stock_text)
+                    if match_stock:
+                        stock_val = float(match_stock.group(1))
+                        
+                        logger.info(f"📊 Verificare stoc: Necesar={consumed_val}, Disponibil={stock_val}")
+                        
+                        if consumed_val > stock_val:
+                            logger.warning(f"⚠️ STOC INSUFICIENT! Necesar: {consumed_val}, Disponibil: {stock_val}")
+                            self._log(f"⚠️ STOC INSUFICIENT pentru {sku}! Necesar: {consumed_val}, Disponibil: {stock_val}. Se sare peste acest bon.", 'warning')
+                            
+                            # Închide tab-ul curent sau navighează înapoi pentru a nu bloca procesul
+                            # Deoarece suntem pe pagina de creare, putem doar să returnăm False
+                            # și să lăsăm bucla principală să continue
+                            return False
+                    else:
+                        logger.warning(f"⚠️ Nu s-a putut parsa stocul din text: '{stock_text}'")
+                else:
+                    logger.info("ℹ️ Nu s-a găsit input-ul de consum (poate nu există rețetă sau s-a încărcat greu)")
+            
+            except Exception as e:
+                logger.warning(f"⚠️ Eroare la verificarea stocului (non-blocant): {e}")
+            # --- END VERIFICARE STOC ---
 
             # PASUL 5: Click pe butonul de previzualizare/salvare
             logger.info("🔍 Căutare buton salvare...")
