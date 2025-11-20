@@ -684,12 +684,31 @@ def handle_user_input(data):
     emit('log', {'type': 'success', 'message': f'✅ Input primit: {input_type}'})
 
 
+def send_heartbeat(client_sid, stop_event):
+    """
+    Trimite heartbeat la fiecare 10 secunde pentru a menține conexiunea vie
+    """
+    while not stop_event.is_set():
+        try:
+            socketio.emit('heartbeat', {'timestamp': time.time()}, room=client_sid)
+            eventlet.sleep(10)  # Heartbeat la fiecare 10 secunde
+        except:
+            break
+
+
 def run_automation_with_live_logs(bonuri, client_sid):
     """
     Rulează automatizarea în background și trimite logs live
     FOLOSEȘTE socketio.start_background_task() care funcționează cu eventlet!
     """
     global automation_active
+
+    # Event pentru oprirea heartbeat
+    import threading
+    stop_heartbeat = threading.Event()
+
+    # Pornește heartbeat în background
+    socketio.start_background_task(send_heartbeat, client_sid, stop_heartbeat)
 
     # Cu socketio.start_background_task() NU mai trebuie app.app_context()!
     try:
@@ -761,8 +780,89 @@ def run_automation_with_live_logs(bonuri, client_sid):
             }, room=client_sid)
             return
 
-        # Procesează bonuri
-        stats = automation.process_bonuri(bonuri, None, None, None)
+        # Procesează bonuri BON CU BON (fix timeout!)
+        stats = {
+            'total': len(bonuri),
+            'success': 0,
+            'failed': 0,
+            'errors': []
+        }
+
+        # Credențiale Oblio
+        oblio_email = os.environ.get('OBLIO_EMAIL')
+        oblio_password = os.environ.get('OBLIO_PASSWORD')
+
+        # Procesare BON cu BON cu progress live
+        for i, bon in enumerate(bonuri, 1):
+            try:
+                # Emit progress înainte de fiecare bon
+                socketio.emit('progress', {
+                    'current': i,
+                    'total': len(bonuri),
+                    'sku': bon.get('sku'),
+                    'nume': bon.get('nume', ''),
+                    'cantitate': bon.get('cantitate', 1)
+                }, room=client_sid)
+
+                # CRITIC: Permite event loop să proceseze mesaje WebSocket
+                eventlet.sleep(0.1)
+
+                # Procesează bonul
+                socketio.emit('log', {
+                    'type': 'info',
+                    'message': f'🔄 Procesare bon {i}/{len(bonuri)}: {bon.get("sku")}'
+                }, room=client_sid)
+
+                success = automation.create_production_voucher(
+                    bon.get('sku'),
+                    bon.get('cantitate', 1),
+                    None,  # cookies
+                    oblio_email,
+                    oblio_password
+                )
+
+                # Emit rezultat după fiecare bon
+                if success:
+                    stats['success'] += 1
+                    socketio.emit('bon_complete', {
+                        'index': i,
+                        'total': len(bonuri),
+                        'success': True,
+                        'sku': bon.get('sku'),
+                        'message': f'✅ Bon {i}/{len(bonuri)} finalizat cu succes!'
+                    }, room=client_sid)
+                else:
+                    stats['failed'] += 1
+                    stats['errors'].append({
+                        'sku': bon.get('sku'),
+                        'error': 'Bon nu a fost creat'
+                    })
+                    socketio.emit('bon_complete', {
+                        'index': i,
+                        'total': len(bonuri),
+                        'success': False,
+                        'sku': bon.get('sku'),
+                        'message': f'❌ Bon {i}/{len(bonuri)} eșuat!'
+                    }, room=client_sid)
+
+                # Pauză între bonuri + permite event loop
+                if i < len(bonuri):
+                    eventlet.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"❌ Eroare la procesarea bonului {i}: {e}")
+                stats['failed'] += 1
+                stats['errors'].append({
+                    'sku': bon.get('sku'),
+                    'error': str(e)
+                })
+                socketio.emit('bon_complete', {
+                    'index': i,
+                    'total': len(bonuri),
+                    'success': False,
+                    'sku': bon.get('sku'),
+                    'message': f'❌ Eroare: {str(e)[:100]}'
+                }, room=client_sid)
 
         # Închide browser
         automation.close()
@@ -785,6 +885,8 @@ def run_automation_with_live_logs(bonuri, client_sid):
             'error': str(e)
         }, room=client_sid)
     finally:
+        # Oprește heartbeat
+        stop_heartbeat.set()
         automation_active = False
 
 

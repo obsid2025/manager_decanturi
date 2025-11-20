@@ -444,14 +444,14 @@ class OblioAutomation:
 
             return False
 
-    def wait_for_element(self, by, selector, timeout=15):
+    def wait_for_element(self, by, selector, timeout=5):
         """
         Așteaptă ca un element să fie disponibil
 
         Args:
             by: Tipul selectorului (By.ID, By.CSS_SELECTOR, etc.)
             selector: Selectorul elementului
-            timeout: Timeout în secunde
+            timeout: Timeout în secunde (default 5s - optimizat)
 
         Returns:
             WebElement sau None
@@ -465,14 +465,14 @@ class OblioAutomation:
             logger.warning(f"⚠️ Element {selector} nu a fost găsit după {timeout}s")
             return None
 
-    def wait_for_clickable(self, by, selector, timeout=15):
+    def wait_for_clickable(self, by, selector, timeout=5):
         """
         Așteaptă ca un element să fie clickable
 
         Args:
             by: Tipul selectorului
             selector: Selectorul elementului
-            timeout: Timeout în secunde
+            timeout: Timeout în secunde (default 5s - optimizat)
 
         Returns:
             WebElement sau None
@@ -762,14 +762,14 @@ class OblioAutomation:
             
             return False
 
-    def type_slowly(self, element, text, delay=0.05):
+    def type_slowly(self, element, text, delay=0.03):
         """
         Tastează text character-by-character (pentru autocomplete)
 
         Args:
             element: WebElement input
             text: Textul de tastat
-            delay: Delay între caractere (secunde)
+            delay: Delay între caractere (secunde) - optimizat la 0.03s
         """
         element.clear()
         for char in text:
@@ -958,11 +958,11 @@ class OblioAutomation:
             # Click salvare (Previzualizare)
             logger.info("🖱️ Click buton salvare...")
             save_button.click()
-            time.sleep(4)
+            time.sleep(2)  # Optimizat: 4s → 2s
 
             # PASUL 6: Verifică dacă am fost redirectat la pagina de preview
             logger.info("🔍 Verificare redirect la pagina de preview...")
-            time.sleep(3)
+            time.sleep(1.5)  # Optimizat: 3s → 1.5s
 
             current_url = self.driver.current_url
             logger.info(f"📍 URL curent după submit: {current_url}")
@@ -1005,7 +1005,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Lanseaza in Productie'...")
                     launch_button.click()
-                    time.sleep(3)
+                    time.sleep(1.5)  # Optimizat: 3s → 1.5s
 
                     # PASUL 8: Click pe butonul OK din popup modal
                     logger.info("🔍 Căutare buton OK în popup modal...")
@@ -1020,7 +1020,7 @@ class OblioAutomation:
 
                     for by, selector in ok_selectors:
                         try:
-                            ok_button = self.wait_for_clickable(by, selector, timeout=5)
+                            ok_button = self.wait_for_clickable(by, selector, timeout=3)
                             if ok_button:
                                 logger.info(f"✅ Buton OK găsit: {selector}")
                                 break
@@ -1030,7 +1030,7 @@ class OblioAutomation:
                     if ok_button:
                         logger.info("🖱️ Click pe butonul OK din popup...")
                         ok_button.click()
-                        time.sleep(2)
+                        time.sleep(1)  # Optimizat: 2s → 1s
                     else:
                         logger.warning("⚠️ Butonul OK nu a fost găsit (poate nu a apărut popup-ul)")
 
@@ -1047,7 +1047,7 @@ class OblioAutomation:
 
                     for by, selector in finalize_selectors:
                         try:
-                            finalize_button = self.wait_for_clickable(by, selector, timeout=5)
+                            finalize_button = self.wait_for_clickable(by, selector, timeout=3)
                             if finalize_button:
                                 logger.info(f"✅ Buton 'Finalizeaza Productia' găsit: {selector}")
                                 break
@@ -1059,7 +1059,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Finalizeaza Productia'...")
                     finalize_button.click()
-                    time.sleep(4)
+                    time.sleep(2)  # Optimizat: 4s → 2s
 
                     # PASUL 10: Verificare finalizare în raportul de producție
                     logger.info("🔍 Verificare finalizare în raportul de producție...")
