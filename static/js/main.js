@@ -730,80 +730,89 @@ function updateTerminalStatus(text, color) {
 }
 
 /**
- * Afișare secțiune input când server-ul cere credențiale
+ * Afișare CLI input când server-ul cere credențiale
  */
 function showInputSection(prompt) {
     console.log('🔍 showInputSection CALLED with prompt:', prompt);
 
-    const inputSection = document.getElementById('terminalInput');
-    const promptDiv = document.getElementById('inputPrompt');
-    const emailSection = document.getElementById('emailInputSection');
-    const passwordSection = document.getElementById('passwordInputSection');
-    const twoFASection = document.getElementById('twoFAInputSection');
+    const cliInputSection = document.getElementById('cliInputSection');
+    const cliPrompt = document.getElementById('cliPrompt');
+    const cliInput = document.getElementById('cliInput');
 
-    console.log('📋 Elements found:', {
-        inputSection: !!inputSection,
-        promptDiv: !!promptDiv,
-        emailSection: !!emailSection,
-        passwordSection: !!passwordSection,
-        twoFASection: !!twoFASection
+    console.log('📋 CLI Elements found:', {
+        cliInputSection: !!cliInputSection,
+        cliPrompt: !!cliPrompt,
+        cliInput: !!cliInput
     });
 
-    // Ascunde toate input-urile
-    emailSection.style.display = 'none';
-    passwordSection.style.display = 'none';
-    twoFASection.style.display = 'none';
+    // Setează tipul curent de input
+    currentInputType = prompt.type;
 
-    // Determină ce input să afișeze
+    // Afișează mesajul în terminal
+    const message = prompt.message || `Se așteaptă ${prompt.type}...`;
+    appendTerminalLog('warning', message);
+
+    // Setează prompt-ul CLI în funcție de tip
     if (prompt.type === 'email') {
-        currentInputType = 'email';
-        promptDiv.textContent = prompt.message || '📧 Introdu email-ul pentru Oblio:';
-        emailSection.style.display = 'block';
-        setTimeout(() => document.getElementById('emailInput').focus(), 100);
+        cliPrompt.textContent = '📧';
+        cliPrompt.style.color = '#00bfff';
+        cliInput.type = 'text';
+        cliInput.placeholder = 'Introdu email-ul și apasă Enter...';
     } else if (prompt.type === 'password') {
-        currentInputType = 'password';
-        promptDiv.textContent = prompt.message || '🔑 Introdu parola pentru Oblio:';
-        passwordSection.style.display = 'block';
-        setTimeout(() => document.getElementById('passwordInput').focus(), 100);
+        cliPrompt.textContent = '🔑';
+        cliPrompt.style.color = '#ff6b6b';
+        cliInput.type = 'password';
+        cliInput.placeholder = 'Introdu parola și apasă Enter...';
     } else if (prompt.type === '2fa') {
-        currentInputType = '2fa';
-        promptDiv.textContent = prompt.message || '🔢 Introdu codul 2FA (6 cifre):';
-        twoFASection.style.display = 'block';
-        setTimeout(() => document.getElementById('twoFAInput').focus(), 100);
+        cliPrompt.textContent = '🔢';
+        cliPrompt.style.color = '#ffd700';
+        cliInput.type = 'text';
+        cliInput.placeholder = 'Introdu codul 2FA (6 cifre) și apasă Enter...';
+        cliInput.maxLength = 6;
     }
 
-    // Afișează secțiunea de input
-    inputSection.style.display = 'block';
+    // Afișează CLI input section
+    cliInputSection.style.display = 'block';
 
-    // Append log
-    appendTerminalLog('warning', prompt.message || 'Se așteaptă input de la utilizator...');
+    // Focus pe input
+    setTimeout(() => {
+        cliInput.value = '';
+        cliInput.focus();
+    }, 100);
+
+    // Scroll terminal la final
+    const terminalLogs = document.getElementById('terminalLogsContainer');
+    if (terminalLogs) {
+        terminalLogs.scrollTop = terminalLogs.scrollHeight;
+    }
 }
 
 /**
- * Trimite input către server prin WebSocket
+ * Trimite input către server prin WebSocket (CLI style)
  */
 function submitInput() {
-    let value = '';
+    const cliInput = document.getElementById('cliInput');
+    const value = cliInput.value.trim();
 
-    if (currentInputType === 'email') {
-        value = document.getElementById('emailInput').value.trim();
-        if (!value) {
-            appendTerminalLog('error', '❌ Email-ul nu poate fi gol!');
-            return;
-        }
-    } else if (currentInputType === 'password') {
-        value = document.getElementById('passwordInput').value;
-        if (!value) {
-            appendTerminalLog('error', '❌ Parola nu poate fi goală!');
-            return;
-        }
-    } else if (currentInputType === '2fa') {
-        value = document.getElementById('twoFAInput').value.trim();
-        if (!/^\d{6}$/.test(value)) {
-            appendTerminalLog('error', '❌ Codul 2FA trebuie să aibă 6 cifre!');
-            return;
-        }
+    // Validare
+    if (!value) {
+        appendTerminalLog('error', '❌ Introdu o valoare validă!');
+        return;
     }
+
+    if (currentInputType === '2fa' && !/^\d{6}$/.test(value)) {
+        appendTerminalLog('error', '❌ Codul 2FA trebuie să aibă 6 cifre!');
+        return;
+    }
+
+    // Afișează input-ul în terminal (mascat pentru password)
+    let displayValue = value;
+    if (currentInputType === 'password') {
+        displayValue = '•'.repeat(value.length);
+    }
+
+    const prompt = currentInputType === 'email' ? '📧' : (currentInputType === 'password' ? '🔑' : '🔢');
+    appendTerminalLog('info', `${prompt} ${displayValue}`);
 
     // Trimite input către server
     socket.emit('user_input', {
@@ -811,12 +820,30 @@ function submitInput() {
         value: value
     });
 
-    // Ascunde secțiunea de input
-    document.getElementById('terminalInput').style.display = 'none';
+    // Ascunde CLI input section
+    document.getElementById('cliInputSection').style.display = 'none';
+
+    // Clear input
+    cliInput.value = '';
 
     // Log
     appendTerminalLog('info', `✉️ Input trimis către server...`);
 }
+
+/**
+ * Event listener pentru Enter key în CLI input
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    const cliInput = document.getElementById('cliInput');
+    if (cliInput) {
+        cliInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitInput();
+            }
+        });
+    }
+});
 
 /**
  * Gestionare finalizare automatizare

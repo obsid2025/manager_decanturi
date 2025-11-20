@@ -473,36 +473,23 @@
             </div>
 
             <!-- Console Logs -->
-            <div style="flex: 1; padding: 1.5rem; overflow-y: auto; background: #1e1e1e; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9rem; line-height: 1.6;">
+            <div id="terminalLogsContainer" style="flex: 1; padding: 1.5rem; overflow-y: auto; background: #1e1e1e; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.9rem; line-height: 1.6;">
                 <div id="terminalLogs"></div>
             </div>
 
-            <!-- Input Section (hidden by default, shown when input is required) -->
-            <div id="terminalInput" style="display: none; padding: 1.5rem; border-top: 1px solid #333; background: #252525;">
-                <div id="inputPrompt" style="color: #ffd700; margin-bottom: 1rem; font-weight: bold; font-size: 1rem;"></div>
-
-                <!-- Email Input -->
-                <div id="emailInputSection" style="display: none; margin-bottom: 1rem;">
-                    <label style="color: #aaa; display: block; margin-bottom: 0.5rem;">📧 Email Oblio:</label>
-                    <input type="email" id="emailInput" placeholder="email@obsid.ro" style="width: 100%; padding: 0.75rem; background: #1e1e1e; border: 1px solid #444; border-radius: 6px; color: white; font-size: 1rem;">
+            <!-- CLI Input Line (hidden by default, shown when input is required) -->
+            <div id="cliInputSection" style="display: none; padding: 1rem 1.5rem; border-top: 1px solid #333; background: #1e1e1e; font-family: 'Consolas', 'Monaco', monospace;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <span id="cliPrompt" style="color: #00ff00; font-weight: bold; font-size: 1rem;">$</span>
+                    <input
+                        type="text"
+                        id="cliInput"
+                        autocomplete="off"
+                        spellcheck="false"
+                        style="flex: 1; background: transparent; border: none; color: #ffffff; font-size: 0.95rem; font-family: 'Consolas', 'Monaco', monospace; outline: none; caret-color: #00ff00; padding: 0;"
+                        placeholder="Introdu valoarea și apasă Enter..."
+                    >
                 </div>
-
-                <!-- Password Input -->
-                <div id="passwordInputSection" style="display: none; margin-bottom: 1rem;">
-                    <label style="color: #aaa; display: block; margin-bottom: 0.5rem;">🔑 Parolă Oblio:</label>
-                    <input type="password" id="passwordInput" placeholder="••••••••" style="width: 100%; padding: 0.75rem; background: #1e1e1e; border: 1px solid #444; border-radius: 6px; color: white; font-size: 1rem;">
-                </div>
-
-                <!-- 2FA Input -->
-                <div id="twoFAInputSection" style="display: none; margin-bottom: 1rem;">
-                    <label style="color: #aaa; display: block; margin-bottom: 0.5rem;">🔢 Cod 2FA (6 cifre):</label>
-                    <input type="text" id="twoFAInput" placeholder="123456" maxlength="6" pattern="[0-9]{6}" style="width: 100%; padding: 0.75rem; background: #1e1e1e; border: 1px solid #444; border-radius: 6px; color: white; font-size: 1.2rem; text-align: center; letter-spacing: 0.5rem;">
-                </div>
-
-                <!-- Submit Button -->
-                <button id="submitInputBtn" onclick="submitInput()" style="width: 100%; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);" onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 6px 16px rgba(102, 126, 234, 0.6)'" onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 12px rgba(102, 126, 234, 0.4)'">
-                    ✅ Trimite
-                </button>
             </div>
 
             <!-- Status Bar -->
