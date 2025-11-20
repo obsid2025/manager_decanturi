@@ -472,12 +472,21 @@ function displayVoucherResultsFromUpload(data) {
 
     // Afișare secțiune rezultate
     resultsSectionVoucher.style.display = 'block';
+
+    // Afișare buton automatizare
+    const startAutomationBtn = document.getElementById('startAutomationBtn');
+    if (startAutomationBtn) {
+        startAutomationBtn.style.display = 'inline-flex';
+    }
 }
 
 /**
  * Afișare rezultate voucher din upload Tab 2 (cu comenzi)
  */
 function displayVoucherResults(data) {
+    // Salvare date pentru automatizare
+    currentBonuriData = data.bonuri;
+
     // Afișare statistici
     document.getElementById('totalBonuri').textContent = data.total_bonuri;
     document.getElementById('totalBucati').textContent = data.total_bucati;
