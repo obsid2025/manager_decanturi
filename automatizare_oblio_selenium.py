@@ -955,14 +955,14 @@ class OblioAutomation:
             except Exception as e:
                 logger.debug(f"ℹ️ Nu există modal de închis: {e}")
 
-            # Click salvare
+            # Click salvare (Previzualizare)
             logger.info("🖱️ Click buton salvare...")
             save_button.click()
             time.sleep(4)
 
-            # PASUL 6: Verifică succesul REAL în baza de date Oblio
-            logger.info("🔍 Verificare dacă bonul a fost creat în baza de date Oblio...")
-            time.sleep(3)  # Așteptăm să se proceseze complet
+            # PASUL 6: Verifică dacă am fost redirectat la pagina de preview
+            logger.info("🔍 Verificare redirect la pagina de preview...")
+            time.sleep(3)
 
             current_url = self.driver.current_url
             logger.info(f"📍 URL curent după submit: {current_url}")
@@ -970,26 +970,100 @@ class OblioAutomation:
             success = False
             production_id = None
 
-            # Metodă 1: Verifică dacă am fost redirectat la preview_production (cel mai sigur indicator)
+            # Verifică dacă am fost redirectat la preview_production
             if "/stock/preview_production/" in current_url:
                 # Extragem ID-ul bonului din URL
                 import re
                 match = re.search(r'/preview_production/(\d+)', current_url)
                 if match:
                     production_id = match.group(1)
-                    logger.info(f"✅ REDIRECT LA BON NOU! ID producție: {production_id}")
+                    logger.info(f"✅ REDIRECT LA PREVIEW! ID producție: {production_id}")
 
-                    # Verificăm că există badge de status pe pagină
-                    try:
-                        badge = WebDriverWait(self.driver, 5).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, ".badge"))
-                        )
-                        badge_text = badge.text
-                        logger.info(f"✅ Status bon: {badge_text}")
-                        success = True
-                    except:
-                        logger.warning("⚠️ Nu s-a găsit badge de status, dar URL-ul e corect")
-                        success = True  # URL-ul e indicator suficient
+                    # PASUL 7: Click pe butonul "Lanseaza in Productie"
+                    logger.info("🔍 Căutare buton 'Lanseaza in Productie'...")
+                    launch_button = None
+
+                    # Încearcă mai multe selectoare pentru butonul de lansare
+                    launch_selectors = [
+                        (By.CSS_SELECTOR, f"a.btn.btn-warning.issue-btn[href*='production_save/{production_id}']"),
+                        (By.XPATH, f"//a[contains(@href, 'production_save/{production_id}')]"),
+                        (By.XPATH, "//a[contains(text(), 'Lanseaza in Productie')]"),
+                        (By.CSS_SELECTOR, "a.issue-btn"),
+                    ]
+
+                    for by, selector in launch_selectors:
+                        try:
+                            launch_button = self.wait_for_clickable(by, selector, timeout=5)
+                            if launch_button:
+                                logger.info(f"✅ Buton 'Lanseaza in Productie' găsit: {selector}")
+                                break
+                        except:
+                            continue
+
+                    if not launch_button:
+                        raise Exception("Butonul 'Lanseaza in Productie' nu a fost găsit!")
+
+                    logger.info("🖱️ Click pe 'Lanseaza in Productie'...")
+                    launch_button.click()
+                    time.sleep(3)
+
+                    # PASUL 8: Click pe butonul OK din popup modal
+                    logger.info("🔍 Căutare buton OK în popup modal...")
+                    ok_button = None
+
+                    ok_selectors = [
+                        (By.CSS_SELECTOR, "button.btn.btn-warning.ok-message-modal"),
+                        (By.CSS_SELECTOR, ".ok-message-modal"),
+                        (By.XPATH, "//button[contains(@class, 'ok-message-modal')]"),
+                        (By.CSS_SELECTOR, "#modal-message .btn-warning"),
+                    ]
+
+                    for by, selector in ok_selectors:
+                        try:
+                            ok_button = self.wait_for_clickable(by, selector, timeout=5)
+                            if ok_button:
+                                logger.info(f"✅ Buton OK găsit: {selector}")
+                                break
+                        except:
+                            continue
+
+                    if ok_button:
+                        logger.info("🖱️ Click pe butonul OK din popup...")
+                        ok_button.click()
+                        time.sleep(2)
+                    else:
+                        logger.warning("⚠️ Butonul OK nu a fost găsit (poate nu a apărut popup-ul)")
+
+                    # PASUL 9: Click pe butonul "Finalizeaza Productia"
+                    logger.info("🔍 Căutare buton 'Finalizeaza Productia'...")
+                    finalize_button = None
+
+                    finalize_selectors = [
+                        (By.CSS_SELECTOR, f"a.btn.btn-warning[href*='production_complete/{production_id}']"),
+                        (By.XPATH, f"//a[contains(@href, 'production_complete/{production_id}')]"),
+                        (By.XPATH, "//a[contains(text(), 'Finalizeaza Productia')]"),
+                        (By.CSS_SELECTOR, "a[href*='production_complete']"),
+                    ]
+
+                    for by, selector in finalize_selectors:
+                        try:
+                            finalize_button = self.wait_for_clickable(by, selector, timeout=5)
+                            if finalize_button:
+                                logger.info(f"✅ Buton 'Finalizeaza Productia' găsit: {selector}")
+                                break
+                        except:
+                            continue
+
+                    if not finalize_button:
+                        raise Exception("Butonul 'Finalizeaza Productia' nu a fost găsit!")
+
+                    logger.info("🖱️ Click pe 'Finalizeaza Productia'...")
+                    finalize_button.click()
+                    time.sleep(4)
+
+                    # PASUL 10: Verificare finalizare în raportul de producție
+                    logger.info("🔍 Verificare finalizare în raportul de producție...")
+                    success = True
 
             # Metodă 2: Dacă nu am fost redirectat, verificăm în raportul de producție
             if not success:
@@ -1050,19 +1124,20 @@ class OblioAutomation:
 
             # Rezultat final
             if success:
-                msg = f"🎉 BON CREAT CU SUCCES! SKU={sku}, Cantitate={quantity}"
+                msg = f"🎉 BON DE PRODUCȚIE FINALIZAT CU SUCCES! SKU={sku}, Cantitate={quantity}"
                 if production_id:
                     msg += f", ID={production_id}"
+                    msg += f"\n   📋 Link: https://www.oblio.eu/stock/preview_production/{production_id}"
                 self._log(msg, 'success')
                 self.stats['success'] += 1
                 return True
             else:
-                self._log(f"❌ BONUL NU A FOST CREAT! SKU={sku} nu apare în raportul de producție", 'error')
+                self._log(f"❌ BONUL NU A FOST FINALIZAT! SKU={sku} - Eroare la finalizarea producției", 'error')
                 self.stats['failed'] += 1
                 self.stats['errors'].append({
                     'sku': sku,
                     'quantity': quantity,
-                    'error': 'Bon nu a fost găsit în raportul de producție după submit'
+                    'error': 'Bon nu a fost finalizat - eroare la unul din pașii de finalizare'
                 })
                 return False
 
