@@ -1217,6 +1217,16 @@ class OblioAutomation:
 
             # Metodă 2: Dacă nu am fost redirectat, verificăm în raportul de producție
             if not success:
+                # Verificăm dacă există un mesaj de eroare pe pagină
+                try:
+                    error_msg = self.driver.find_element(By.CSS_SELECTOR, ".alert-danger, .error-message, .text-danger")
+                    if error_msg.is_displayed():
+                        error_text = error_msg.text.strip()
+                        logger.error(f"❌ EROARE OBLIO DETECTATĂ: {error_text}")
+                        raise Exception(f"Eroare Oblio: {error_text}")
+                except NoSuchElementException:
+                    pass
+
                 logger.info("🔍 Navigare la raportul de producție pentru verificare...")
                 self.driver.get("https://www.oblio.eu/report/production")
                 time.sleep(3)
