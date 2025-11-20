@@ -949,6 +949,63 @@ class OblioAutomation:
             if not save_button:
                 raise Exception("Butonul de salvare nu a fost găsit!")
 
+            # DIAGNOSTIC COMPLET: Dump all form fields înainte de click
+            logger.info("🔍 DIAGNOSTIC: Verificare TOATE câmpurile formularului...")
+            try:
+                form_diagnostic = self.driver.execute_script("""
+                    var diagnostics = {
+                        formFields: {},
+                        requiredEmpty: [],
+                        validationErrors: [],
+                        consoleErrors: []
+                    };
+
+                    // Toate inputurile din form
+                    var inputs = document.querySelectorAll('input, select, textarea');
+                    inputs.forEach(function(input) {
+                        var id = input.id || input.name || 'unnamed';
+                        var value = input.value || '';
+                        var required = input.required || input.classList.contains('required');
+                        var visible = input.offsetParent !== null;
+
+                        diagnostics.formFields[id] = {
+                            value: value,
+                            type: input.type || input.tagName,
+                            required: required,
+                            visible: visible
+                        };
+
+                        // Check required fields
+                        if (required && visible && !value) {
+                            diagnostics.requiredEmpty.push(id);
+                        }
+                    });
+
+                    // Caută mesaje de validare vizibile
+                    var errorMessages = document.querySelectorAll('.error, .invalid-feedback, .text-danger, .alert-danger');
+                    errorMessages.forEach(function(msg) {
+                        if (msg.offsetParent !== null && msg.textContent.trim()) {
+                            diagnostics.validationErrors.push(msg.textContent.trim());
+                        }
+                    });
+
+                    return diagnostics;
+                """)
+
+                logger.info("📊 FORM FIELDS:")
+                for field_id, field_info in form_diagnostic.get('formFields', {}).items():
+                    if field_info.get('visible', False) and (field_info.get('value') or field_info.get('required')):
+                        logger.info(f"  • {field_id}: {field_info.get('value', 'EMPTY')} (required: {field_info.get('required', False)})")
+
+                if form_diagnostic.get('requiredEmpty'):
+                    logger.warning(f"⚠️ CÂMPURI OBLIGATORII GOALE: {', '.join(form_diagnostic['requiredEmpty'])}")
+
+                if form_diagnostic.get('validationErrors'):
+                    logger.error(f"❌ ERORI VALIDARE: {', '.join(form_diagnostic['validationErrors'])}")
+
+            except Exception as e:
+                logger.warning(f"⚠️ Eroare diagnostic form: {e}")
+
             # Încearcă să închidă orice modal care ar putea bloca butonul
             try:
                 logger.info("🔍 Verificare modal-uri care ar putea bloca...")
@@ -972,38 +1029,68 @@ class OblioAutomation:
             except Exception as e:
                 logger.debug(f"ℹ️ Nu există modal de închis: {e}")
 
-            # Click salvare (Previzualizare)
-            logger.info("🖱️ Click buton salvare...")
-
-            # Încearcă mai întâi click normal
+            # Scroll la buton pentru a fi sigur că e vizibil
             try:
-                save_button.click()
-                time.sleep(1)
-            except Exception as e:
-                logger.warning(f"⚠️ Click normal eșuat: {e}")
-                # Fallback: JavaScript click
-                logger.info("🔄 Încerc JavaScript click...")
-                self.driver.execute_script("arguments[0].click();", save_button)
-                time.sleep(1)
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", save_button)
+                time.sleep(0.5)
+                logger.info("✅ Scroll la butonul de salvare")
+            except:
+                pass
 
-            # ALTERNATIVĂ: Dacă click-ul nu funcționează, trigger form submit
+            # Click salvare (Previzualizare) - FORȚAT prin JavaScript
+            logger.info("🖱️ Click buton salvare (prin JavaScript pentru bypass validare UI)...")
+
+            # Încearcă direct JavaScript click pentru bypass event handlers
             try:
-                current_url_before = self.driver.current_url
-                time.sleep(2)
-                current_url_after = self.driver.current_url
+                # Folosește JavaScript direct pe onclick handler
+                click_result = self.driver.execute_script("""
+                    var btn = arguments[0];
 
-                # Dacă URL-ul nu s-a schimbat după click, încearcă form submit
-                if current_url_before == current_url_after and "production/" in current_url_after:
-                    logger.warning("⚠️ URL nu s-a schimbat după click! Încerc form submit...")
-                    self.driver.execute_script("""
-                        var form = document.querySelector('form');
-                        if (form) {
-                            form.submit();
+                    // Capturează onclick handler
+                    var onclickAttr = btn.getAttribute('onclick');
+                    console.log('Onclick handler:', onclickAttr);
+
+                    // Execută direct funcția din onclick
+                    if (onclickAttr && onclickAttr.includes('submit_form_doc')) {
+                        // Extrage numele formului din onclick
+                        var match = onclickAttr.match(/submit_form_doc\\('([^']+)'\\)/);
+                        if (match && match[1]) {
+                            var formName = match[1];
+                            console.log('Form name:', formName);
+
+                            // Găsește form-ul
+                            var form = document.querySelector('form[name="' + formName + '"]') ||
+                                      document.querySelector('form#' + formName) ||
+                                      document.querySelector('form');
+
+                            if (form) {
+                                console.log('Form găsit, submit...');
+                                // Submit direct
+                                form.submit();
+                                return 'FORM_SUBMITTED_DIRECT';
+                            } else {
+                                console.log('Form NU găsit!');
+                                return 'FORM_NOT_FOUND';
+                            }
                         }
-                    """)
-                    time.sleep(2)
+                    }
+
+                    // Fallback: click normal
+                    btn.click();
+                    return 'CLICKED_NORMAL';
+                """, save_button)
+
+                logger.info(f"✅ Click executat: {click_result}")
+                time.sleep(2)
+
             except Exception as e:
-                logger.debug(f"ℹ️ Form submit check: {e}")
+                logger.warning(f"⚠️ JavaScript click eșuat: {e}")
+                # Ultimate fallback: click normal
+                try:
+                    save_button.click()
+                    time.sleep(1)
+                except Exception as e2:
+                    logger.error(f"❌ Click normal EȘUAT: {e2}")
 
             # DEBUG: Verifică JavaScript errors
             try:
