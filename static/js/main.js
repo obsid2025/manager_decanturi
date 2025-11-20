@@ -891,9 +891,9 @@ function handleAutomationComplete(data) {
  */
 document.addEventListener('keydown', (e) => {
     const terminalModal = document.getElementById('terminalModal');
-    if (terminalModal.style.display === 'block' && e.key === 'Enter') {
-        const inputSection = document.getElementById('terminalInput');
-        if (inputSection.style.display === 'block') {
+    if (terminalModal && terminalModal.style.display === 'block' && e.key === 'Enter') {
+        const cliInputSection = document.getElementById('cliInputSection');
+        if (cliInputSection && cliInputSection.style.display === 'block') {
             submitInput();
         }
     }

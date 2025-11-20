@@ -901,9 +901,15 @@ class OblioAutomation:
             if not pp_quantity_input:
                 raise Exception("Element #pp_quantity nu a fost găsit!")
 
-            pp_quantity_input.clear()
-            time.sleep(0.3)
-            pp_quantity_input.send_keys(str(quantity))
+            # FIX: Șterge COMPLET câmpul înainte de a introduce valoarea
+            # clear() uneori nu funcționează, deci folosim Ctrl+A + Delete
+            pp_quantity_input.click()
+            time.sleep(0.2)
+            pp_quantity_input.send_keys(Keys.CONTROL + "a")  # Select all
+            time.sleep(0.1)
+            pp_quantity_input.send_keys(Keys.DELETE)  # Delete
+            time.sleep(0.2)
+            pp_quantity_input.send_keys(str(quantity))  # Introduce cantitatea
             time.sleep(0.5)
             logger.info(f"✅ Cantitate setată: {quantity}")
 
