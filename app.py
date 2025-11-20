@@ -817,6 +817,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 eventlet.sleep(0.1)  # Permite event loop să proceseze
 
                 # NU pasăm email/password pentru a forța login interactiv cu 2FA
+                # Login-ul se va face DOAR la primul bon, apoi sesiunea rămâne activă
                 success = automation.create_production_voucher(
                     bon.get('sku'),
                     bon.get('cantitate', 1),
