@@ -66,9 +66,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     initTypewriter();
-    initEventListeners();
-    logSystem('SYSTEM_INIT', 'Terminal initialized. Ready for input.');
-    logSystem('SYSTEM_CHECK', 'Connected to server via Socket.IO');
+    
+    try {
+        initEventListeners();
+        logSystem('SYSTEM_INIT', 'Terminal initialized. Ready for input.');
+        logSystem('SYSTEM_CHECK', 'Connected to server via Socket.IO');
+        
+        // Debug: Check if elements exist
+        if (!dom.production.fileInput) logSystem('ERR', 'Production File Input NOT FOUND', 'error');
+        if (!dom.production.fileName) logSystem('ERR', 'Production File Name Display NOT FOUND', 'error');
+        if (!dom.production.processBtn) logSystem('ERR', 'Production Process Button NOT FOUND', 'error');
+        
+    } catch (e) {
+        logSystem('CRITICAL_ERR', e.message, 'error');
+        console.error(e);
+    }
 });
 
 function initTypewriter() {
@@ -140,24 +152,27 @@ function initEventListeners() {
     dom.analysis.exportBtn.addEventListener('click', exportReport);
 
     // Production File Upload
-    // Note: We need to ensure the element exists before adding listener
     if (dom.production.fileInput) {
         // Click handler for the custom button
         const uploadBtn = document.querySelector('#voucher-tab .upload-box button');
         if (uploadBtn) {
             uploadBtn.onclick = (e) => {
                 e.preventDefault();
+                logSystem('DEBUG', 'Upload button clicked', 'info');
                 dom.production.fileInput.click();
             };
+        } else {
+            logSystem('WARN', 'Upload button selector failed', 'warning');
         }
 
         dom.production.fileInput.addEventListener('change', (e) => {
+            logSystem('DEBUG', `File input changed. Files: ${e.target.files.length}`, 'info');
             if (e.target.files.length > 0) {
                 handleVoucherFileSelect(e.target.files[0]);
             }
         });
     } else {
-        console.error("Production file input not found!");
+        logSystem('ERR', "Production file input not found in DOM!", 'error');
     }
 
     // Process Vouchers
@@ -343,21 +358,28 @@ async function exportReport() {
 // --- PRODUCTION MODULE (VOUCHERS) ---
 
 function handleVoucherFileSelect(file) {
+    logSystem('DEBUG', `Handling file: ${file.name}`, 'info');
+    
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext !== 'xlsx' && ext !== 'xls') {
         logSystem('UPLOAD_ERROR', 'Invalid file format. Expected .xlsx or .xls', 'error');
         return;
     }
 
-    dom.production.fileName.textContent = file.name;
-    dom.production.fileName.classList.remove('dim');
-    dom.production.fileName.classList.add('val-success');
+    if (dom.production.fileName) {
+        dom.production.fileName.textContent = file.name;
+        dom.production.fileName.classList.remove('dim');
+        dom.production.fileName.classList.add('val-success');
+    } else {
+        logSystem('ERR', 'fileName element missing', 'error');
+    }
     
     // Show process button
     if (dom.production.processBtn) {
         dom.production.processBtn.style.display = 'inline-block';
+        logSystem('DEBUG', 'Process button shown', 'info');
     } else {
-        console.error("Process button not found in DOM");
+        logSystem('ERR', "Process button not found in DOM", 'error');
     }
     
     logSystem('FILE_LOAD', `Production file loaded: ${file.name}`);
