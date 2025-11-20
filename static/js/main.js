@@ -103,7 +103,12 @@ function initEventListeners() {
     });
 
     // File Upload (Analysis)
-    dom.analysis.uploadBox.addEventListener('click', () => dom.analysis.fileInput.click());
+    dom.analysis.uploadBox.addEventListener('click', (e) => {
+        // Prevent triggering if clicking on the button itself (to avoid double trigger)
+        if (e.target.tagName !== 'BUTTON') {
+            dom.analysis.fileInput.click();
+        }
+    });
     dom.analysis.uploadBox.addEventListener('dragover', (e) => {
         e.preventDefault();
         dom.analysis.uploadBox.style.borderColor = 'var(--terminal-green)';
@@ -137,6 +142,15 @@ function initEventListeners() {
     // Production File Upload
     // Note: We need to ensure the element exists before adding listener
     if (dom.production.fileInput) {
+        // Click handler for the custom button
+        const uploadBtn = document.querySelector('#voucher-tab .upload-box button');
+        if (uploadBtn) {
+            uploadBtn.onclick = (e) => {
+                e.preventDefault();
+                dom.production.fileInput.click();
+            };
+        }
+
         dom.production.fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleVoucherFileSelect(e.target.files[0]);
@@ -340,7 +354,11 @@ function handleVoucherFileSelect(file) {
     dom.production.fileName.classList.add('val-success');
     
     // Show process button
-    dom.production.processBtn.style.display = 'inline-block';
+    if (dom.production.processBtn) {
+        dom.production.processBtn.style.display = 'inline-block';
+    } else {
+        console.error("Process button not found in DOM");
+    }
     
     logSystem('FILE_LOAD', `Production file loaded: ${file.name}`);
 }
@@ -397,7 +415,7 @@ function renderVouchers(data) {
             <td class="dim">${bon.sku}</td>
             <td>${bon.nume}</td>
             <td class="val-success">${bon.cantitate}</td>
-            <td class="dim">${bon.comenzi.join(', ')}</td>
+            <td class="dim">${bon.comenzi ? bon.comenzi.join(', ') : ''}</td>
             <td><button class="terminal-btn sm-btn" onclick="copyToClipboard('${bon.sku}')">[ COPY ]</button></td>
         `;
         dom.production.tableBody.appendChild(tr);
