@@ -838,7 +838,18 @@ class OblioAutomation:
                     # După login, navighează la pagina de producție
                     self._log(f"🌐 Navigare la pagina de producție...", 'info')
                     self.driver.get(url)
-                    time.sleep(2)
+                    time.sleep(3)  # Așteaptă încărcare pagină
+
+                    # Verifică URL curent
+                    current_url = self.driver.current_url
+                    self._log(f"📍 URL curent după navigare: {current_url}", 'info')
+
+                    # Dacă nu suntem pe pagina de producție, navighează din nou
+                    if "production" not in current_url.lower():
+                        self._log(f"⚠️ Nu suntem pe pagina de producție! Re-navighează...", 'warning')
+                        self.driver.get(url)
+                        time.sleep(3)
+                        self._log(f"📍 URL după re-navigare: {self.driver.current_url}", 'info')
 
             # PASUL 1: Găsește și completează câmpul SKU
             logger.info("🔍 Căutare câmp SKU (#pp_name)...")

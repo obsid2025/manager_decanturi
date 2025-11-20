@@ -909,19 +909,6 @@ function handleAutomationComplete(data) {
 }
 
 /**
- * Handle Enter key for input submission
- */
-document.addEventListener('keydown', (e) => {
-    const terminalModal = document.getElementById('terminalModal');
-    if (terminalModal && terminalModal.style.display === 'block' && e.key === 'Enter') {
-        const cliInputSection = document.getElementById('cliInputSection');
-        if (cliInputSection && cliInputSection.style.display === 'block') {
-            submitInput();
-        }
-    }
-});
-
-/**
  * Copiere SKU individual
  */
 async function copySKU(sku, button) {
