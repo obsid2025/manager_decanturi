@@ -813,12 +813,13 @@ def run_automation_with_live_logs(bonuri, client_sid):
                     'message': f'🔄 Procesare bon {i}/{len(bonuri)}: {bon.get("sku")}'
                 }, room=client_sid)
 
+                # NU pasăm email/password pentru a forța login interactiv cu 2FA
                 success = automation.create_production_voucher(
                     bon.get('sku'),
                     bon.get('cantitate', 1),
-                    None,  # cookies
-                    oblio_email,
-                    oblio_password
+                    None,   # cookies
+                    None,   # email - forțează login interactiv
+                    None    # password - forțează login interactiv
                 )
 
                 # Emit rezultat după fiecare bon
