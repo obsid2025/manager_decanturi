@@ -829,6 +829,9 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 # Emit rezultat după fiecare bon
                 if success:
                     stats['success'] += 1
+                    # Adăugăm bonul în lista de produse reușite pentru transfer
+                    stats.setdefault('successful_products', []).append(bon)
+                    
                     socketio.emit('bon_complete', {
                         'index': i,
                         'total': len(bonuri),
@@ -870,6 +873,36 @@ def run_automation_with_live_logs(bonuri, client_sid):
                     'sku': bon.get('sku'),
                     'message': f'❌ Eroare: {str(e)[:100]}'
                 }, room=client_sid)
+
+        # ============================================================
+        # ETAPA 2: TRANSFER GESTIUNE (Materiale consumabile -> Marfuri)
+        # ============================================================
+        successful_products = stats.get('successful_products', [])
+        
+        if successful_products:
+            socketio.emit('log', {
+                'type': 'info',
+                'message': f'🚚 START TRANSFER GESTIUNE pentru {len(successful_products)} produse...'
+            }, room=client_sid)
+            eventlet.sleep(1)
+
+            transfer_success = automation.create_transfer_note(successful_products)
+            
+            if transfer_success:
+                socketio.emit('log', {
+                    'type': 'success',
+                    'message': '✅ NOTA DE TRANSFER EMISĂ CU SUCCES!'
+                }, room=client_sid)
+            else:
+                socketio.emit('log', {
+                    'type': 'error',
+                    'message': '❌ EROARE LA EMITEREA NOTEI DE TRANSFER!'
+                }, room=client_sid)
+        else:
+            socketio.emit('log', {
+                'type': 'warning',
+                'message': '⚠️ Nu există produse reușite pentru transfer.'
+            }, room=client_sid)
 
         # Închide browser
         automation.close()

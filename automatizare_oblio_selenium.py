@@ -1320,6 +1320,144 @@ class OblioAutomation:
 
             return False
 
+    def create_transfer_note(self, products_list):
+        """
+        Creează o Notă de Transfer pentru o listă de produse
+        Transferă din 'Materiale consumabile' în 'Marfuri'
+
+        Args:
+            products_list (list): Lista de produse [{'sku': '...', 'cantitate': ...}]
+
+        Returns:
+            bool: True dacă transferul a reușit, False altfel
+        """
+        if not products_list:
+            self._log("⚠️ Nu există produse pentru transfer!", 'warning')
+            return False
+
+        self._log(f"🚚 START TRANSFER GESTIUNE: {len(products_list)} produse", 'info')
+        self._log(f"📍 Din 'Materiale consumabile' -> 'Marfuri'", 'info')
+
+        try:
+            # Navigare la pagina de transfer
+            url = "https://www.oblio.eu/stock/transfer/"
+            self._log(f"🌐 Navigare la: {url}", 'info')
+            self.driver.get(url)
+            time.sleep(3)
+
+            # PASUL 1: Selectare Gestiune Sursă (Materiale consumabile)
+            self._log("🔍 Selectare gestiune sursă: Materiale consumabile...", 'info')
+            
+            try:
+                from selenium.webdriver.support.ui import Select
+                gestiune_select = Select(self.wait_for_element(By.ID, "gestiune1"))
+                gestiune_select.select_by_value("237258") # Materiale consumabile
+                self._log("✅ Gestiune selectată: Materiale consumabile (237258)", 'info')
+                time.sleep(1)
+            except Exception as e:
+                raise Exception(f"Nu s-a putut selecta gestiunea sursă: {e}")
+
+            # PASUL 2: Confirmare Popup "OK, am inteles!"
+            self._log("🔍 Căutare popup confirmare...", 'info')
+            try:
+                ok_button = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-message-modal", timeout=5)
+                if ok_button:
+                    self._log("✅ Popup găsit, click OK...", 'info')
+                    ok_button.click()
+                    time.sleep(1.5)
+            except:
+                self._log("ℹ️ Popup-ul nu a apărut sau a fost deja închis", 'info')
+
+            # PASUL 3: Adăugare produse în listă
+            for i, prod in enumerate(products_list, 1):
+                sku = prod.get('sku')
+                quantity = prod.get('cantitate', 1)
+                
+                self._log(f"➕ Adăugare produs {i}/{len(products_list)}: SKU={sku}, Qty={quantity}", 'info')
+
+                # 3.1 Introducere SKU
+                name_input = self.wait_for_element(By.ID, "ap_name1")
+                if not name_input:
+                    raise Exception("Câmpul de căutare produs nu a fost găsit!")
+                
+                name_input.clear()
+                self.type_slowly(name_input, sku, delay=0.05)
+                name_input.send_keys(Keys.SPACE)
+                name_input.send_keys(Keys.BACKSPACE)
+                time.sleep(2) # Așteptare autocomplete
+
+                # 3.2 Selectare din autocomplete
+                try:
+                    autocomplete_items = self.driver.find_elements(By.CSS_SELECTOR, ".ui-menu-item")
+                    if len(autocomplete_items) > 0:
+                        autocomplete_items[0].click()
+                        time.sleep(1)
+                    else:
+                        # Încercare Enter dacă nu apare lista
+                        name_input.send_keys(Keys.ENTER)
+                        time.sleep(1)
+                except:
+                    self._log(f"⚠️ Eroare selectare produs {sku}", 'warning')
+                    continue
+
+                # 3.3 Setare Cantitate
+                qty_input = self.wait_for_element(By.ID, "ap_quantity")
+                qty_input.click()
+                time.sleep(0.1)
+                qty_input.send_keys(Keys.CONTROL + "a")
+                qty_input.send_keys(Keys.DELETE)
+                qty_input.send_keys(str(quantity))
+                
+                # 3.4 Setare Preț Vânzare (19.99)
+                price_input = self.wait_for_element(By.ID, "ap_price_2")
+                price_input.click()
+                time.sleep(0.1)
+                price_input.send_keys(Keys.CONTROL + "a")
+                price_input.send_keys(Keys.DELETE)
+                price_input.send_keys("19.99")
+
+                # 3.5 Click Adaugă
+                add_btn = self.driver.find_element(By.CSS_SELECTOR, ".btn-add-product-on-doc")
+                add_btn.click()
+                self._log(f"✅ Produs {sku} adăugat în listă", 'info')
+                time.sleep(1.5) # Așteptare procesare rând
+
+            # PASUL 4: Previzualizare Transfer
+            self._log("🔍 Finalizare: Click Previzualizare Transfer...", 'info')
+            preview_btn = self.wait_for_clickable(By.ID, "invoice_preview_btn")
+            
+            # Force JS Click (robust)
+            self.driver.execute_script("arguments[0].click();", preview_btn)
+            
+            # Așteptare redirect
+            time.sleep(3)
+            if "/stock/preview_transfer/" not in self.driver.current_url:
+                # Fallback submit form
+                self.driver.execute_script("submit_form_doc();")
+                time.sleep(3)
+
+            if "/stock/preview_transfer/" in self.driver.current_url:
+                self._log("✅ Redirectat la previzualizare transfer", 'info')
+                
+                # PASUL 5: Emite Nota Transfer
+                self._log("🔍 Căutare buton 'Emite Nota transfer'...", 'info')
+                issue_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".issue-btn")
+                
+                if issue_btn:
+                    issue_btn.click()
+                    self._log("🖱️ Click 'Emite Nota transfer'", 'info')
+                    time.sleep(3)
+                    self._log("🎉 TRANSFER FINALIZAT CU SUCCES!", 'success')
+                    return True
+                else:
+                    raise Exception("Butonul de emitere nu a fost găsit!")
+            else:
+                raise Exception("Nu s-a făcut redirectarea la pagina de previzualizare!")
+
+        except Exception as e:
+            self._log(f"❌ EROARE TRANSFER: {e}", 'error')
+            return False
+
     def process_bonuri(self, bonuri, oblio_cookies=None, oblio_email=None, oblio_password=None):
         """
         Procesează o listă de bonuri
