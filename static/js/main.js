@@ -2,8 +2,10 @@
 
 // Global State
 let currentFilename = null;
+let currentVouchers = [];
 let socket = io();
 let isProcessing = false;
+let currentInputType = null;
 
 // DOM Elements
 const dom = {
@@ -18,26 +20,43 @@ const dom = {
     analysis: {
         fileInput: document.getElementById('fileInput'),
         uploadBox: document.getElementById('uploadBox'),
-        fileName: document.getElementById('fileNameDisplay'),
-        executeBtn: document.getElementById('executeAnalysisBtn'),
-        results: document.getElementById('analysisResults'),
+        fileName: document.getElementById('fileName'),
+        executeBtn: document.getElementById('processBtn'),
+        results: document.getElementById('resultsSection'),
         tableBody: document.getElementById('tableBody'),
         summaryGrid: document.getElementById('summaryGrid'),
-        exportBtn: document.getElementById('exportReportBtn'),
+        exportBtn: document.getElementById('exportBtn'),
         stats: {
-            finalized: document.getElementById('stat-finalized'),
-            cancelled: document.getElementById('stat-cancelled'),
-            total: document.getElementById('stat-total'),
-            grandTotal: document.getElementById('stat-grand-total')
+            finalized: document.getElementById('comenziFinalizate'),
+            cancelled: document.getElementById('comenziAnulate'),
+            total: document.getElementById('totalComenzi'),
+            grandTotal: document.getElementById('totalGeneral')
         }
     },
     production: {
-        runBtn: document.getElementById('runOblioBotBtn'),
+        fileInput: document.getElementById('fileInputVoucher'),
+        fileName: document.getElementById('fileNameVoucher'),
+        processBtn: document.getElementById('processBtnVoucher'),
+        loading: document.getElementById('loadingVoucher'),
+        resultsSection: document.getElementById('resultsSectionVoucher'),
+        stats: {
+            totalBonuri: document.getElementById('totalBonuri'),
+            totalBucati: document.getElementById('totalBucati')
+        },
+        copyBtn: document.getElementById('copyAllBtn'),
+        runBtn: document.getElementById('startAutomationBtn'),
         stopBtn: document.getElementById('stopAutomationBtn'),
-        status: document.getElementById('automationStatus')
+        tableBody: document.getElementById('voucherTableBody'),
+        errorAlert: document.getElementById('errorAlertVoucher'),
+        errorMessage: document.getElementById('errorMessageVoucher'),
+        status: document.getElementById('terminalStatus')
     },
-    logs: document.getElementById('systemLogs'),
-    cli: document.getElementById('cliInput')
+    logs: document.getElementById('terminalLogs'),
+    cli: {
+        input: document.getElementById('cliInput'),
+        section: document.getElementById('cliInputSection'),
+        prompt: document.getElementById('cliPrompt')
+    }
 };
 
 // --- INITIALIZATION ---
@@ -112,15 +131,32 @@ function initEventListeners() {
     // Export
     dom.analysis.exportBtn.addEventListener('click', exportReport);
 
+    // Production File Upload
+    dom.production.fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleVoucherFileSelect(e.target.files[0]);
+        }
+    });
+
+    // Process Vouchers
+    dom.production.processBtn.addEventListener('click', processVouchers);
+    
+    // Copy All
+    dom.production.copyBtn.addEventListener('click', copyAllSkus);
+
     // Automation
     dom.production.runBtn.addEventListener('click', startAutomation);
     dom.production.stopBtn.addEventListener('click', stopAutomation);
 
-    // CLI Input (Cosmetic for now)
-    dom.cli.addEventListener('keypress', (e) => {
+    // CLI Input
+    dom.cli.input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            handleCliCommand(dom.cli.value);
-            dom.cli.value = '';
+            if (currentInputType) {
+                submitInput();
+            } else {
+                handleCliCommand(dom.cli.input.value);
+                dom.cli.input.value = '';
+            }
         }
     });
 }
@@ -146,7 +182,7 @@ function logSystem(source, message, type = 'info') {
     entry.className = 'log-entry';
     
     const time = new Date().toLocaleTimeString('ro-RO', { hour12: false });
-    const colorClass = type === 'error' ? 'val-error' : (type === 'success' ? 'val-success' : 'val-info');
+    const colorClass = type === 'error' ? 'val-error' : (type === 'success' ? 'val-success' : (type === 'warning' ? 'val-yellow' : 'val-info'));
     
     entry.innerHTML = `
         <span class="timestamp">[${time}]</span>
@@ -170,6 +206,9 @@ function handleFileSelect(file) {
     dom.analysis.fileName.textContent = file.name;
     dom.analysis.fileName.classList.remove('dim');
     dom.analysis.fileName.classList.add('val-success');
+    
+    // Show execute button
+    dom.analysis.executeBtn.style.display = 'inline-block';
     
     // Update hidden input if drag/drop was used
     if (dom.analysis.fileInput.files[0] !== file) {
@@ -275,15 +314,112 @@ async function exportReport() {
     window.location.href = `/export/${currentFilename}`;
 }
 
+// --- PRODUCTION MODULE (VOUCHERS) ---
+
+function handleVoucherFileSelect(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls') {
+        logSystem('UPLOAD_ERROR', 'Invalid file format. Expected .xlsx or .xls', 'error');
+        return;
+    }
+
+    dom.production.fileName.textContent = file.name;
+    dom.production.fileName.classList.remove('dim');
+    dom.production.fileName.classList.add('val-success');
+    
+    // Show process button
+    dom.production.processBtn.style.display = 'inline-block';
+    
+    logSystem('FILE_LOAD', `Production file loaded: ${file.name}`);
+}
+
+async function processVouchers() {
+    const file = dom.production.fileInput.files[0];
+    if (!file) {
+        logSystem('EXEC_ERROR', 'No file selected for vouchers.', 'error');
+        return;
+    }
+
+    logSystem('PRODUCTION', 'Processing vouchers...', 'info');
+    dom.production.processBtn.disabled = true;
+    dom.production.loading.style.display = 'block';
+    dom.production.errorAlert.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/process-vouchers', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Unknown server error');
+        }
+
+        currentVouchers = data.bonuri;
+        renderVouchers(data);
+        logSystem('PRODUCTION', `Processed ${data.total_bonuri} vouchers.`, 'success');
+
+    } catch (error) {
+        logSystem('PRODUCTION_FAIL', error.message, 'error');
+        dom.production.errorAlert.style.display = 'block';
+        dom.production.errorMessage.textContent = error.message;
+    } finally {
+        dom.production.processBtn.disabled = false;
+        dom.production.loading.style.display = 'none';
+    }
+}
+
+function renderVouchers(data) {
+    dom.production.stats.totalBonuri.textContent = data.total_bonuri;
+    dom.production.stats.totalBucati.textContent = data.total_bucati;
+
+    dom.production.tableBody.innerHTML = '';
+    data.bonuri.forEach(bon => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="dim">${bon.sku}</td>
+            <td>${bon.nume}</td>
+            <td class="val-success">${bon.cantitate}</td>
+            <td class="dim">${bon.comenzi.join(', ')}</td>
+            <td><button class="terminal-btn sm-btn" onclick="copyToClipboard('${bon.sku}')">[ COPY ]</button></td>
+        `;
+        dom.production.tableBody.appendChild(tr);
+    });
+
+    dom.production.resultsSection.style.display = 'block';
+    dom.production.runBtn.style.display = 'inline-block';
+}
+
+function copyAllSkus() {
+    if (!currentVouchers.length) return;
+    const skus = currentVouchers.map(b => b.sku).join('\n');
+    navigator.clipboard.writeText(skus).then(() => {
+        logSystem('CLIPBOARD', 'All SKUs copied to clipboard.', 'success');
+    });
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        logSystem('CLIPBOARD', `Copied: ${text}`, 'success');
+    });
+}
+
 // --- PRODUCTION MODULE (AUTOMATION) ---
 
 function startAutomation() {
     if (isProcessing) return;
+    
+    if (!currentVouchers || currentVouchers.length === 0) {
+        logSystem('AUTO_ERR', 'No vouchers loaded. Please process a file first.', 'error');
+        return;
+    }
 
     logSystem('AUTO_INIT', 'Initializing Oblio Automation Bot...');
-    
-    // Check if we have data (optional, depending on workflow)
-    // For now, we assume the user knows what they are doing or the backend handles validation
     
     dom.production.runBtn.disabled = true;
     dom.production.stopBtn.disabled = false;
@@ -292,35 +428,14 @@ function startAutomation() {
     
     isProcessing = true;
 
-    // Emit socket event to start
-    // Note: The original code didn't have a socket emit for start, it likely used a fetch or just relied on the file upload response.
-    // Assuming we need to trigger it or just listen. 
-    // If the backend starts automatically after upload, we just listen.
-    // But if we have a button, we should probably hit an endpoint.
-    
-    // Since the original code was mixed, let's assume we trigger it via an endpoint or just wait for logs if it was triggered by upload.
-    // However, the user asked for a "Start" button in the UI.
-    
-    // Let's try to hit a start endpoint if it exists, or just simulate the state if the backend is already running.
-    // Based on previous context, the automation runs on the server.
-    
-    // For this implementation, we'll assume the user wants to trigger the process.
-    // If there isn't a specific endpoint, we might need to create one or just rely on the logs.
-    
-    // Let's just log for now, as the backend integration for "Start" wasn't explicitly detailed in the "Stop" task.
-    // Wait, the previous `app.py` didn't show a specific "start" route other than `process_file`.
-    // So "Start" might actually mean "Process the uploaded file and run automation".
-    
-    // If the user clicks "Run Oblio Bot", we might need to re-trigger the processing or just show the logs.
-    logSystem('AUTO_WARN', 'Ensure Oblio is open in the background if required.');
+    socket.emit('start_automation_live', {
+        bonuri: currentVouchers
+    });
 }
 
 function stopAutomation() {
     logSystem('STOP_CMD', 'Sending INTERRUPT signal to server...', 'warning');
-    
     socket.emit('stop_automation');
-    
-    // Optimistic UI update
     dom.production.stopBtn.textContent = '[ STOPPING... ]';
     dom.production.stopBtn.disabled = true;
 }
@@ -331,32 +446,15 @@ socket.on('connect', () => {
     logSystem('NET', 'Socket connected.');
 });
 
-socket.on('log_message', (data) => {
-    // data = { message: "..." }
-    logSystem('SERVER', data.message);
-    
-    // Auto-detect completion or error to reset UI
-    if (data.message.includes('Finalizat') || data.message.includes('Eroare')) {
-        isProcessing = false;
-        dom.production.runBtn.disabled = false;
-        dom.production.stopBtn.disabled = true;
-        dom.production.status.textContent = 'STATUS: IDLE';
-        dom.production.status.className = 'dim';
-        dom.production.stopBtn.textContent = '[ CTRL+C (STOP) ]';
-    }
+socket.on('log', (data) => {
+    // data = { type: 'info'|'error'|'success', message: "..." }
+    logSystem('SERVER', data.message, data.type);
 });
 
 socket.on('automation_stopped', (data) => {
     logSystem('STOP_CONFIRM', 'Process stopped by user.', 'success');
-    isProcessing = false;
-    dom.production.runBtn.disabled = false;
-    dom.production.stopBtn.disabled = true;
-    dom.production.stopBtn.textContent = '[ CTRL+C (STOP) ]';
-    dom.production.status.textContent = 'STATUS: STOPPED';
-    dom.production.status.className = 'val-error';
+    resetAutomationUI();
 });
-
-// --- ADDITIONAL SOCKET EVENTS ---
 
 socket.on('progress', (data) => {
     logSystem('PROGRESS', `Processing ${data.current}/${data.total}: ${data.sku} (${data.nume})`, 'info');
@@ -364,14 +462,14 @@ socket.on('progress', (data) => {
 
 socket.on('bon_complete', (data) => {
     if (data.success) {
-        logSystem('SUCCESS', `Voucher complete: ${data.message}`, 'success');
+        logSystem('SUCCESS', data.message, 'success');
     } else {
-        logSystem('FAIL', `Voucher failed: ${data.message}`, 'error');
+        logSystem('FAIL', data.message, 'error');
     }
 });
 
 socket.on('automation_complete', (data) => {
-    logSystem('COMPLETE', 'Automation sequence finished.', 'success');
+    logSystem('COMPLETE', data.message || 'Automation sequence finished.', data.success ? 'success' : 'error');
     resetAutomationUI();
 });
 
