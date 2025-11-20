@@ -24,6 +24,15 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import logging
+import cloudinary
+import cloudinary.uploader
+
+# Configurare Cloudinary
+cloudinary.config( 
+  cloud_name = "do1fmca8i", 
+  api_key = "986836174941413", 
+  api_secret = "kanoBXprGBCBR9ytbGQygeKIl1I" 
+)
 
 # Configurare logging
 logging.basicConfig(
@@ -484,6 +493,35 @@ class OblioAutomation:
             return element
         except TimeoutException:
             logger.warning(f"⚠️ Element {selector} nu e clickable după {timeout}s")
+            return None
+
+    def upload_screenshot_to_cloudinary(self, screenshot_path):
+        """
+        Încarcă un screenshot pe Cloudinary și returnează URL-ul
+        """
+        try:
+            if not os.path.exists(screenshot_path):
+                return None
+                
+            self._log(f"☁️ Upload screenshot pe Cloudinary: {screenshot_path}...", 'info')
+            
+            # Upload
+            response = cloudinary.uploader.upload(
+                screenshot_path, 
+                folder="obsid_errors",
+                resource_type="image"
+            )
+            
+            url = response.get('secure_url')
+            if url:
+                self._log(f"📸 SCREENSHOT URL: {url}", 'error') # Log as error to be visible red
+                return url
+            else:
+                self._log("⚠️ Upload Cloudinary reușit dar fără URL", 'warning')
+                return None
+                
+        except Exception as e:
+            self._log(f"⚠️ Eroare upload Cloudinary: {str(e)}", 'warning')
             return None
 
     def load_cookies_from_json(self, cookies_json):
@@ -1354,6 +1392,9 @@ class OblioAutomation:
                 screenshot_path = f"error_screenshot_{sku}_{int(time.time())}.png"
                 self.driver.save_screenshot(screenshot_path)
                 self._log(f"📸 Screenshot salvat: {screenshot_path}", 'info')
+                
+                # Upload to Cloudinary
+                self.upload_screenshot_to_cloudinary(screenshot_path)
             except:
                 pass
 
@@ -1544,6 +1585,18 @@ class OblioAutomation:
 
         except Exception as e:
             self._log(f"❌ EROARE TRANSFER: {e}", 'error')
+            
+            # Screenshot pentru debugging
+            try:
+                screenshot_path = f"error_transfer_{int(time.time())}.png"
+                self.driver.save_screenshot(screenshot_path)
+                self._log(f"📸 Screenshot salvat: {screenshot_path}", 'info')
+                
+                # Upload to Cloudinary
+                self.upload_screenshot_to_cloudinary(screenshot_path)
+            except:
+                pass
+                
             return False
 
     def process_bonuri(self, bonuri, oblio_cookies=None, oblio_email=None, oblio_password=None):
