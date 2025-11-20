@@ -977,9 +977,27 @@ class OblioAutomation:
             save_button.click()
             time.sleep(2)  # Optimizat: 4s → 2s
 
+            # DEBUG: Verifică JavaScript errors
+            try:
+                js_errors = self.driver.execute_script(
+                    "return window.jsErrors || [];"
+                )
+                if js_errors:
+                    logger.warning(f"⚠️ JavaScript errors găsite: {js_errors}")
+            except:
+                pass
+
+            # DEBUG: Screenshot după click pentru debugging
+            try:
+                screenshot_path = f"after_click_{sku}_{int(time.time())}.png"
+                self.driver.save_screenshot(screenshot_path)
+                logger.info(f"📸 Screenshot după click: {screenshot_path}")
+            except:
+                pass
+
             # PASUL 6: Verifică dacă am fost redirectat la pagina de preview
             logger.info("🔍 Verificare redirect la pagina de preview...")
-            time.sleep(1.5)  # Optimizat: 3s → 1.5s
+            time.sleep(3)  # Mărit de la 1.5s la 3s pentru a aștepta redirect
 
             current_url = self.driver.current_url
             logger.info(f"📍 URL curent după submit: {current_url}")
