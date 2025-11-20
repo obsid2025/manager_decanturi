@@ -1380,29 +1380,45 @@ class OblioAutomation:
                 if not name_input:
                     raise Exception("Câmpul de căutare produs nu a fost găsit!")
                 
+                # Asigură-te că elementul este vizibil și interactabil
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", name_input)
+                time.sleep(0.5)
+                
                 name_input.clear()
-                self.type_slowly(name_input, sku, delay=0.05)
+                self.type_slowly(name_input, sku, delay=0.02) # Mai rapid
                 name_input.send_keys(Keys.SPACE)
                 name_input.send_keys(Keys.BACKSPACE)
-                time.sleep(2) # Așteptare autocomplete
+                time.sleep(1.5) # Așteptare autocomplete
 
                 # 3.2 Selectare din autocomplete
                 try:
-                    autocomplete_items = self.driver.find_elements(By.CSS_SELECTOR, ".ui-menu-item")
+                    # Așteaptă explicit lista de autocomplete
+                    autocomplete_items = WebDriverWait(self.driver, 3).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
+                    )
                     if len(autocomplete_items) > 0:
                         autocomplete_items[0].click()
-                        time.sleep(1)
+                        time.sleep(0.5)
                     else:
                         # Încercare Enter dacă nu apare lista
                         name_input.send_keys(Keys.ENTER)
-                        time.sleep(1)
+                        time.sleep(0.5)
                 except:
-                    self._log(f"⚠️ Eroare selectare produs {sku}", 'warning')
-                    continue
+                    self._log(f"⚠️ Eroare selectare produs {sku} (autocomplete)", 'warning')
+                    # Fallback Enter
+                    name_input.send_keys(Keys.ENTER)
+                    time.sleep(0.5)
 
                 # 3.3 Setare Cantitate
                 qty_input = self.wait_for_element(By.ID, "ap_quantity")
-                qty_input.click()
+                # Asigură-te că elementul este vizibil
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", qty_input)
+                
+                try:
+                    qty_input.click()
+                except:
+                    self.driver.execute_script("arguments[0].click();", qty_input)
+                    
                 time.sleep(0.1)
                 qty_input.send_keys(Keys.CONTROL + "a")
                 qty_input.send_keys(Keys.DELETE)
@@ -1410,7 +1426,11 @@ class OblioAutomation:
                 
                 # 3.4 Setare Preț Vânzare (19.99)
                 price_input = self.wait_for_element(By.ID, "ap_price_2")
-                price_input.click()
+                try:
+                    price_input.click()
+                except:
+                    self.driver.execute_script("arguments[0].click();", price_input)
+                    
                 time.sleep(0.1)
                 price_input.send_keys(Keys.CONTROL + "a")
                 price_input.send_keys(Keys.DELETE)
@@ -1418,9 +1438,21 @@ class OblioAutomation:
 
                 # 3.5 Click Adaugă
                 add_btn = self.driver.find_element(By.CSS_SELECTOR, ".btn-add-product-on-doc")
-                add_btn.click()
+                # Scroll la buton pentru a evita suprapunerea
+                self.driver.execute_script("arguments[0].scrollIntoView(true);", add_btn)
+                time.sleep(0.5)
+                
+                try:
+                    add_btn.click()
+                except:
+                    self.driver.execute_script("arguments[0].click();", add_btn)
+                    
                 self._log(f"✅ Produs {sku} adăugat în listă", 'info')
-                time.sleep(1.5) # Așteptare procesare rând
+                
+                # Așteaptă ca rândul să fie procesat și input-ul să fie golit/resetat
+                # Verificăm dacă input-ul de nume este gol sau așteptăm puțin mai mult
+                time.sleep(2) 
+
 
             # PASUL 4: Previzualizare Transfer
             self._log("🔍 Finalizare: Click Previzualizare Transfer...", 'info')
