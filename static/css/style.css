@@ -129,12 +129,12 @@ nav {
     }
     
     #module-display {
-        flex: 2;
+        flex: 1;
         min-width: 0; /* Prevent flex overflow */
     }
     
     .system-logs-container {
-        flex: 1;
+        flex: 1.2; /* Wider terminal */
         position: sticky;
         top: 20px;
         height: calc(100vh - 150px);

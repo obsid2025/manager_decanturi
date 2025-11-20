@@ -8,60 +8,63 @@ let isProcessing = false;
 let currentInputType = null;
 
 // DOM Elements
-const dom = {
-    nav: {
-        analysis: document.getElementById('cmd-analysis'),
-        production: document.getElementById('cmd-production')
-    },
-    modules: {
-        analysis: document.getElementById('analysis-module'),
-        production: document.getElementById('production-module')
-    },
-    analysis: {
-        fileInput: document.getElementById('fileInput'),
-        uploadBox: document.getElementById('uploadBox'),
-        fileName: document.getElementById('fileName'),
-        executeBtn: document.getElementById('processBtn'),
-        results: document.getElementById('resultsSection'),
-        tableBody: document.getElementById('tableBody'),
-        summaryGrid: document.getElementById('summaryGrid'),
-        exportBtn: document.getElementById('exportBtn'),
-        stats: {
-            finalized: document.getElementById('comenziFinalizate'),
-            cancelled: document.getElementById('comenziAnulate'),
-            total: document.getElementById('totalComenzi'),
-            grandTotal: document.getElementById('totalGeneral')
-        }
-    },
-    production: {
-        fileInput: document.getElementById('fileInputVoucher'),
-        fileName: document.getElementById('fileNameVoucher'),
-        processBtn: document.getElementById('processBtnVoucher'),
-        loading: document.getElementById('loadingVoucher'),
-        resultsSection: document.getElementById('resultsSectionVoucher'),
-        stats: {
-            totalBonuri: document.getElementById('totalBonuri'),
-            totalBucati: document.getElementById('totalBucati')
-        },
-        copyBtn: document.getElementById('copyAllBtn'),
-        runBtn: document.getElementById('startAutomationBtn'),
-        stopBtn: document.getElementById('stopAutomationBtn'),
-        tableBody: document.getElementById('voucherTableBody'),
-        errorAlert: document.getElementById('errorAlertVoucher'),
-        errorMessage: document.getElementById('errorMessageVoucher'),
-        status: document.getElementById('terminalStatus')
-    },
-    logs: document.getElementById('terminalLogs'),
-    cli: {
-        input: document.getElementById('cliInput'),
-        section: document.getElementById('cliInputSection'),
-        prompt: document.getElementById('cliPrompt')
-    }
-};
+let dom = {};
 
 // --- INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize DOM elements here to ensure they exist
+    dom = {
+        nav: {
+            analysis: document.getElementById('cmd-analysis'),
+            production: document.getElementById('cmd-production')
+        },
+        modules: {
+            analysis: document.getElementById('raport-tab'), // Fixed ID: raport-tab
+            production: document.getElementById('voucher-tab') // Fixed ID: voucher-tab
+        },
+        analysis: {
+            fileInput: document.getElementById('fileInput'),
+            uploadBox: document.querySelector('#raport-tab .upload-box'), // More specific
+            fileName: document.getElementById('fileName'),
+            executeBtn: document.getElementById('processBtn'),
+            results: document.getElementById('resultsSection'),
+            tableBody: document.getElementById('tableBody'),
+            summaryGrid: document.getElementById('summaryGrid'),
+            exportBtn: document.getElementById('exportBtn'),
+            stats: {
+                finalized: document.getElementById('comenziFinalizate'),
+                cancelled: document.getElementById('comenziAnulate'),
+                total: document.getElementById('totalComenzi'),
+                grandTotal: document.getElementById('totalGeneral')
+            }
+        },
+        production: {
+            fileInput: document.getElementById('fileInputVoucher'),
+            fileName: document.getElementById('fileNameVoucher'),
+            processBtn: document.getElementById('processBtnVoucher'),
+            loading: document.getElementById('loadingVoucher'),
+            resultsSection: document.getElementById('resultsSectionVoucher'),
+            stats: {
+                totalBonuri: document.getElementById('totalBonuri'),
+                totalBucati: document.getElementById('totalBucati')
+            },
+            copyBtn: document.getElementById('copyAllBtn'),
+            runBtn: document.getElementById('startAutomationBtn'),
+            stopBtn: document.getElementById('stopAutomationBtn'),
+            tableBody: document.getElementById('voucherTableBody'),
+            errorAlert: document.getElementById('errorAlertVoucher'),
+            errorMessage: document.getElementById('errorMessageVoucher'),
+            status: document.getElementById('terminalStatus')
+        },
+        logs: document.getElementById('terminalLogs'),
+        cli: {
+            input: document.getElementById('cliInput'),
+            section: document.getElementById('cliInputSection'),
+            prompt: document.getElementById('cliPrompt')
+        }
+    };
+
     initTypewriter();
     initEventListeners();
     logSystem('SYSTEM_INIT', 'Terminal initialized. Ready for input.');
@@ -81,7 +84,7 @@ function initTypewriter() {
                 i++;
                 setTimeout(type, 100); // Typing speed
             } else {
-                titleElement.classList.add('blink'); // Add blinking cursor effect at end
+                // titleElement.classList.add('blink'); // Removed blinking cursor effect
             }
         }
         type();
@@ -132,17 +135,26 @@ function initEventListeners() {
     dom.analysis.exportBtn.addEventListener('click', exportReport);
 
     // Production File Upload
-    dom.production.fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleVoucherFileSelect(e.target.files[0]);
-        }
-    });
+    // Note: We need to ensure the element exists before adding listener
+    if (dom.production.fileInput) {
+        dom.production.fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleVoucherFileSelect(e.target.files[0]);
+            }
+        });
+    } else {
+        console.error("Production file input not found!");
+    }
 
     // Process Vouchers
-    dom.production.processBtn.addEventListener('click', processVouchers);
-    
+    if (dom.production.processBtn) {
+        dom.production.processBtn.addEventListener('click', processVouchers);
+    }
+
     // Copy All
-    dom.production.copyBtn.addEventListener('click', copyAllSkus);
+    if (dom.production.copyBtn) {
+        dom.production.copyBtn.addEventListener('click', copyAllSkus);
+    }
 
     // Automation
     dom.production.runBtn.addEventListener('click', startAutomation);
@@ -526,9 +538,15 @@ function showInputSection(prompt) {
         if (prompt.type === 'password') {
             dom.cli.input.type = 'password';
             dom.cli.prompt.textContent = 'PASSWORD>';
+            dom.cli.input.placeholder = 'Enter password...';
+        } else if (prompt.type === '2fa') {
+            dom.cli.input.type = 'text';
+            dom.cli.prompt.textContent = '2FA_CODE>';
+            dom.cli.input.placeholder = 'Enter 2FA code...';
         } else {
             dom.cli.input.type = 'text';
             dom.cli.prompt.textContent = 'INPUT>';
+            dom.cli.input.placeholder = 'Enter value...';
         }
     }
 }
@@ -545,6 +563,9 @@ function submitInput() {
     });
 
     dom.cli.input.value = '';
-    dom.cli.section.style.display = 'none';
+    // Reset to default CLI state instead of hiding
     currentInputType = null;
+    dom.cli.input.type = 'text';
+    dom.cli.prompt.textContent = '$';
+    dom.cli.input.placeholder = 'Type command...';
 }

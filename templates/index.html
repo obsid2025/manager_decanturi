@@ -17,8 +17,8 @@
     <div class="terminal-wrapper">
         <header>
             <nav>
-                <a href="#" class="nav-cmd active" data-tab="raport-tab">/analysis_module</a>
-                <a href="#" class="nav-cmd" data-tab="voucher-tab">/production_module</a>
+                <a href="#" id="cmd-analysis" class="nav-cmd active" data-tab="raport-tab">/analysis_module</a>
+                <a href="#" id="cmd-production" class="nav-cmd" data-tab="voucher-tab">/production_module</a>
                 <a href="https://www.obsid.ro/" target="_blank" class="nav-cmd">/exit_system</a>
             </nav>
         </header>
@@ -190,10 +190,10 @@
                 </div>
                 
                 <!-- CLI Input Section -->
-                <div id="cliInputSection" style="display: none;">
+                <div id="cliInputSection" style="display: block;">
                     <div class="cli-wrapper">
                         <span id="cliPrompt" class="cli-prompt">$</span>
-                        <input type="text" id="cliInput" class="terminal-input" autocomplete="off" spellcheck="false">
+                        <input type="text" id="cliInput" class="terminal-input" autocomplete="off" spellcheck="false" placeholder="Type command...">
                     </div>
                 </div>
             </div>
