@@ -1487,6 +1487,23 @@ class OblioAutomation:
                     self.driver.execute_script("arguments[0].click();", add_btn)
                     
                 self._log(f"✅ Produs {sku} adăugat în listă", 'info')
+
+                # --- VERIFICARE POPUP CONFIRMARE PREȚ (NOU) ---
+                # Uneori apare un popup care întreabă dacă vrem să modificăm prețul
+                try:
+                    # Căutăm butonul "DA" din popup (.ok-confirm-modal)
+                    confirm_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-confirm-modal", timeout=2)
+                    if confirm_btn:
+                        self._log("⚠️ Popup confirmare preț detectat. Click DA...", 'warning')
+                        try:
+                            confirm_btn.click()
+                        except:
+                            self.driver.execute_script("arguments[0].click();", confirm_btn)
+                        time.sleep(1)
+                except:
+                    # Popup-ul nu a apărut, continuăm
+                    pass
+                # --- END VERIFICARE POPUP ---
                 
                 # Așteaptă ca rândul să fie procesat și input-ul să fie golit/resetat
                 # Verificăm dacă input-ul de nume este gol sau așteptăm puțin mai mult
