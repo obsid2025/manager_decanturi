@@ -658,16 +658,21 @@ async function startOblioAutomation() {
 function openTerminal() {
     const modal = document.getElementById('terminalModal');
     const logsDiv = document.getElementById('terminalLogs');
-    const inputSection = document.getElementById('terminalInput');
+    const cliInputSection = document.getElementById('cliInputSection');
 
     // Reset terminal
     logsDiv.innerHTML = '';
-    inputSection.style.display = 'none';
 
-    // Clear input fields
-    document.getElementById('emailInput').value = '';
-    document.getElementById('passwordInput').value = '';
-    document.getElementById('twoFAInput').value = '';
+    // Ascunde CLI input section dacă există
+    if (cliInputSection) {
+        cliInputSection.style.display = 'none';
+    }
+
+    // Clear CLI input
+    const cliInput = document.getElementById('cliInput');
+    if (cliInput) {
+        cliInput.value = '';
+    }
 
     // Afișează modal
     modal.style.display = 'block';
