@@ -1527,17 +1527,10 @@ class OblioAutomation:
                 qty_input.send_keys(Keys.DELETE)
                 qty_input.send_keys(str(quantity))
                 
-                # 3.4 Setare Preț Vânzare (19.99)
-                price_input = self.wait_for_element(By.ID, "ap_price_2")
-                try:
-                    price_input.click()
-                except:
-                    self.driver.execute_script("arguments[0].click();", price_input)
-                    
-                time.sleep(0.1)
-                price_input.send_keys(Keys.CONTROL + "a")
-                price_input.send_keys(Keys.DELETE)
-                price_input.send_keys("19.99")
+                # 3.4 (ELIMINAT) Setare Preț Vânzare
+                # Nu setăm prețul manual la transfer, lăsăm Oblio să pună prețul de achiziție/stoc
+                # price_input = self.wait_for_element(By.ID, "ap_price_2")
+                # ...
 
                 # 3.5 Click Adaugă
                 add_btn = self.driver.find_element(By.CSS_SELECTOR, ".btn-add-product-on-doc")
@@ -1545,10 +1538,9 @@ class OblioAutomation:
                 self.driver.execute_script("arguments[0].scrollIntoView(true);", add_btn)
                 time.sleep(0.5)
                 
-                try:
-                    add_btn.click()
-                except:
-                    self.driver.execute_script("arguments[0].click();", add_btn)
+                # Folosim DOAR execute_script pentru a evita dublarea click-urilor
+                # și pentru a fi siguri că merge chiar dacă e parțial acoperit
+                self.driver.execute_script("arguments[0].click();", add_btn)
                     
                 self._log(f"✅ Produs {sku} adăugat în listă", 'info')
 
