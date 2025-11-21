@@ -1675,10 +1675,33 @@ class OblioAutomation:
                     if error_modal.is_displayed():
                         error_text = error_modal.text
                         self._log(f"❌ Eroare afișată în modal: {error_text}", 'error')
+                        
+                        # SCREENSHOT 1: Cu eroarea
+                        try:
+                            ts = int(time.time())
+                            shot_path = os.path.join(os.getcwd(), 'uploads', f'error_modal_{ts}.png')
+                            self.driver.save_screenshot(shot_path)
+                            self.upload_screenshot_to_cloudinary(shot_path)
+                        except:
+                            pass
+
                         # Încercăm să închidem modalul
                         try:
                             ok_btn = error_modal.find_element(By.CSS_SELECTOR, ".ok-message-modal")
                             ok_btn.click()
+                            time.sleep(1)
+                        except:
+                            pass
+                        
+                        # SCREENSHOT 2: Produsele de sus (pentru debug stoc)
+                        try:
+                            self.driver.execute_script("window.scrollTo(0, 0);")
+                            time.sleep(1)
+                            ts = int(time.time())
+                            shot_path_top = os.path.join(os.getcwd(), 'uploads', f'products_top_{ts}.png')
+                            self.driver.save_screenshot(shot_path_top)
+                            self.upload_screenshot_to_cloudinary(shot_path_top)
+                            self._log("📸 Screenshot cu produsele salvat pentru debug", 'info')
                         except:
                             pass
                 except:
