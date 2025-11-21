@@ -988,35 +988,40 @@ class OblioAutomation:
 
             # Tastează SKU character-by-character pentru autocomplete
             logger.info(f"⌨️ Tastare SKU: {sku}")
-            self.type_slowly(pp_name_input, sku, delay=0.08)
+            self.type_slowly(pp_name_input, sku, delay=0.01)
 
             # Trigger autocomplete
             pp_name_input.send_keys(Keys.SPACE)
             pp_name_input.send_keys(Keys.BACKSPACE)
-            time.sleep(2)
-
+            
             # PASUL 2: Așteaptă și selectează din autocomplete
             logger.info("🔍 Așteptare autocomplete...")
-            time.sleep(2.5)
-
-            # Caută elementele autocomplete (jQuery UI)
+            
             try:
-                autocomplete_items = self.driver.find_elements(By.CSS_SELECTOR, ".ui-menu-item")
+                # Așteaptă explicit lista de autocomplete (max 3 secunde)
+                autocomplete_items = WebDriverWait(self.driver, 3).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
+                )
 
                 if len(autocomplete_items) > 0:
                     logger.info(f"✅ Autocomplete găsit: {len(autocomplete_items)} rezultate")
                     first_item = autocomplete_items[0]
                     logger.info(f"🖱️ Click pe primul rezultat: {first_item.text[:50]}...")
                     first_item.click()
-                    time.sleep(1.5)
+                    # Așteaptă puțin ca Oblio să populeze câmpurile ascunse (ID produs)
+                    time.sleep(0.5)
                 else:
-                    logger.warning("⚠️ Autocomplete nu a apărut, încerc ENTER...")
+                    logger.warning("⚠️ Autocomplete gol, încerc ENTER...")
                     pp_name_input.send_keys(Keys.ENTER)
-                    time.sleep(1.5)
+                    time.sleep(0.5)
+            except TimeoutException:
+                logger.warning("⚠️ Timeout autocomplete, încerc ENTER...")
+                pp_name_input.send_keys(Keys.ENTER)
+                time.sleep(0.5)
             except Exception as e:
                 logger.warning(f"⚠️ Eroare autocomplete: {e}, încerc ENTER...")
                 pp_name_input.send_keys(Keys.ENTER)
-                time.sleep(1.5)
+                time.sleep(0.5)
 
             # PASUL 3: Verifică că produsul a fost selectat
             logger.info("🔍 Verificare selecție produs...")
@@ -1045,9 +1050,9 @@ class OblioAutomation:
             pp_quantity_input.send_keys(Keys.CONTROL + "a")  # Select all
             time.sleep(0.1)
             pp_quantity_input.send_keys(Keys.DELETE)  # Delete
-            time.sleep(0.2)
+            time.sleep(0.1)
             pp_quantity_input.send_keys(str(quantity))  # Introduce cantitatea
-            time.sleep(1.5) # Așteaptă ca Oblio să calculeze rețeta
+            time.sleep(0.5) # Așteaptă ca Oblio să calculeze rețeta (optimizat)
             logger.info(f"✅ Cantitate setată: {quantity}")
 
             # --- VERIFICARE STOC (NOU) ---
@@ -1055,7 +1060,7 @@ class OblioAutomation:
             try:
                 # Caută input-ul de cantitate consumată (ap_1_quantity2)
                 # Acesta apare automat după ce Oblio încarcă rețeta
-                consumed_qty_input = self.wait_for_element(By.ID, "ap_1_quantity2", timeout=5)
+                consumed_qty_input = self.wait_for_element(By.ID, "ap_1_quantity2", timeout=3)
                 
                 if consumed_qty_input:
                     consumed_val = float(consumed_qty_input.get_attribute('value') or 0)
@@ -1320,7 +1325,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Lanseaza in Productie'...")
                     launch_button.click()
-                    time.sleep(1.5)  # Optimizat: 3s → 1.5s
+                    time.sleep(0.5)  # Optimizat: 1.5s → 0.5s
 
                     # PASUL 8: Click pe butonul OK din popup modal
                     logger.info("🔍 Căutare buton OK în popup modal...")
@@ -1335,7 +1340,7 @@ class OblioAutomation:
 
                     for by, selector in ok_selectors:
                         try:
-                            ok_button = self.wait_for_clickable(by, selector, timeout=3)
+                            ok_button = self.wait_for_clickable(by, selector, timeout=2)
                             if ok_button:
                                 logger.info(f"✅ Buton OK găsit: {selector}")
                                 break
@@ -1345,7 +1350,7 @@ class OblioAutomation:
                     if ok_button:
                         logger.info("🖱️ Click pe butonul OK din popup...")
                         ok_button.click()
-                        time.sleep(1)  # Optimizat: 2s → 1s
+                        time.sleep(0.5)  # Optimizat: 1s → 0.5s
                     else:
                         logger.warning("⚠️ Butonul OK nu a fost găsit (poate nu a apărut popup-ul)")
 
@@ -1362,7 +1367,7 @@ class OblioAutomation:
 
                     for by, selector in finalize_selectors:
                         try:
-                            finalize_button = self.wait_for_clickable(by, selector, timeout=3)
+                            finalize_button = self.wait_for_clickable(by, selector, timeout=2)
                             if finalize_button:
                                 logger.info(f"✅ Buton 'Finalizeaza Productia' găsit: {selector}")
                                 break
@@ -1374,7 +1379,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Finalizeaza Productia'...")
                     finalize_button.click()
-                    time.sleep(2)  # Optimizat: 4s → 2s
+                    time.sleep(1)  # Optimizat: 2s → 1s
 
                     # PASUL 10: Verificare finalizare în raportul de producție
                     logger.info("🔍 Verificare finalizare în raportul de producție...")
@@ -1576,20 +1581,19 @@ class OblioAutomation:
                 time.sleep(0.5)
                 
                 name_input.clear()
-                self.type_slowly(name_input, sku, delay=0.02) # Mai rapid
+                self.type_slowly(name_input, sku, delay=0.01) # Mai rapid
                 name_input.send_keys(Keys.SPACE)
                 name_input.send_keys(Keys.BACKSPACE)
-                time.sleep(1.5) # Așteptare autocomplete
-
+                
                 # 3.2 Selectare din autocomplete
                 try:
                     # Așteaptă explicit lista de autocomplete
-                    autocomplete_items = WebDriverWait(self.driver, 4).until(
+                    autocomplete_items = WebDriverWait(self.driver, 3).until(
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
                     )
                     if len(autocomplete_items) > 0:
                         autocomplete_items[0].click()
-                        time.sleep(1.0) # Așteaptă popularea câmpurilor (preț, etc.)
+                        time.sleep(0.5) # Așteaptă popularea câmpurilor (preț, etc.)
                     else:
                         self._log(f"⚠️ Autocomplete gol pentru {sku}. Nu trimit ENTER pentru a evita duplicarea.", 'warning')
                         # Nu trimitem ENTER, riscăm duplicare sau submit prematur
