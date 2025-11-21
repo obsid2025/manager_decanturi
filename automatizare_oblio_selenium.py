@@ -1904,6 +1904,32 @@ class OblioAutomation:
         tabs = []
         main_window = self.driver.current_window_handle
         
+        # 0. Verificare Login (PRE-CHECK)
+        # Verificăm login-ul pe fereastra principală înainte de a deschide tab-uri
+        url_prod = "https://www.oblio.eu/stock/production/"
+        self.driver.get(url_prod)
+        time.sleep(1)
+        
+        if "login" in self.driver.current_url.lower():
+            self._log("🔐 Login necesar înainte de batch...", 'warning')
+            if oblio_cookies:
+                self.load_cookies_from_json(oblio_cookies)
+                self.driver.get(url_prod)
+            elif oblio_email and oblio_password:
+                self.login_to_oblio(oblio_email, oblio_password)
+                self.driver.get(url_prod)
+            elif self.input_callback:
+                self.interactive_login()
+                self.driver.get(url_prod)
+            else:
+                self.wait_for_manual_login()
+                self.driver.get(url_prod)
+                
+        # Verificăm din nou dacă suntem logați
+        if "login" in self.driver.current_url.lower():
+             self._log("❌ Login eșuat! Nu pot începe batch-ul.", 'error')
+             return [{'sku': item.get('sku'), 'success': False, 'message': 'Login failed'}] * len(batch_list)
+
         self._log(f"🚀 START BATCH: {len(batch_list)} bonuri în paralel...", 'info')
         
         # 1. Deschide tab-uri și navighează (PRE-LOAD)
@@ -1921,8 +1947,7 @@ class OblioAutomation:
             tab_handle = self.driver.current_window_handle
             
             # Navighează la producție
-            url = "https://www.oblio.eu/stock/production/"
-            self.driver.get(url)
+            self.driver.get(url_prod)
             
             tabs.append({
                 'handle': tab_handle,
@@ -1930,24 +1955,6 @@ class OblioAutomation:
                 'qty': qty,
                 'index': i
             })
-            
-            # Verifică login pe primul tab
-            if i == 0:
-                if "login" in self.driver.current_url.lower():
-                    self._log("🔐 Login necesar pe primul tab...", 'warning')
-                    # Logica de login existentă
-                    if oblio_cookies:
-                        self.load_cookies_from_json(oblio_cookies)
-                        self.driver.get(url)
-                    elif oblio_email and oblio_password:
-                        self.login_to_oblio(oblio_email, oblio_password)
-                        self.driver.get(url)
-                    elif self.input_callback:
-                        self.interactive_login()
-                        self.driver.get(url)
-                    else:
-                        self.wait_for_manual_login()
-                        self.driver.get(url)
 
         # 2. Completează formularele (FILL)
         self._log("📝 [BATCH] Completare formulare...", 'info')
