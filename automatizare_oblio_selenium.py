@@ -1648,6 +1648,46 @@ class OblioAutomation:
                 except Exception as e:
                     self._log(f"⚠️ Eroare click previzualizare: {e}", 'warning')
                     self.driver.execute_script("submit_form_doc();")
+
+            # --- VERIFICARE POST-SUBMIT (POPUP-URI SAU REDIRECT) ---
+            # Așteptăm redirect sau popup
+            max_retries = 5
+            for i in range(max_retries):
+                time.sleep(1)
+                
+                # 1. Verificăm dacă a apărut un popup de confirmare (ex: preț modificat)
+                try:
+                    confirm_btn = self.driver.find_element(By.CSS_SELECTOR, ".ok-confirm-modal")
+                    if confirm_btn.is_displayed():
+                        self._log("⚠️ Popup confirmare detectat DUPĂ submit. Click DA...", 'warning')
+                        try:
+                            confirm_btn.click()
+                        except:
+                            self.driver.execute_script("arguments[0].click();", confirm_btn)
+                        time.sleep(2) # Așteptăm să se proceseze
+                        continue # Mai verificăm o dată
+                except:
+                    pass
+
+                # 2. Verificăm dacă a apărut un mesaj de eroare (modal)
+                try:
+                    error_modal = self.driver.find_element(By.CSS_SELECTOR, "#modal-message")
+                    if error_modal.is_displayed():
+                        error_text = error_modal.text
+                        self._log(f"❌ Eroare afișată în modal: {error_text}", 'error')
+                        # Încercăm să închidem modalul
+                        try:
+                            ok_btn = error_modal.find_element(By.CSS_SELECTOR, ".ok-message-modal")
+                            ok_btn.click()
+                        except:
+                            pass
+                except:
+                    pass
+
+                # 3. Verificăm dacă s-a făcut redirect
+                if "preview_transfer" in self.driver.current_url:
+                    break
+            # --- END VERIFICARE POST-SUBMIT ---
             
             # Așteptare redirect
             time.sleep(3)
