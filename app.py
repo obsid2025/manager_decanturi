@@ -44,6 +44,7 @@ automation_logs_queue = queue.Queue()
 automation_input_queue = queue.Queue()
 automation_active = False
 stop_requested = False
+current_automation_instance = None # Referință către instanța curentă de automatizare
 
 # Creare directoare dacă nu există
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -787,6 +788,10 @@ def run_automation_with_live_logs(bonuri, client_sid):
             }, room=client_sid),
             input_callback=lambda prompt: wait_for_user_input(prompt, client_sid)
         )
+        
+        # Setăm instanța globală pentru a putea fi oprită
+        global current_automation_instance
+        current_automation_instance = automation
 
         # Setup driver
         if not automation.setup_driver():
@@ -811,6 +816,12 @@ def run_automation_with_live_logs(bonuri, client_sid):
         # Credențiale Oblio
         oblio_email = os.environ.get('OBLIO_EMAIL')
         oblio_password = os.environ.get('OBLIO_PASSWORD')
+        
+        if oblio_email:
+            socketio.emit('log', {
+                'type': 'info',
+                'message': f'🔐 Folosesc credențiale din ENV: {oblio_email}'
+            }, room=client_sid)
 
         # Procesare BON cu BON cu progress live
         for i, bon in enumerate(bonuri, 1):
@@ -842,14 +853,13 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 }, room=client_sid)
                 eventlet.sleep(0.1)  # Permite event loop să proceseze
 
-                # NU pasăm email/password pentru a forța login interactiv cu 2FA
-                # Login-ul se va face DOAR la primul bon, apoi sesiunea rămâne activă
+                # Pasăm email/password din ENV dacă există
                 success = automation.create_production_voucher(
                     bon.get('sku'),
                     bon.get('cantitate', 1),
                     None,   # cookies
-                    None,   # email - forțează login interactiv
-                    None    # password - forțează login interactiv
+                    oblio_email,   # email din ENV
+                    oblio_password # password din ENV
                 )
 
                 # Emit rezultat după fiecare bon

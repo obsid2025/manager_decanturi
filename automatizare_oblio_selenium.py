@@ -14,6 +14,7 @@ import time
 import json
 import sys
 import os
+import re
 import platform
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -64,12 +65,23 @@ class OblioAutomation:
         self.headless = headless
         self.log_callback = log_callback
         self.input_callback = input_callback
+        self.stop_requested = False # Flag pentru oprire
         self.stats = {
             'total': 0,
             'success': 0,
             'failed': 0,
             'errors': []
         }
+
+    def stop(self):
+        """Oprește execuția automatizării"""
+        self._log("🛑 Comandă de oprire primită! Se oprește după pasul curent...", 'warning')
+        self.stop_requested = True
+
+    def _check_stop(self):
+        """Verifică dacă s-a cerut oprirea și aruncă excepție"""
+        if self.stop_requested:
+            raise Exception("Execuție oprită manual de utilizator (STOP)")
 
     def _log(self, message, level='info'):
         """
@@ -1455,7 +1467,7 @@ class OblioAutomation:
                 
                 self._log(f"➕ Adăugare produs {i}/{len(products_list)}: SKU={sku}, Qty={quantity}", 'info')
 
-                # --- VERIFICARE PREVENTIVĂ POPUP (NOU) ---
+                # --- VERIFICARE POPUP (NOU) ---
                 # Verificăm dacă a rămas un popup deschis de la produsul anterior
                 try:
                     confirm_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-confirm-modal", timeout=1)
@@ -1476,7 +1488,7 @@ class OblioAutomation:
                     )
                 except:
                     pass # Ignorăm timeout, poate nu există backdrop
-                # --- END VERIFICARE PREVENTIVĂ ---
+                # --- END VERIFICARE POPUP ---
 
                 # 3.1 Introducere SKU
                 name_input = self.wait_for_element(By.ID, "ap_name1")
@@ -1783,6 +1795,9 @@ class OblioAutomation:
         self.stats['total'] = len(bonuri)
 
         for i, bon in enumerate(bonuri, 1):
+            # Verifică dacă s-a cerut oprirea
+            self._check_stop()
+
             sku = bon.get('sku')
             cantitate = bon.get('cantitate', 1)
 
