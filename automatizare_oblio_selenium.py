@@ -873,20 +873,21 @@ class OblioAutomation:
             
             return False
 
-    def type_slowly(self, element, text, delay=0.03):
+    def type_slowly(self, element, text, delay=0.005):
         """
         Tastează text character-by-character (pentru autocomplete)
 
         Args:
             element: WebElement input
             text: Textul de tastat
-            delay: Delay între caractere (secunde) - optimizat la 0.03s
+            delay: Delay între caractere (secunde) - optimizat pentru viteză
         """
         element.clear()
         for char in text:
             element.send_keys(char)
-            time.sleep(delay)
-        logger.debug(f"⌨️ Tastat: {text}")
+            if delay > 0:
+                time.sleep(delay)
+        # logger.debug(f"⌨️ Tastat: {text}")
 
     def create_production_voucher(self, sku, quantity, oblio_cookies=None, oblio_email=None, oblio_password=None):
         """
@@ -909,9 +910,23 @@ class OblioAutomation:
         try:
             # Navighează la pagina de producție
             url = "https://www.oblio.eu/stock/production/"
-            self._log(f"🌐 Navigare la: {url}", 'info')
-            self.driver.get(url)
-            time.sleep(2)
+            
+            # Optimizare: Verificăm dacă suntem deja pe pagină pentru a evita reload
+            if self.driver.current_url == url:
+                self._log(f"ℹ️ Deja pe pagina de producție, skip navigare.", 'info')
+                # Resetăm formularul dacă e nevoie (de obicei e gol după save)
+            else:
+                self._log(f"🌐 Navigare la: {url}", 'info')
+                self.driver.get(url)
+                # time.sleep(2) # Eliminat sleep fix
+            
+            # Așteptăm ca elementul principal să fie vizibil
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "pp_name"))
+                )
+            except:
+                self._log("⚠️ Timeout așteptare pagină producție", 'warning')
             
             # Verifică dacă suntem pe pagina de login (nu suntem autentificați)
             if "login" in self.driver.current_url.lower():
@@ -1897,8 +1912,8 @@ class OblioAutomation:
 
             # Pauză între bonuri
             if i < len(bonuri):
-                self._log(f"⏳ Pauză 2 secunde înainte de următorul bon...", 'info')
-                time.sleep(2)
+                # self._log(f"⏳ Pauză 2 secunde înainte de următorul bon...", 'info')
+                time.sleep(0.1) # Optimizat: pauză minimă
 
         # Raport final
         self._log(f"{'='*60}", 'info')
