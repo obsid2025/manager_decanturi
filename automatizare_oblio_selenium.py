@@ -1580,20 +1580,30 @@ class OblioAutomation:
                 self.driver.execute_script("arguments[0].scrollIntoView(true);", name_input)
                 time.sleep(0.5)
                 
+                # Așteaptă ca elementul să fie interactabil
+                try:
+                    WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.ID, "ap_name1")))
+                except:
+                    self._log("⚠️ Timeout așteptare input SKU interactabil", 'warning')
+
                 name_input.clear()
-                self.type_slowly(name_input, sku, delay=0.01) # Mai rapid
+                self.type_slowly(name_input, sku, delay=0.03) # Puțin mai lent pentru stabilitate
                 name_input.send_keys(Keys.SPACE)
                 name_input.send_keys(Keys.BACKSPACE)
                 
                 # 3.2 Selectare din autocomplete
                 try:
                     # Așteaptă explicit lista de autocomplete
-                    autocomplete_items = WebDriverWait(self.driver, 3).until(
+                    autocomplete_items = WebDriverWait(self.driver, 5).until(
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
                     )
                     if len(autocomplete_items) > 0:
-                        autocomplete_items[0].click()
-                        time.sleep(0.5) # Așteaptă popularea câmpurilor (preț, etc.)
+                        # Așteaptă ca primul element să fie clickable
+                        first_item = WebDriverWait(self.driver, 3).until(
+                            EC.element_to_be_clickable(autocomplete_items[0])
+                        )
+                        first_item.click()
+                        time.sleep(1.0) # Așteaptă popularea câmpurilor (preț, etc.)
                     else:
                         self._log(f"⚠️ Autocomplete gol pentru {sku}. Nu trimit ENTER pentru a evita duplicarea.", 'warning')
                         # Nu trimitem ENTER, riscăm duplicare sau submit prematur
