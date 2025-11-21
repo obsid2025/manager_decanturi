@@ -1455,6 +1455,29 @@ class OblioAutomation:
                 
                 self._log(f"➕ Adăugare produs {i}/{len(products_list)}: SKU={sku}, Qty={quantity}", 'info')
 
+                # --- VERIFICARE PREVENTIVĂ POPUP (NOU) ---
+                # Verificăm dacă a rămas un popup deschis de la produsul anterior
+                try:
+                    confirm_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-confirm-modal", timeout=1)
+                    if confirm_btn and confirm_btn.is_displayed():
+                        self._log("⚠️ Popup rămas deschis detectat. Click DA...", 'warning')
+                        try:
+                            confirm_btn.click()
+                        except:
+                            self.driver.execute_script("arguments[0].click();", confirm_btn)
+                        time.sleep(1.5)
+                except:
+                    pass
+                
+                # Așteptăm să dispară orice modal backdrop
+                try:
+                    WebDriverWait(self.driver, 2).until(
+                        EC.invisibility_of_element_located((By.CSS_SELECTOR, ".modal-backdrop"))
+                    )
+                except:
+                    pass # Ignorăm timeout, poate nu există backdrop
+                # --- END VERIFICARE PREVENTIVĂ ---
+
                 # 3.1 Introducere SKU
                 name_input = self.wait_for_element(By.ID, "ap_name1")
                 if not name_input:
@@ -1533,14 +1556,23 @@ class OblioAutomation:
                 # Uneori apare un popup care întreabă dacă vrem să modificăm prețul
                 try:
                     # Căutăm butonul "DA" din popup (.ok-confirm-modal)
-                    confirm_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-confirm-modal", timeout=2)
+                    # Mărit timeout la 3 secunde pentru a fi siguri
+                    confirm_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-confirm-modal", timeout=3)
                     if confirm_btn:
                         self._log("⚠️ Popup confirmare preț detectat. Click DA...", 'warning')
                         try:
                             confirm_btn.click()
                         except:
                             self.driver.execute_script("arguments[0].click();", confirm_btn)
-                        time.sleep(1)
+                        
+                        # Așteptăm să dispară popup-ul
+                        time.sleep(1.5)
+                        try:
+                            WebDriverWait(self.driver, 2).until(
+                                EC.invisibility_of_element_located((By.CSS_SELECTOR, ".ok-confirm-modal"))
+                            )
+                        except:
+                            pass
                 except:
                     # Popup-ul nu a apărut, continuăm
                     pass
