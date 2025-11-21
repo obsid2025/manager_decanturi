@@ -1,12 +1,13 @@
 /* TERMINAL THEME - OBSID DECANT MANAGER */
 :root {
-    --bg-color: #181818;
-    --terminal-green: #00ff00;
-    --terminal-dim: #008800;
-    --terminal-dark: #003300;
-    --terminal-red: #ff3333;
-    --terminal-yellow: #ffff00;
-    --terminal-blue: #00ffff;
+    --bg-color: #121212;
+    --terminal-green: #2ecc71;
+    --terminal-dim: #27ae60;
+    --terminal-dark: #145a32;
+    --terminal-red: #e74c3c;
+    --terminal-yellow: #f1c40f;
+    --terminal-blue: #3498db;
+    --text-color: #ffffff;
     --font-main: 'Fira Code', 'Courier New', monospace;
     --font-retro: 'VT323', monospace;
     --scanline-color: rgba(0, 0, 0, 0.5);
@@ -20,7 +21,7 @@
 
 body {
     background-color: var(--bg-color);
-    color: var(--terminal-green);
+    color: var(--text-color);
     font-family: var(--font-main);
     font-size: 14px;
     line-height: 1.5;
