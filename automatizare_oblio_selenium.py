@@ -2029,28 +2029,57 @@ class OblioAutomation:
                 # Click JS
                 self.driver.execute_script("arguments[0].click();", save_button)
                 
-                # Așteaptă redirect
-                time.sleep(1.5)
+                # Așteaptă redirect (mai mult timp pentru siguranță)
+                time.sleep(3.0)
                 
                 # Verifică redirect
-                if "/stock/preview_production/" in self.driver.current_url:
+                current_url = self.driver.current_url
+                if "/stock/preview_production/" in current_url:
+                    # Extrage ID-ul din URL pentru a construi selectori mai preciși
+                    import re
+                    match = re.search(r'/preview_production/(\d+)', current_url)
+                    prod_id = match.group(1) if match else ""
+                    
                     # Lansează
-                    launch_btn = self.wait_for_clickable(By.CSS_SELECTOR, "a.issue-btn", timeout=5)
+                    launch_btn = None
+                    launch_selectors = [
+                        (By.CSS_SELECTOR, "a.issue-btn"),
+                        (By.XPATH, "//a[contains(text(), 'Lanseaza in Productie')]"),
+                        (By.CSS_SELECTOR, f"a[href*='production_save/{prod_id}']")
+                    ]
+                    
+                    for by, sel in launch_selectors:
+                        try:
+                            launch_btn = self.wait_for_clickable(by, sel, timeout=5)
+                            if launch_btn: break
+                        except: continue
+
                     if launch_btn:
                         launch_btn.click()
-                        time.sleep(0.5)
+                        time.sleep(1.0)
                         
                         # Confirmă Popup
                         ok_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-message-modal", timeout=3)
                         if ok_btn:
                             ok_btn.click()
-                            time.sleep(0.5)
+                            time.sleep(1.0)
                             
                         # Finalizează
-                        finalize_btn = self.wait_for_clickable(By.XPATH, "//a[contains(text(), 'Finalizeaza Productia')]", timeout=5)
+                        finalize_btn = None
+                        finalize_selectors = [
+                            (By.XPATH, "//a[contains(text(), 'Finalizeaza Productia')]"),
+                            (By.CSS_SELECTOR, f"a[href*='production_complete/{prod_id}']")
+                        ]
+                        
+                        for by, sel in finalize_selectors:
+                            try:
+                                finalize_btn = self.wait_for_clickable(by, sel, timeout=5)
+                                if finalize_btn: break
+                            except: continue
+
                         if finalize_btn:
                             finalize_btn.click()
-                            time.sleep(1.0)
+                            time.sleep(2.0)
                             
                             results.append({'sku': sku, 'success': True, 'message': 'Bon creat cu succes'})
                             self.stats['success'] += 1
@@ -2059,7 +2088,12 @@ class OblioAutomation:
                     else:
                         raise Exception("Buton Lansare negăsit")
                 else:
-                    raise Exception("Nu s-a făcut redirect la preview")
+                    # Fallback: Verifică dacă a rămas pe pagină cu eroare
+                    try:
+                        err = self.driver.find_element(By.CSS_SELECTOR, ".alert-danger")
+                        raise Exception(f"Eroare Oblio: {err.text}")
+                    except:
+                        raise Exception(f"Nu s-a făcut redirect la preview. URL curent: {current_url}")
                     
             except Exception as e:
                 self._log(f"❌ [Tab {tab['index']+1}] Eroare la salvare: {e}", 'error')
