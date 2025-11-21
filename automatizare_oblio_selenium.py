@@ -1585,15 +1585,76 @@ class OblioAutomation:
 
             # PASUL 4: Previzualizare Transfer
             self._log("🔍 Finalizare: Click Previzualizare Transfer...", 'info')
-            preview_btn = self.wait_for_clickable(By.ID, "invoice_preview_btn")
             
-            # Force JS Click (robust)
-            self.driver.execute_script("arguments[0].click();", preview_btn)
+            # Încearcă să închidă orice modal care ar putea bloca butonul (ex: popup preț rămas)
+            try:
+                modal_close_selectors = [
+                    (By.CSS_SELECTOR, ".ok-confirm-modal"),
+                    (By.CSS_SELECTOR, "#modal-message .ok-message-modal"),
+                    (By.CSS_SELECTOR, ".modal.show .btn[data-dismiss='modal']"),
+                ]
+                for by, selector in modal_close_selectors:
+                    try:
+                        modal_button = self.driver.find_element(by, selector)
+                        if modal_button.is_displayed():
+                            self._log(f"⚠️ Modal blocant găsit, închid: {selector}", 'warning')
+                            try:
+                                modal_button.click()
+                            except:
+                                self.driver.execute_script("arguments[0].click();", modal_button)
+                            time.sleep(1)
+                    except:
+                        continue
+            except:
+                pass
+
+            # Căutare buton salvare (mai multe variante)
+            preview_btn = None
+            save_selectors = [
+                (By.ID, "invoice_preview_btn"),
+                (By.CSS_SELECTOR, "a[onclick*='submit_form_doc']"),
+                (By.XPATH, "//a[contains(text(), 'Previzualizare')]"),
+                (By.CSS_SELECTOR, ".btn-submit")
+            ]
+
+            for by, selector in save_selectors:
+                try:
+                    preview_btn = self.wait_for_clickable(by, selector, timeout=3)
+                    if preview_btn:
+                        break
+                except:
+                    continue
+            
+            if not preview_btn:
+                # Fallback: încearcă să găsească formularul și să-i dea submit direct
+                self._log("⚠️ Buton previzualizare negăsit, încerc submit direct pe form...", 'warning')
+                self.driver.execute_script("submit_form_doc();")
+            else:
+                # Scroll și Click
+                try:
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", preview_btn)
+                    time.sleep(0.5)
+                    
+                    # Click robust (încearcă să execute funcția din onclick direct)
+                    self.driver.execute_script("""
+                        var btn = arguments[0];
+                        var onclickAttr = btn.getAttribute('onclick');
+                        if (onclickAttr && onclickAttr.includes('submit_form_doc')) {
+                            submit_form_doc(); // Execută funcția globală Oblio
+                        } else {
+                            btn.click();
+                        }
+                    """, preview_btn)
+                except Exception as e:
+                    self._log(f"⚠️ Eroare click previzualizare: {e}", 'warning')
+                    self.driver.execute_script("submit_form_doc();")
             
             # Așteptare redirect
             time.sleep(3)
+            
+            # Verificare URL
             if "/stock/preview_transfer/" not in self.driver.current_url:
-                # Fallback submit form
+                self._log("⚠️ Redirect întârziat, mai încerc o dată submit...", 'warning')
                 self.driver.execute_script("submit_form_doc();")
                 time.sleep(3)
 
