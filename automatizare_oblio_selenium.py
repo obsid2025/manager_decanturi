@@ -23,7 +23,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 import logging
 import cloudinary
 import cloudinary.uploader
@@ -1577,7 +1577,7 @@ class OblioAutomation:
                     raise Exception("Câmpul de căutare produs nu a fost găsit!")
                 
                 # Asigură-te că elementul este vizibil și interactabil
-                self.driver.execute_script("arguments[0].scrollIntoView(true);", name_input)
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", name_input)
                 time.sleep(0.5)
                 
                 # Așteaptă ca elementul să fie interactabil
@@ -1591,38 +1591,62 @@ class OblioAutomation:
                 name_input.send_keys(Keys.SPACE)
                 name_input.send_keys(Keys.BACKSPACE)
                 
-                # 3.2 Selectare din autocomplete
-                try:
-                    # Așteaptă explicit lista de autocomplete
-                    autocomplete_items = WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
-                    )
-                    if len(autocomplete_items) > 0:
-                        # Așteaptă ca primul element să fie clickable
-                        first_item = WebDriverWait(self.driver, 3).until(
-                            EC.element_to_be_clickable(autocomplete_items[0])
+                # 3.2 Selectare din autocomplete (Robust)
+                product_selected = False
+                for attempt in range(3):
+                    try:
+                        # Așteaptă explicit lista de autocomplete
+                        autocomplete_items = WebDriverWait(self.driver, 5).until(
+                            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
                         )
-                        first_item.click()
-                        time.sleep(1.0) # Așteaptă popularea câmpurilor (preț, etc.)
-                    else:
-                        self._log(f"⚠️ Autocomplete gol pentru {sku}. Nu trimit ENTER pentru a evita duplicarea.", 'warning')
-                        # Nu trimitem ENTER, riscăm duplicare sau submit prematur
-                except Exception as e:
-                    self._log(f"⚠️ Eroare/Timeout selectare produs {sku}: {e}", 'warning')
-                    # Nu trimitem ENTER ca fallback, mai bine eșuăm la acest produs decât să duplicăm
-                    # Sau putem încerca să continuăm, poate a fost selectat deja?
+                        
+                        if len(autocomplete_items) > 0:
+                            # Așteaptă ca primul element să fie clickable
+                            first_item = WebDriverWait(self.driver, 3).until(
+                                EC.element_to_be_clickable(autocomplete_items[0])
+                            )
+                            first_item.click()
+                            
+                            # Verifică dacă s-a populat un hidden field (ex: ap_id_1 sau similar)
+                            # Sau așteaptă dispariția autocomplete-ului
+                            try:
+                                WebDriverWait(self.driver, 2).until(
+                                    EC.invisibility_of_element_located((By.CSS_SELECTOR, ".ui-menu-item"))
+                                )
+                            except: pass
+                            
+                            time.sleep(1.0) # Așteaptă popularea câmpurilor
+                            product_selected = True
+                            break
+                        else:
+                            self._log(f"⚠️ Autocomplete gol pentru {sku} (încercare {attempt+1})", 'warning')
+                            time.sleep(1)
+                            
+                    except StaleElementReferenceException:
+                        self._log(f"⚠️ Stale element la selectare produs {sku}, reîncerc...", 'warning')
+                        continue
+                    except Exception as e:
+                        self._log(f"⚠️ Eroare selectare produs {sku}: {e}", 'warning')
+                        break
+                
+                if not product_selected:
+                    self._log(f"❌ Nu s-a putut selecta produsul {sku}!", 'error')
+                    # Putem încerca un ENTER ca ultimă soluție
+                    name_input.send_keys(Keys.ENTER)
+                    time.sleep(1)
 
                 # 3.3 Setare Cantitate
                 qty_input = self.wait_for_element(By.ID, "ap_quantity")
                 # Asigură-te că elementul este vizibil
-                self.driver.execute_script("arguments[0].scrollIntoView(true);", qty_input)
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", qty_input)
                 
                 try:
+                    WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.ID, "ap_quantity")))
                     qty_input.click()
                 except:
                     self.driver.execute_script("arguments[0].click();", qty_input)
                     
-                time.sleep(0.1)
+                time.sleep(0.2)
                 qty_input.send_keys(Keys.CONTROL + "a")
                 qty_input.send_keys(Keys.DELETE)
                 qty_input.send_keys(str(quantity))
@@ -1632,6 +1656,8 @@ class OblioAutomation:
                 time.sleep(1.0)
                 try:
                     price_input = self.driver.find_element(By.ID, "ap_price_2")
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", price_input)
+                    
                     # Verificăm dacă are valoare
                     current_val = price_input.get_attribute("value")
                     
@@ -2037,8 +2063,11 @@ class OblioAutomation:
                 self.driver.execute_script("arguments[0].click();", save_button)
                 
                 # Așteaptă redirect (mai mult timp pentru siguranță)
-                time.sleep(3.0)
-                
+                try:
+                    WebDriverWait(self.driver, 10).until(EC.url_contains("/preview_production/"))
+                except TimeoutException:
+                    self._log(f"⚠️ Timeout redirect după salvare {sku}. Verific erori...", 'warning')
+
                 # Verifică redirect
                 current_url = self.driver.current_url
                 if "/stock/preview_production/" in current_url:
