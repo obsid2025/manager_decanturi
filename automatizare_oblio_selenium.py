@@ -1600,10 +1600,18 @@ class OblioAutomation:
                 qty_input.send_keys(Keys.DELETE)
                 qty_input.send_keys(str(quantity))
                 
-                # 3.4 (ELIMINAT) Setare Preț Vânzare
-                # Nu setăm prețul manual la transfer, lăsăm Oblio să pună prețul de achiziție/stoc
-                # price_input = self.wait_for_element(By.ID, "ap_price_2")
-                # ...
+                # 3.4 Setare Preț (OBLIGATORIU pentru transfer)
+                # Dacă Oblio nu completează automat prețul, îl setăm manual la 1
+                try:
+                    price_input = self.driver.find_element(By.ID, "ap_price_2")
+                    # Verificăm dacă are valoare
+                    current_val = price_input.get_attribute("value")
+                    if not current_val:
+                        self._log("⚠️ Preț necompletat automat. Setez valoarea 1...", 'warning')
+                        price_input.clear()
+                        price_input.send_keys("1")
+                except Exception as e:
+                    self._log(f"⚠️ Eroare la setarea prețului: {e}", 'warning')
 
                 # 3.5 Click Adaugă
                 add_btn = self.driver.find_element(By.CSS_SELECTOR, ".btn-add-product-on-doc")
