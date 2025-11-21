@@ -779,6 +779,67 @@ class OblioAutomation:
             # Verifică dacă login-ul a reușit
             current_url = self.driver.current_url
             logger.info(f"🌐 URL curent după login: {current_url}")
+
+            # ---------------------------------------------------------
+            # SUPORT 2FA (Two-Factor Authentication)
+            # ---------------------------------------------------------
+            if "/tfa" in current_url.lower():
+                self._log("🔐 2FA Detectat! Este necesar codul de autentificare.", 'warning')
+                
+                if self.input_callback:
+                    # Cere codul de la utilizator prin WebSocket
+                    self._log("⌨️ Aștept codul 2FA de la utilizator...", 'info')
+                    code = self.input_callback({
+                        'type': '2fa',
+                        'message': 'Introduceți codul 2FA (Google Authenticator/Email):'
+                    })
+                    
+                    if code:
+                        self._log(f"✅ Cod primit: {code}", 'info')
+                        
+                        # Găsește câmpul pentru cod
+                        code_input = None
+                        code_selectors = [
+                            (By.NAME, "code"),
+                            (By.ID, "code"),
+                            (By.CSS_SELECTOR, "input[name='code']"),
+                            (By.CSS_SELECTOR, "input[type='text']"), # Risky but fallback
+                        ]
+                        
+                        for by, selector in code_selectors:
+                            try:
+                                code_input = self.driver.find_element(by, selector)
+                                if code_input.is_displayed():
+                                    break
+                            except:
+                                continue
+                                
+                        if code_input:
+                            code_input.clear()
+                            code_input.send_keys(code)
+                            
+                            # Submit
+                            code_input.send_keys(Keys.ENTER)
+                            time.sleep(3)
+                            
+                            # Verifică din nou URL-ul
+                            current_url = self.driver.current_url
+                            if "/tfa" not in current_url.lower() and "login" not in current_url.lower():
+                                self._log("✅ Autentificare 2FA reușită!", 'success')
+                                return True
+                            else:
+                                self._log("❌ Cod 2FA incorect sau expirat!", 'error')
+                                return False
+                        else:
+                            self._log("❌ Nu am găsit câmpul pentru codul 2FA!", 'error')
+                            return False
+                    else:
+                        self._log("❌ Nu s-a primit niciun cod 2FA.", 'error')
+                        return False
+                else:
+                    self._log("⚠️ 2FA necesar dar nu există interfață de input. Aștept manual...", 'warning')
+                    # Fallback la așteptare manuală
+                    return self.wait_for_manual_login(timeout=60)
             
             # Verifică dacă suntem pe dashboard sau stock
             if "dashboard" in current_url or "stock" in current_url or "home" in current_url:
