@@ -1569,21 +1569,19 @@ class OblioAutomation:
                 # 3.2 Selectare din autocomplete
                 try:
                     # Așteaptă explicit lista de autocomplete
-                    autocomplete_items = WebDriverWait(self.driver, 3).until(
+                    autocomplete_items = WebDriverWait(self.driver, 4).until(
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
                     )
                     if len(autocomplete_items) > 0:
                         autocomplete_items[0].click()
-                        time.sleep(0.5)
+                        time.sleep(1.0) # Așteaptă popularea câmpurilor (preț, etc.)
                     else:
-                        # Încercare Enter dacă nu apare lista
-                        name_input.send_keys(Keys.ENTER)
-                        time.sleep(0.5)
-                except:
-                    self._log(f"⚠️ Eroare selectare produs {sku} (autocomplete)", 'warning')
-                    # Fallback Enter
-                    name_input.send_keys(Keys.ENTER)
-                    time.sleep(0.5)
+                        self._log(f"⚠️ Autocomplete gol pentru {sku}. Nu trimit ENTER pentru a evita duplicarea.", 'warning')
+                        # Nu trimitem ENTER, riscăm duplicare sau submit prematur
+                except Exception as e:
+                    self._log(f"⚠️ Eroare/Timeout selectare produs {sku}: {e}", 'warning')
+                    # Nu trimitem ENTER ca fallback, mai bine eșuăm la acest produs decât să duplicăm
+                    # Sau putem încerca să continuăm, poate a fost selectat deja?
 
                 # 3.3 Setare Cantitate
                 qty_input = self.wait_for_element(By.ID, "ap_quantity")
@@ -1601,15 +1599,25 @@ class OblioAutomation:
                 qty_input.send_keys(str(quantity))
                 
                 # 3.4 Setare Preț (OBLIGATORIU pentru transfer)
-                # Dacă Oblio nu completează automat prețul, îl setăm manual la 1
+                # Așteptăm puțin să vedem dacă Oblio completează prețul
+                time.sleep(1.0)
                 try:
                     price_input = self.driver.find_element(By.ID, "ap_price_2")
                     # Verificăm dacă are valoare
                     current_val = price_input.get_attribute("value")
+                    
+                    # Dacă e gol, mai așteptăm puțin
                     if not current_val:
-                        self._log("⚠️ Preț necompletat automat. Setez valoarea 1...", 'warning')
+                        time.sleep(1.0)
+                        current_val = price_input.get_attribute("value")
+                    
+                    if not current_val:
+                        self._log("⚠️ Preț necompletat automat de Oblio. Setez valoarea 1...", 'warning')
                         price_input.clear()
                         price_input.send_keys("1")
+                    else:
+                        self._log(f"ℹ️ Preț preluat automat: {current_val}", 'info')
+                        
                 except Exception as e:
                     self._log(f"⚠️ Eroare la setarea prețului: {e}", 'warning')
 
@@ -1620,10 +1628,18 @@ class OblioAutomation:
                 time.sleep(0.5)
                 
                 # Folosim DOAR execute_script pentru a evita dublarea click-urilor
-                # și pentru a fi siguri că merge chiar dacă e parțial acoperit
                 self.driver.execute_script("arguments[0].click();", add_btn)
                     
                 self._log(f"✅ Produs {sku} adăugat în listă", 'info')
+                
+                # Așteptăm ca input-ul să se golească (semn că a fost adăugat)
+                try:
+                    WebDriverWait(self.driver, 5).until(
+                        lambda d: d.find_element(By.ID, "ap_name1").get_attribute("value") == ""
+                    )
+                    self._log("✅ Input golit - produs adăugat cu succes.", 'info')
+                except:
+                    self._log("⚠️ Input-ul nu s-a golit. Posibilă eroare la adăugare sau popup.", 'warning')
 
                 # --- VERIFICARE POPUP CONFIRMARE PREȚ (NOU) ---
                 # Uneori apare un popup care întreabă dacă vrem să modificăm prețul
