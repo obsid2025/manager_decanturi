@@ -1890,6 +1890,193 @@ class OblioAutomation:
                 
             return False
 
+    def create_production_vouchers_batch(self, batch_list, oblio_cookies=None, oblio_email=None, oblio_password=None):
+        """
+        Creează bonuri de producție în batch (tab-uri paralele)
+        
+        Args:
+            batch_list (list): Listă de dict-uri {'sku': '...', 'cantitate': ...}
+            
+        Returns:
+            list: Listă de rezultate [{'sku': '...', 'success': True/False, 'message': '...'}]
+        """
+        results = []
+        tabs = []
+        main_window = self.driver.current_window_handle
+        
+        self._log(f"🚀 START BATCH: {len(batch_list)} bonuri în paralel...", 'info')
+        
+        # 1. Deschide tab-uri și navighează (PRE-LOAD)
+        for i, item in enumerate(batch_list):
+            sku = item.get('sku')
+            qty = item.get('cantitate', 1)
+            
+            self._log(f"🌐 [Tab {i+1}] Deschidere tab pentru {sku}...", 'info')
+            
+            # Deschide tab nou
+            self.driver.execute_script("window.open('about:blank', '_blank');")
+            
+            # Switch la noul tab (ultimul deschis)
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            tab_handle = self.driver.current_window_handle
+            
+            # Navighează la producție
+            url = "https://www.oblio.eu/stock/production/"
+            self.driver.get(url)
+            
+            tabs.append({
+                'handle': tab_handle,
+                'sku': sku,
+                'qty': qty,
+                'index': i
+            })
+            
+            # Verifică login pe primul tab
+            if i == 0:
+                if "login" in self.driver.current_url.lower():
+                    self._log("🔐 Login necesar pe primul tab...", 'warning')
+                    # Logica de login existentă
+                    if oblio_cookies:
+                        self.load_cookies_from_json(oblio_cookies)
+                        self.driver.get(url)
+                    elif oblio_email and oblio_password:
+                        self.login_to_oblio(oblio_email, oblio_password)
+                        self.driver.get(url)
+                    elif self.input_callback:
+                        self.interactive_login()
+                        self.driver.get(url)
+                    else:
+                        self.wait_for_manual_login()
+                        self.driver.get(url)
+
+        # 2. Completează formularele (FILL)
+        self._log("📝 [BATCH] Completare formulare...", 'info')
+        for tab in tabs:
+            try:
+                self.driver.switch_to.window(tab['handle'])
+                sku = tab['sku']
+                qty = tab['qty']
+                
+                self._log(f"📝 [Tab {tab['index']+1}] Completare {sku}...", 'info')
+                
+                # Verifică dacă suntem pe pagina corectă
+                if "production" not in self.driver.current_url:
+                    self.driver.get("https://www.oblio.eu/stock/production/")
+                
+                # --- LOGICA DE COMPLETARE (Copiată și adaptată din create_production_voucher) ---
+                # SKU
+                pp_name_input = self.wait_for_element(By.ID, "pp_name", timeout=10)
+                if not pp_name_input:
+                    raise Exception("Input SKU negăsit")
+                    
+                pp_name_input.clear()
+                self.type_slowly(pp_name_input, sku, delay=0.01)
+                pp_name_input.send_keys(Keys.SPACE)
+                pp_name_input.send_keys(Keys.BACKSPACE)
+                
+                # Autocomplete
+                try:
+                    autocomplete_items = WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui-menu-item"))
+                    )
+                    if len(autocomplete_items) > 0:
+                        first_item = WebDriverWait(self.driver, 3).until(
+                            EC.element_to_be_clickable(autocomplete_items[0])
+                        )
+                        first_item.click()
+                    else:
+                        pp_name_input.send_keys(Keys.ENTER)
+                except:
+                    pp_name_input.send_keys(Keys.ENTER)
+                
+                # Cantitate
+                pp_quantity_input = self.wait_for_element(By.ID, "pp_quantity", timeout=5)
+                if pp_quantity_input:
+                    pp_quantity_input.click()
+                    pp_quantity_input.send_keys(Keys.CONTROL + "a")
+                    pp_quantity_input.send_keys(Keys.DELETE)
+                    pp_quantity_input.send_keys(str(qty))
+                
+                # Verificare stoc (opțional, doar log)
+                time.sleep(0.5)
+                
+                tab['status'] = 'filled'
+                
+            except Exception as e:
+                self._log(f"❌ [Tab {tab['index']+1}] Eroare la completare: {e}", 'error')
+                tab['status'] = 'error'
+                tab['error'] = str(e)
+
+        # 3. Salvare și Finalizare (SUBMIT)
+        self._log("💾 [BATCH] Salvare și finalizare...", 'info')
+        for tab in tabs:
+            if tab.get('status') != 'filled':
+                results.append({'sku': tab['sku'], 'success': False, 'message': f"Eroare la completare: {tab.get('error')}"})
+                self.driver.close()
+                continue
+                
+            try:
+                self.driver.switch_to.window(tab['handle'])
+                sku = tab['sku']
+                self._log(f"💾 [Tab {tab['index']+1}] Salvare {sku}...", 'info')
+                
+                # Click Salvare
+                save_button = self.wait_for_clickable(By.ID, "invoice_preview_btn", timeout=5)
+                if not save_button:
+                    # Fallback selectors
+                    save_button = self.driver.find_element(By.CSS_SELECTOR, ".btn-submit")
+                
+                # Click JS
+                self.driver.execute_script("arguments[0].click();", save_button)
+                
+                # Așteaptă redirect
+                time.sleep(1.5)
+                
+                # Verifică redirect
+                if "/stock/preview_production/" in self.driver.current_url:
+                    # Lansează
+                    launch_btn = self.wait_for_clickable(By.CSS_SELECTOR, "a.issue-btn", timeout=5)
+                    if launch_btn:
+                        launch_btn.click()
+                        time.sleep(0.5)
+                        
+                        # Confirmă Popup
+                        ok_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-message-modal", timeout=3)
+                        if ok_btn:
+                            ok_btn.click()
+                            time.sleep(0.5)
+                            
+                        # Finalizează
+                        finalize_btn = self.wait_for_clickable(By.XPATH, "//a[contains(text(), 'Finalizeaza Productia')]", timeout=5)
+                        if finalize_btn:
+                            finalize_btn.click()
+                            time.sleep(1.0)
+                            
+                            results.append({'sku': sku, 'success': True, 'message': 'Bon creat cu succes'})
+                            self.stats['success'] += 1
+                        else:
+                            raise Exception("Buton Finalizare negăsit")
+                    else:
+                        raise Exception("Buton Lansare negăsit")
+                else:
+                    raise Exception("Nu s-a făcut redirect la preview")
+                    
+            except Exception as e:
+                self._log(f"❌ [Tab {tab['index']+1}] Eroare la salvare: {e}", 'error')
+                results.append({'sku': tab['sku'], 'success': False, 'message': str(e)})
+                self.stats['failed'] += 1
+            finally:
+                self.driver.close()
+
+        # Revino la fereastra principală (dacă mai există, altfel switch la ultima rămasă)
+        try:
+            self.driver.switch_to.window(main_window)
+        except:
+            if len(self.driver.window_handles) > 0:
+                self.driver.switch_to.window(self.driver.window_handles[0])
+
+        return results
+
     def process_bonuri(self, bonuri, oblio_cookies=None, oblio_email=None, oblio_password=None):
         """
         Procesează o listă de bonuri

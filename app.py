@@ -823,92 +823,102 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 'message': f'🔐 Folosesc credențiale din ENV: {oblio_email}'
             }, room=client_sid)
 
-        # Procesare BON cu BON cu progress live
-        for i, bon in enumerate(bonuri, 1):
+        # Procesare BON cu BON cu progress live (BATCH OPTIMIZATION)
+        batch_size = 3 # Procesăm câte 3 bonuri în paralel
+        
+        for i in range(0, len(bonuri), batch_size):
             if stop_requested:
-                socketio.emit('log', {
-                    'type': 'warning',
-                    'message': '🛑 Automatizare oprită manual de utilizator!'
-                }, room=client_sid)
-                socketio.emit('automation_complete', {
-                    'success': False,
-                    'error': 'Stopped by user'
-                }, room=client_sid)
                 break
-            try:
-                # Emit progress înainte de fiecare bon
+                
+            batch = bonuri[i:i + batch_size]
+            batch_indices = range(i + 1, i + len(batch) + 1)
+            
+            socketio.emit('log', {
+                'type': 'info',
+                'message': f'🚀 Procesare batch {i//batch_size + 1}: {len(batch)} bonuri în paralel...'
+            }, room=client_sid)
+            
+            # Emit progress pentru toate din batch
+            for idx, bon in zip(batch_indices, batch):
                 socketio.emit('progress', {
-                    'current': i,
+                    'current': idx,
                     'total': len(bonuri),
                     'sku': bon.get('sku'),
                     'nume': bon.get('nume', ''),
                     'cantitate': bon.get('cantitate', 1)
                 }, room=client_sid)
-                eventlet.sleep(0.1)  # Permite event loop să proceseze
+            
+            eventlet.sleep(0.1)
 
-                # Procesează bonul
-                socketio.emit('log', {
-                    'type': 'info',
-                    'message': f'🔄 Procesare bon {i}/{len(bonuri)}: {bon.get("sku")}'
-                }, room=client_sid)
-                eventlet.sleep(0.1)  # Permite event loop să proceseze
-
-                # Pasăm email/password din ENV dacă există
-                success = automation.create_production_voucher(
-                    bon.get('sku'),
-                    bon.get('cantitate', 1),
+            try:
+                # Apelăm metoda de batch
+                results = automation.create_production_vouchers_batch(
+                    batch,
                     None,   # cookies
-                    oblio_email,   # email din ENV
-                    oblio_password # password din ENV
+                    oblio_email,
+                    oblio_password
                 )
-
-                # Emit rezultat după fiecare bon
-                if success:
-                    stats['success'] += 1
-                    # Adăugăm bonul în lista de produse reușite pentru transfer
-                    stats.setdefault('successful_products', []).append(bon)
+                
+                # Procesăm rezultatele
+                for res in results:
+                    sku = res['sku']
+                    success = res['success']
+                    msg = res['message']
                     
-                    socketio.emit('bon_complete', {
-                        'index': i,
-                        'total': len(bonuri),
-                        'success': True,
-                        'sku': bon.get('sku'),
-                        'message': f'✅ Bon {i}/{len(bonuri)} finalizat cu succes!'
-                    }, room=client_sid)
-                    eventlet.sleep(0.1)  # Permite event loop să proceseze
-                else:
+                    # Găsim indexul original
+                    original_idx = next((idx for idx, b in zip(batch_indices, batch) if b.get('sku') == sku), 0)
+                    original_bon = next((b for b in batch if b.get('sku') == sku), {})
+                    
+                    if success:
+                        stats['success'] += 1
+                        stats.setdefault('successful_products', []).append(original_bon)
+                        
+                        socketio.emit('bon_complete', {
+                            'index': original_idx,
+                            'total': len(bonuri),
+                            'success': True,
+                            'sku': sku,
+                            'message': f'✅ Bon {original_idx}/{len(bonuri)} finalizat cu succes!'
+                        }, room=client_sid)
+                    else:
+                        stats['failed'] += 1
+                        stats['errors'].append({'sku': sku, 'error': msg})
+                        
+                        socketio.emit('bon_complete', {
+                            'index': original_idx,
+                            'total': len(bonuri),
+                            'success': False,
+                            'sku': sku,
+                            'message': f'❌ Bon {original_idx}/{len(bonuri)} eșuat: {msg}'
+                        }, room=client_sid)
+                        
+                eventlet.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"❌ Eroare la procesarea batch-ului: {e}")
+                # Mark all in batch as failed
+                for idx, bon in zip(batch_indices, batch):
                     stats['failed'] += 1
-                    stats['errors'].append({
-                        'sku': bon.get('sku'),
-                        'error': 'Bon nu a fost creat'
-                    })
+                    stats['errors'].append({'sku': bon.get('sku'), 'error': str(e)})
                     socketio.emit('bon_complete', {
-                        'index': i,
+                        'index': idx,
                         'total': len(bonuri),
                         'success': False,
                         'sku': bon.get('sku'),
-                        'message': f'❌ Bon {i}/{len(bonuri)} eșuat!'
+                        'message': f'❌ Eroare batch: {str(e)[:100]}'
                     }, room=client_sid)
-                    eventlet.sleep(0.1)  # Permite event loop să proceseze
 
-                # Pauză între bonuri + permite event loop
-                if i < len(bonuri):
-                    eventlet.sleep(0.5)
-
-            except Exception as e:
-                logger.error(f"❌ Eroare la procesarea bonului {i}: {e}")
-                stats['failed'] += 1
-                stats['errors'].append({
-                    'sku': bon.get('sku'),
-                    'error': str(e)
-                })
-                socketio.emit('bon_complete', {
-                    'index': i,
-                    'total': len(bonuri),
-                    'success': False,
-                    'sku': bon.get('sku'),
-                    'message': f'❌ Eroare: {str(e)[:100]}'
-                }, room=client_sid)
+        # Check stop request outside loop
+        if stop_requested:
+            socketio.emit('log', {
+                'type': 'warning',
+                'message': '🛑 Automatizare oprită manual de utilizator!'
+            }, room=client_sid)
+            socketio.emit('automation_complete', {
+                'success': False,
+                'error': 'Stopped by user'
+            }, room=client_sid)
+            return # Exit function
 
         # ============================================================
         # ETAPA 2: TRANSFER GESTIUNE (Materiale consumabile -> Marfuri)
