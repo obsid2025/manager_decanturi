@@ -1674,6 +1674,23 @@ class OblioAutomation:
                 else:
                     raise Exception("Butonul de emitere nu a fost găsit!")
             else:
+                # DIAGNOSTIC: De ce nu s-a făcut redirectarea?
+                self._log("❌ Redirect eșuat. Caut erori pe pagină...", 'error')
+                
+                # 1. Caută mesaje de eroare standard
+                try:
+                    error_elems = self.driver.find_elements(By.CSS_SELECTOR, ".alert-danger, .text-danger, .error-message, .invalid-feedback, .error")
+                    found_errors = False
+                    for elem in error_elems:
+                        if elem.is_displayed() and elem.text.strip():
+                            self._log(f"❌ EROARE PE PAGINĂ: {elem.text.strip()}", 'error')
+                            found_errors = True
+                    
+                    if not found_errors:
+                        self._log("ℹ️ Nu am găsit mesaje de eroare explicite pe pagină.", 'warning')
+                except:
+                    pass
+
                 raise Exception("Nu s-a făcut redirectarea la pagina de previzualizare!")
 
         except Exception as e:
