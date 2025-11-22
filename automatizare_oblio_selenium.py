@@ -2053,8 +2053,33 @@ class OblioAutomation:
                     pp_quantity_input.send_keys(Keys.DELETE)
                     pp_quantity_input.send_keys(str(qty))
                 
-                # Verificare stoc (opțional, doar log)
-                time.sleep(0.5)
+                # --- VERIFICARE STOC (BATCH) ---
+                time.sleep(1.0) # Așteaptă calculare rețetă
+                try:
+                    # Caută input-ul de cantitate consumată (ap_1_quantity2)
+                    consumed_qty_input = self.wait_for_element(By.ID, "ap_1_quantity2", timeout=2)
+                    
+                    if consumed_qty_input:
+                        consumed_val = float(consumed_qty_input.get_attribute('value') or 0)
+                        
+                        # Caută span-ul cu stocul (ap_1_name_note)
+                        stock_span = self.driver.find_element(By.ID, "ap_1_name_note")
+                        stock_text = stock_span.text # Ex: "Stoc: 0.02 buc"
+                        
+                        # Parsează stocul
+                        import re
+                        match_stock = re.search(r'Stoc:\s*([\d\.]+)', stock_text)
+                        if match_stock:
+                            stock_val = float(match_stock.group(1))
+                            
+                            if consumed_val > stock_val:
+                                self._log(f"⚠️ [Tab {tab['index']+1}] STOC INSUFICIENT pentru {sku}! Necesar: {consumed_val}, Disponibil: {stock_val}", 'warning')
+                                tab['status'] = 'skipped'
+                                tab['error'] = f"Stoc insuficient (Necesar: {consumed_val}, Disponibil: {stock_val})"
+                                continue # Skip la următorul tab
+                except Exception as e:
+                    self._log(f"⚠️ [Tab {tab['index']+1}] Eroare verificare stoc: {e}", 'warning')
+                # --- END VERIFICARE STOC ---
                 
                 tab['status'] = 'filled'
                 
@@ -2066,9 +2091,16 @@ class OblioAutomation:
         # 3. Salvare și Finalizare (SUBMIT)
         self._log("💾 [BATCH] Salvare și finalizare...", 'info')
         for tab in tabs:
+            # Dacă statusul nu e 'filled', înseamnă că a fost eroare sau skip (stoc insuficient)
             if tab.get('status') != 'filled':
-                results.append({'sku': tab['sku'], 'success': False, 'message': f"Eroare la completare: {tab.get('error')}"})
-                self.driver.close()
+                msg = tab.get('error', 'Unknown error')
+                results.append({'sku': tab['sku'], 'success': False, 'message': msg})
+                
+                # Închidem tab-ul dacă există
+                try:
+                    self.driver.switch_to.window(tab['handle'])
+                    self.driver.close()
+                except: pass
                 continue
                 
             try:
