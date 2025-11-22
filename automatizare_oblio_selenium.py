@@ -1528,11 +1528,7 @@ class OblioAutomation:
                 self._log("✅ Gestiune sursă selectată: Materiale consumabile (237258)", 'info')
                 time.sleep(1)
                 
-                # Selectare Gestiune Destinație (Marfuri) - Explicit
-                gestiune2_select = Select(self.wait_for_element(By.ID, "gestiune2"))
-                gestiune2_select.select_by_value("237255") # Marfuri
-                self._log("✅ Gestiune destinație selectată: Marfuri (237255)", 'info')
-                time.sleep(1)
+                # Gestiunea Destinație este implicit "Marfuri" (237255), nu o mai selectăm explicit
                 
             except Exception as e:
                 raise Exception(f"Nu s-a putut selecta gestiunea: {e}")
