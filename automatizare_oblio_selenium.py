@@ -1664,15 +1664,32 @@ class OblioAutomation:
                     # Verificăm dacă are valoare
                     current_val = price_input.get_attribute("value")
                     
-                    # Dacă e gol, mai așteptăm puțin
-                    if not current_val:
+                    # Dacă e gol sau 0, mai așteptăm puțin
+                    if not current_val or current_val.strip() == "" or current_val == "0" or current_val == "0.00":
                         time.sleep(1.0)
                         current_val = price_input.get_attribute("value")
                     
+                    # Verificăm din nou și setăm default 19.99 dacă e necesar
+                    should_set_price = False
                     if not current_val:
-                        self._log("⚠️ Preț necompletat automat de Oblio. Setez valoarea 1...", 'warning')
-                        price_input.clear()
-                        price_input.send_keys("1")
+                        should_set_price = True
+                    else:
+                        try:
+                            if float(current_val) == 0:
+                                should_set_price = True
+                        except:
+                            should_set_price = True
+
+                    if should_set_price:
+                        self._log("⚠️ Preț necompletat sau 0. Setez valoarea standard 19.99...", 'warning')
+                        try:
+                            price_input.click()
+                        except:
+                            self.driver.execute_script("arguments[0].click();", price_input)
+                            
+                        price_input.send_keys(Keys.CONTROL + "a")
+                        price_input.send_keys(Keys.DELETE)
+                        price_input.send_keys("19.99")
                     else:
                         self._log(f"ℹ️ Preț preluat automat: {current_val}", 'info')
                         
