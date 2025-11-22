@@ -1525,10 +1525,17 @@ class OblioAutomation:
                 from selenium.webdriver.support.ui import Select
                 gestiune_select = Select(self.wait_for_element(By.ID, "gestiune1"))
                 gestiune_select.select_by_value("237258") # Materiale consumabile
-                self._log("✅ Gestiune selectată: Materiale consumabile (237258)", 'info')
+                self._log("✅ Gestiune sursă selectată: Materiale consumabile (237258)", 'info')
                 time.sleep(1)
+                
+                # Selectare Gestiune Destinație (Marfuri) - Explicit
+                gestiune2_select = Select(self.wait_for_element(By.ID, "gestiune2"))
+                gestiune2_select.select_by_value("237255") # Marfuri
+                self._log("✅ Gestiune destinație selectată: Marfuri (237255)", 'info')
+                time.sleep(1)
+                
             except Exception as e:
-                raise Exception(f"Nu s-a putut selecta gestiunea sursă: {e}")
+                raise Exception(f"Nu s-a putut selecta gestiunea: {e}")
 
             # PASUL 2: Confirmare Popup "OK, am inteles!"
             self._log("🔍 Căutare popup confirmare...", 'info')
@@ -1933,8 +1940,18 @@ class OblioAutomation:
         # 0. Verificare Login (PRE-CHECK)
         # Verificăm login-ul pe fereastra principală înainte de a deschide tab-uri
         url_prod = "https://www.oblio.eu/stock/production/"
+        self._log(f"Verificare login pe main window... Navigare la {url_prod}", 'info')
         self.driver.get(url_prod)
-        time.sleep(1)
+        
+        # Așteaptă să se stabilizeze URL-ul (redirect la login sau load la production)
+        try:
+            WebDriverWait(self.driver, 5).until(
+                lambda d: "login" in d.current_url.lower() or "production" in d.current_url.lower()
+            )
+        except:
+            pass # Continuăm verificarea
+            
+        time.sleep(1) # Extra safety
         
         if "login" in self.driver.current_url.lower():
             self._log("🔐 Login necesar înainte de batch...", 'warning')
@@ -1952,9 +1969,19 @@ class OblioAutomation:
                 self.driver.get(url_prod)
                 
         # Verificăm din nou dacă suntem logați
-        if "login" in self.driver.current_url.lower():
-             self._log("❌ Login eșuat! Nu pot începe batch-ul.", 'error')
-             return [{'sku': item.get('sku'), 'success': False, 'message': 'Login failed'}] * len(batch_list)
+        # Așteptăm explicit elementul #pp_name care confirmă că suntem pe pagina de producție
+        try:
+            WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "pp_name"))
+            )
+            self._log("✅ Login confirmat. Începem procesarea batch...", 'success')
+        except TimeoutException:
+             self._log("❌ Login eșuat sau pagina nu s-a încărcat! Nu pot începe batch-ul.", 'error')
+             try:
+                self.driver.save_screenshot("batch_login_fail.png")
+                self.upload_screenshot_to_cloudinary("batch_login_fail.png")
+             except: pass
+             return [{'sku': b.get('sku'), 'success': False, 'message': 'Login failed - Page not loaded'} for b in batch_list]
 
         self._log(f"🚀 START BATCH: {len(batch_list)} bonuri în paralel...", 'info')
         
