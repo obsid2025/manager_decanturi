@@ -824,7 +824,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
             }, room=client_sid)
 
         # Procesare BON cu BON cu progress live (BATCH OPTIMIZATION)
-        batch_size = 3 # Procesăm câte 3 bonuri în paralel
+        batch_size = 5 # Procesăm câte 5 bonuri în paralel (crescut de la 3)
         
         for i in range(0, len(bonuri), batch_size):
             if stop_requested:
