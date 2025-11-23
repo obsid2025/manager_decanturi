@@ -7,7 +7,8 @@ OBSID - Platformă de management decanturi parfumuri
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_socketio import SocketIO, emit
 import pandas as pd
 import re
@@ -35,6 +36,20 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['EXPORT_FOLDER'] = 'exports'
 app.config['SECRET_KEY'] = 'obsid-selenium-automation-secret-2025'
+
+# Configurare Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Model User simplu
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User(user_id)
 
 # Inițializare SocketIO pentru WebSocket live logs
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
@@ -298,13 +313,44 @@ def proceseazaBonuriProductie(fisier_path):
     return rezultat
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Credențiale din ENV sau default
+        valid_user = os.environ.get('APP_USER', 'admin')
+        valid_pass = os.environ.get('APP_PASS', 'obsid123')
+        
+        if username == valid_user and password == valid_pass:
+            user = User(1)
+            login_user(user)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            return render_template('login.html', error='Invalid credentials')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     """Pagina principală"""
     return render_template('index.html')
 
 
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload_file():
     """
     Upload și procesare fișier Excel
@@ -376,6 +422,7 @@ def upload_file():
 
 
 @app.route('/process-vouchers', methods=['POST'])
+@login_required
 def process_vouchers():
     """
     Procesare fișier pentru bonuri de producție (agregate pe SKU)
@@ -419,6 +466,7 @@ def process_vouchers():
 
 
 @app.route('/export/<filename>')
+@login_required
 def export_excel(filename):
     """
     Export raport în Excel
@@ -471,6 +519,7 @@ def export_excel(filename):
 
 
 @app.route('/download-model')
+@login_required
 def download_model():
     """
     Download fișier model de import
@@ -540,6 +589,7 @@ def health():
 
 
 @app.route('/start-automation-selenium', methods=['POST'])
+@login_required
 def start_automation_selenium():
     """
     Pornește automatizarea Selenium pentru crearea bonurilor în Oblio
