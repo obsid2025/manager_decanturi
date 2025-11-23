@@ -331,20 +331,29 @@ def login():
         valid_user = os.environ.get('APP_USER', 'admin')
         valid_pass = os.environ.get('APP_PASS', 'obsid123')
         
-        # Debug temporar (doar în consolă)
-        print(f"DEBUG LOGIN: User input: '{username}', Env user: '{valid_user}'")
-        print(f"DEBUG LOGIN: Pass input len: {len(password) if password else 0}, Env pass len: {len(valid_pass) if valid_pass else 0}")
+        # Debug logs
+        logger.info(f"LOGIN DEBUG: EnvUser='{valid_user}', EnvPassLen={len(valid_pass) if valid_pass else 0}")
         
         if username and password and valid_user and valid_pass:
-            if username.strip() == valid_user.strip() and password.strip() == valid_pass.strip():
+            # Comparare directă (fără strip pentru parolă dacă conține spații intenționate, dar strip la user e ok)
+            if username.strip() == valid_user.strip() and password == valid_pass:
                 user = User(1)
                 login_user(user)
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('index'))
             else:
-                return render_template('login.html', error='Invalid credentials')
+                # DEBUG EXTINS PENTRU UI - Arată ce așteaptă serverul vs ce a primit
+                # ATENȚIE: A se scoate în producție după debug!
+                debug_msg = (
+                    f"DEBUG INFO: "
+                    f"Expected User: '{valid_user}' | "
+                    f"Expected Pass Len: {len(valid_pass)} | "
+                    f"Received Pass Len: {len(password)} | "
+                    f"Pass Match: {password == valid_pass}"
+                )
+                return render_template('login.html', error=f'Invalid credentials. {debug_msg}')
         else:
-             return render_template('login.html', error='Missing credentials')
+             return render_template('login.html', error='Missing credentials configuration')
             
     return render_template('login.html')
 
