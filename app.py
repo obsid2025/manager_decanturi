@@ -200,6 +200,11 @@ def proceseazaComenzi(fisier_path):
     Detectează automat coloanele necesare (ordinea nu mai contează)
     Returnează și SKU-urile pentru fiecare produs
     """
+    # Asigură-te că baza de date este încărcată
+    if not PRODUCT_DB:
+        logger.warning("⚠ Baza de date produse este goală! Încerc reîncărcarea...")
+        load_product_db()
+
     df = pd.read_excel(fisier_path)
 
     # Detectare automată coloane
@@ -277,39 +282,10 @@ def proceseazaComenzi(fisier_path):
                     found_sku = PRODUCT_DB[produs_norm]
                     # logger.info(f"✅ SKU găsit în DB: {produs_clean} -> {found_sku}")
                 else:
-                    # Fallback la logica veche (atribute) doar dacă nu e în DB
-                    # logger.warning(f"⚠ Produs negăsit în DB: {produs_clean} (norm: {produs_norm}). Încerc fallback atribute...")
-                    
-                    # 2. Căutare exactă după cantitate (ml) și sufix SKU
-                    candidates = []
-                    for attr in parsed_attributes:
-                        if not attr['used']:
-                            # Verifică dacă SKU se termină cu cantitatea (ex: -5 pentru 5ml)
-                            if attr['sku'].endswith(f"-{cantitate_ml}"):
-                                candidates.append(attr)
-                            # Fallback: verifică dacă atributul menționează cantitatea explicit
-                            elif attr['qty'] == cantitate_ml:
-                                candidates.append(attr)
-
-                    if len(candidates) == 1:
-                        # Match unic perfect
-                        found_sku = candidates[0]['sku']
-                        candidates[0]['used'] = True
-                    elif len(candidates) > 1:
-                        # Ambiguitate - încercăm să rafinăm după Sex
-                        produs_lower = produs.lower()
-                        sex_candidates = []
-                        for cand in candidates:
-                            if cand['sex'] and cand['sex'] in produs_lower:
-                                sex_candidates.append(cand)
-                        
-                        if len(sex_candidates) == 1:
-                            found_sku = sex_candidates[0]['sku']
-                            sex_candidates[0]['used'] = True
-                        else:
-                            # Dacă tot avem ambiguitate, luăm primul (FIFO)
-                            found_sku = candidates[0]['sku']
-                            candidates[0]['used'] = True
+                    # Logăm faptul că nu s-a găsit în DB, dar NU facem fallback la atribute
+                    # deoarece utilizatorul a raportat că atributele sunt nesigure.
+                    logger.warning(f"⚠ Produs negăsit în DB: {produs_clean} (norm: {produs_norm}). SKU setat la N/A.")
+                    found_sku = 'N/A'
                 
                 sku = found_sku
 
