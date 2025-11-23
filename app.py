@@ -28,6 +28,7 @@ import threading
 import eventlet
 import eventlet.queue as queue
 import time
+import requests
 
 # Configurare logging
 # Update: Added more logging for debugging
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Încărcare bază de date produse (SKU mapping)
 PRODUCT_DB = {}
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/17FhRBDaknpXgsoTXOkpEWcMf2o55uOjDymlaGiiKUwU/export?format=csv&gid=1884124540"
 
 def normalize_name(text):
     """
@@ -56,39 +58,67 @@ def normalize_name(text):
 
 def load_product_db():
     global PRODUCT_DB
+    df_db = None
+    
+    # 1. Încercare încărcare din Google Sheets
     try:
-        # Încercăm mai multe căi posibile pentru a găsi fișierul
-        possible_paths = [
-            os.path.join(os.path.dirname(__file__), 'produse.xlsx'),
-            os.path.join(os.getcwd(), 'produse.xlsx'),
-            'produse.xlsx'
-        ]
+        logger.info(f"🌐 Încercare descărcare bază de date din Google Sheets...")
+        response = requests.get(GOOGLE_SHEET_URL, timeout=10)
+        response.raise_for_status()
         
-        db_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                db_path = path
-                break
+        df_db = pd.read_csv(io.BytesIO(response.content))
+        logger.info("✅ Baza de date descărcată cu succes din Google Sheets!")
         
-        if db_path:
-            logger.info(f"📂 Încărcare bază de date din: {db_path}")
-            df_db = pd.read_excel(db_path)
-            # Creare mapare: Nume Produs Normalizat -> SKU
-            count = 0
-            for _, row in df_db.iterrows():
-                nume = str(row['Denumire Produs'])
-                sku = str(row['Cod Produs (SKU)']).strip()
-                if nume and sku:
-                    norm_nume = normalize_name(nume)
-                    PRODUCT_DB[norm_nume] = sku
-                    count += 1
-            logger.info(f"✅ Baza de date produse încărcată: {count} produse")
-        else:
-            logger.warning(f"⚠ Fișierul produse.xlsx nu a fost găsit! Căi verificate: {possible_paths}")
-            logger.warning(f"📂 Director curent: {os.getcwd()}")
-            logger.warning(f"📂 Conținut director: {os.listdir(os.getcwd())}")
+        # Salvare cache local (backup)
+        try:
+            df_db.to_excel('produse.xlsx', index=False)
+            logger.info("💾 Cache local actualizat (produse.xlsx)")
+        except Exception as e:
+            logger.warning(f"⚠ Nu s-a putut salva cache-ul local: {e}")
+            
     except Exception as e:
-        logger.error(f"❌ Eroare la încărcarea bazei de date produse: {e}")
+        logger.error(f"❌ Eroare la descărcarea din Google Sheets: {e}")
+        logger.info("📂 Încercare încărcare din cache local (produse.xlsx)...")
+    
+    # 2. Fallback la fișier local dacă descărcarea a eșuat
+    if df_db is None:
+        try:
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), 'produse.xlsx'),
+                os.path.join(os.getcwd(), 'produse.xlsx'),
+                'produse.xlsx'
+            ]
+            
+            db_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    db_path = path
+                    break
+            
+            if db_path:
+                logger.info(f"📂 Încărcare bază de date din local: {db_path}")
+                df_db = pd.read_excel(db_path)
+            else:
+                logger.error("❌ CRITIC: Nu s-a găsit nici baza de date online, nici cea locală!")
+                return
+        except Exception as e:
+            logger.error(f"❌ Eroare la încărcarea locală: {e}")
+            return
+
+    # 3. Procesare date
+    try:
+        count = 0
+        PRODUCT_DB = {} # Reset DB
+        for _, row in df_db.iterrows():
+            nume = str(row['Denumire Produs'])
+            sku = str(row['Cod Produs (SKU)']).strip()
+            if nume and sku and sku.lower() != 'nan':
+                norm_nume = normalize_name(nume)
+                PRODUCT_DB[norm_nume] = sku
+                count += 1
+        logger.info(f"✅ Baza de date produse activă: {count} produse")
+    except Exception as e:
+        logger.error(f"❌ Eroare la procesarea datelor din DB: {e}")
 
 app = Flask(__name__)
 

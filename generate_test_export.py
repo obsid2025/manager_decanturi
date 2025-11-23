@@ -1,9 +1,13 @@
 import pandas as pd
 import re
 import os
+import requests
+import io
 from collections import defaultdict
 
 # --- LOGIC COPIED FROM app.py ---
+
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/17FhRBDaknpXgsoTXOkpEWcMf2o55uOjDymlaGiiKUwU/export?format=csv&gid=1884124540"
 
 def normalize_name(text):
     if not isinstance(text, str):
@@ -47,17 +51,29 @@ def detecteazaColoane(df):
 # --- MAIN SCRIPT ---
 
 def main():
-    print("Loading DB...")
-    db_path = r'c:\DEV\Python\manager_decanturi\manager_decanturi\produse.xlsx'
-    if not os.path.exists(db_path):
+    print("Loading DB from Google Sheets...")
+    df_db = None
+    try:
+        response = requests.get(GOOGLE_SHEET_URL, timeout=10)
+        response.raise_for_status()
+        df_db = pd.read_csv(io.BytesIO(response.content))
+        print("✅ Downloaded DB from Google Sheets.")
+    except Exception as e:
+        print(f"❌ Failed to download DB: {e}")
+        print("Trying local file...")
         db_path = 'produse.xlsx'
-    
-    df_db = pd.read_excel(db_path)
+        if os.path.exists(db_path):
+            df_db = pd.read_excel(db_path)
+            print("✅ Loaded DB from local file.")
+        else:
+            print("❌ No DB found!")
+            return
+
     PRODUCT_DB = {}
     for _, row in df_db.iterrows():
         nume = str(row['Denumire Produs'])
         sku = str(row['Cod Produs (SKU)']).strip()
-        if nume and sku:
+        if nume and sku and sku.lower() != 'nan':
             norm_nume = normalize_name(nume)
             PRODUCT_DB[norm_nume] = sku
 
