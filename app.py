@@ -30,6 +30,7 @@ import eventlet.queue as queue
 import time
 
 # Configurare logging
+# Update: Added more logging for debugging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
