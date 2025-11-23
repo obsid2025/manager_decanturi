@@ -156,7 +156,7 @@ def proceseazaComenzi(fisier_path):
             break
 
     # Filtrare comenzi finalizate (flexibil - acceptă variante)
-    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata', case=False, na=False)]
+    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
 
     # Raport agregat pe SKU (în loc de doar pe nume+cantitate)
     raport = defaultdict(lambda: {'nume': '', 'cantitate_ml': 0, 'bucati': 0})
@@ -180,8 +180,13 @@ def proceseazaComenzi(fisier_path):
 
                 # FILTRARE SUPLIMENTARĂ: Exclude produsele care nu sunt decanturi (nu au extensie -3/-5/-10)
                 # Chiar dacă numele conține "Decant", verificăm SKU-ul pentru siguranță
+                # Dacă SKU este N/A, permitem produsul dacă numele conține "Decant" (fallback)
                 if sku != 'N/A' and not re.search(r'-\d+$', sku):
+                    logger.info(f"Produs exclus (SKU non-decant): {nume_parfum} | SKU: {sku}")
                     continue
+                
+                if sku == 'N/A':
+                     logger.warning(f"Produs cu SKU N/A acceptat: {nume_parfum}")
 
                 # Agregare pe SKU
                 raport[sku]['nume'] = nume_parfum
@@ -261,7 +266,7 @@ def proceseazaBonuriProductie(fisier_path):
         raise ValueError('Nu s-a găsit coloana cu atributele produselor')
 
     # Filtrare comenzi finalizate
-    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata', case=False, na=False)]
+    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
 
     # Agregare bonuri pe SKU
     bonuri_agregate = defaultdict(lambda: {'nume': '', 'cantitate': 0, 'comenzi': []})
@@ -518,9 +523,14 @@ def export_excel(filename):
 
         df_raport = pd.DataFrame(date_raport)
 
-        # Sumar pe parfum
-        df_sumar = df_raport.groupby('Parfum').agg({'Bucăți': 'sum'}).reset_index()
-        df_sumar.columns = ['Parfum', 'Total Bucăți']
+        if df_raport.empty:
+            # DataFrame gol - structură default pentru a evita erori
+            df_raport = pd.DataFrame(columns=['SKU', 'Parfum', 'Cantitate (ml)', 'Bucăți'])
+            df_sumar = pd.DataFrame(columns=['Parfum', 'Total Bucăți'])
+        else:
+            # Sumar pe parfum
+            df_sumar = df_raport.groupby('Parfum').agg({'Bucăți': 'sum'}).reset_index()
+            df_sumar.columns = ['Parfum', 'Total Bucăți']
 
         # Creare Excel în memorie
         output = io.BytesIO()
