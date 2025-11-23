@@ -42,6 +42,46 @@ def extrageInfoProdus(text_produs):
     return (nume_parfum, cantitate_ml, int(numar_bucati))
 
 
+def detecteazaColoane(df):
+    """
+    Detectează automat coloanele necesare din Excel
+    Returns: (coloana_status, coloana_produse, coloana_atribute)
+    """
+    coloane = df.columns.tolist()
+
+    # Detectare coloană Status
+    coloana_status = None
+    for col in coloane:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['status', 'stare', 'statu']):
+            coloana_status = col
+            break
+
+    # Detectare coloană Produse
+    coloana_produse = None
+    for col in coloane:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['produse', 'produs', 'articol', 'item']):
+            coloana_produse = col
+            break
+
+    # Detectare coloană Atribute
+    coloana_atribute = None
+    for col in coloane:
+        col_lower = str(col).lower()
+        if any(keyword in col_lower for keyword in ['atribute', 'atribut']):
+            coloana_atribute = col
+            break
+
+    if not coloana_status:
+        raise ValueError('Nu s-a găsit coloana cu statusul comenzii (trebuie să conțină "Status" în nume)')
+
+    if not coloana_produse:
+        raise ValueError('Nu s-a găsit coloana cu produsele comandate (trebuie să conțină "Produse" în nume)')
+
+    return coloana_status, coloana_produse, coloana_atribute
+
+
 def proceseazaComenzi(cale_fisier):
     """
     Procesează fișierul cu comenzi și returnează raportul de producție
@@ -49,8 +89,16 @@ def proceseazaComenzi(cale_fisier):
     # Citire fișier Excel
     df = pd.read_excel(cale_fisier)
 
-    # Filtrare comenzi finalizate (exclude anulate)
-    df_finalizate = df[df['Status Comanda'] == 'Comanda Finalizata (Facturata)']
+    # Detectare coloane
+    try:
+        coloana_status, coloana_produse, coloana_atribute = detecteazaColoane(df)
+    except ValueError as e:
+        print(f"Eroare structură fișier: {e}")
+        return {}, 0, len(df)
+
+    # Filtrare comenzi finalizate (include și Confirmata pentru flexibilitate)
+    # Caută 'Finalizata' sau 'Confirmata' (case insensitive)
+    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
 
     # Dicționar pentru agregare: {(nume_parfum, cantitate_ml): total_bucati}
     raport = defaultdict(int)
@@ -58,12 +106,27 @@ def proceseazaComenzi(cale_fisier):
     # Procesare comenzi
     for idx, row in df_finalizate.iterrows():
         # Split produse separate prin ' | '
-        produse = str(row['Produse comandate']).split(' | ')
+        produse = str(row[coloana_produse]).split(' | ')
+        atribute_text = str(row[coloana_atribute]) if coloana_atribute else ''
 
-        for produs in produse:
+        # Extrage SKU-uri din atribute
+        sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text) if atribute_text else []
+
+        for i, produs in enumerate(produse):
             info = extrageInfoProdus(produs.strip())
             if info:
                 nume_parfum, cantitate_ml, numar_bucati = info
+
+                # Verificare SKU (dacă există)
+                # User request: exclude produsele care nu au extensie -3/-5/-10 (parfumuri întregi)
+                if i < len(sku_matches):
+                    sku = sku_matches[i]
+                    # Verifică dacă SKU se termină în -cifră (ex: -3, -5, -10)
+                    if not re.search(r'-\d+$', sku):
+                        # Dacă SKU-ul nu are extensie de decant, îl ignorăm
+                        # Chiar dacă numele conține "Decant" (posibilă eroare în denumire sau parsare)
+                        continue
+
                 raport[(nume_parfum, cantitate_ml)] += numar_bucati
 
     return raport, len(df_finalizate), len(df)
@@ -138,11 +201,17 @@ def salveazaRaportExcel(raport, cale_fisier_iesire):
     # Creare DataFrame și salvare
     df_raport = pd.DataFrame(date_raport)
 
-    # Grupare pe parfum pentru sumar
-    df_sumar = df_raport.groupby('Parfum').agg({
-        'Bucăți': 'sum'
-    }).reset_index()
-    df_sumar.columns = ['Parfum', 'Total Bucăți']
+    if df_raport.empty:
+        print(f'⚠ Nu au fost găsite decanturi de procesat.')
+        # Creăm un DataFrame gol cu coloanele corecte pentru a evita erorile
+        df_raport = pd.DataFrame(columns=['Parfum', 'Cantitate (ml)', 'Bucăți'])
+        df_sumar = pd.DataFrame(columns=['Parfum', 'Total Bucăți'])
+    else:
+        # Grupare pe parfum pentru sumar
+        df_sumar = df_raport.groupby('Parfum').agg({
+            'Bucăți': 'sum'
+        }).reset_index()
+        df_sumar.columns = ['Parfum', 'Total Bucăți']
 
     # Salvare în Excel cu mai multe sheet-uri
     with pd.ExcelWriter(cale_fisier_iesire, engine='openpyxl') as writer:

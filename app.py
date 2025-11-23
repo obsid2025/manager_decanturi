@@ -178,6 +178,11 @@ def proceseazaComenzi(fisier_path):
                 # Obține SKU pentru acest produs
                 sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
 
+                # FILTRARE SUPLIMENTARĂ: Exclude produsele care nu sunt decanturi (nu au extensie -3/-5/-10)
+                # Chiar dacă numele conține "Decant", verificăm SKU-ul pentru siguranță
+                if sku != 'N/A' and not re.search(r'-\d+$', sku):
+                    continue
+
                 # Agregare pe SKU
                 raport[sku]['nume'] = nume_parfum
                 raport[sku]['cantitate_ml'] = cantitate_ml
