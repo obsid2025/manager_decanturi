@@ -37,6 +37,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Încărcare bază de date produse (SKU mapping)
+PRODUCT_DB = {}
+try:
+    db_path = os.path.join(os.path.dirname(__file__), 'produse.xlsx')
+    if os.path.exists(db_path):
+        df_db = pd.read_excel(db_path)
+        # Creare mapare: Nume Produs -> SKU
+        # Normalizăm numele (strip) pentru matching mai sigur
+        for _, row in df_db.iterrows():
+            nume = str(row['Denumire Produs']).strip()
+            sku = str(row['Cod Produs (SKU)']).strip()
+            PRODUCT_DB[nume] = sku
+        logger.info(f"✅ Baza de date produse încărcată: {len(PRODUCT_DB)} produse")
+    else:
+        logger.warning("⚠ Fișierul produse.xlsx nu a fost găsit! Se va folosi fallback la atribute.")
+except Exception as e:
+    logger.error(f"❌ Eroare la încărcarea bazei de date produse: {e}")
+
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -208,40 +226,50 @@ def proceseazaComenzi(fisier_path):
             if info:
                 nume_parfum, cantitate_ml, numar_bucati = info
                 
-                # Căutare SKU potrivit în lista de atribute
+                # Căutare SKU
                 found_sku = 'N/A'
                 
-                # 1. Căutare exactă după cantitate (ml) și sufix SKU
-                candidates = []
-                for attr in parsed_attributes:
-                    if not attr['used']:
-                        # Verifică dacă SKU se termină cu cantitatea (ex: -5 pentru 5ml)
-                        if attr['sku'].endswith(f"-{cantitate_ml}"):
-                            candidates.append(attr)
-                        # Fallback: verifică dacă atributul menționează cantitatea explicit
-                        elif attr['qty'] == cantitate_ml:
-                             candidates.append(attr)
-
-                if len(candidates) == 1:
-                    # Match unic perfect
-                    found_sku = candidates[0]['sku']
-                    candidates[0]['used'] = True
-                elif len(candidates) > 1:
-                    # Ambiguitate - încercăm să rafinăm după Sex
-                    produs_lower = produs.lower()
-                    sex_candidates = []
-                    for cand in candidates:
-                        if cand['sex'] and cand['sex'] in produs_lower:
-                            sex_candidates.append(cand)
+                # 1. Căutare în baza de date produse (Prioritate MAXIMĂ)
+                # Curățăm numele produsului din comandă (scoatem cantitatea de la final ", 1.00")
+                produs_clean = re.sub(r', \d+\.\d+$', '', produs.strip())
+                
+                if produs_clean in PRODUCT_DB:
+                    found_sku = PRODUCT_DB[produs_clean]
+                    # logger.info(f"✅ SKU găsit în DB: {produs_clean} -> {found_sku}")
+                else:
+                    # Fallback la logica veche (atribute) doar dacă nu e în DB
+                    # logger.warning(f"⚠ Produs negăsit în DB: {produs_clean}. Încerc fallback atribute...")
                     
-                    if len(sex_candidates) == 1:
-                        found_sku = sex_candidates[0]['sku']
-                        sex_candidates[0]['used'] = True
-                    else:
-                        # Dacă tot avem ambiguitate, luăm primul (FIFO)
-                        # Riscul de swap există, dar e minimizat de filtrarea pe cantitate
+                    # 2. Căutare exactă după cantitate (ml) și sufix SKU
+                    candidates = []
+                    for attr in parsed_attributes:
+                        if not attr['used']:
+                            # Verifică dacă SKU se termină cu cantitatea (ex: -5 pentru 5ml)
+                            if attr['sku'].endswith(f"-{cantitate_ml}"):
+                                candidates.append(attr)
+                            # Fallback: verifică dacă atributul menționează cantitatea explicit
+                            elif attr['qty'] == cantitate_ml:
+                                candidates.append(attr)
+
+                    if len(candidates) == 1:
+                        # Match unic perfect
                         found_sku = candidates[0]['sku']
                         candidates[0]['used'] = True
+                    elif len(candidates) > 1:
+                        # Ambiguitate - încercăm să rafinăm după Sex
+                        produs_lower = produs.lower()
+                        sex_candidates = []
+                        for cand in candidates:
+                            if cand['sex'] and cand['sex'] in produs_lower:
+                                sex_candidates.append(cand)
+                        
+                        if len(sex_candidates) == 1:
+                            found_sku = sex_candidates[0]['sku']
+                            sex_candidates[0]['used'] = True
+                        else:
+                            # Dacă tot avem ambiguitate, luăm primul (FIFO)
+                            found_sku = candidates[0]['sku']
+                            candidates[0]['used'] = True
                 
                 sku = found_sku
 
