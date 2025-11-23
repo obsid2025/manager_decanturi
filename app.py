@@ -39,23 +39,62 @@ logger = logging.getLogger(__name__)
 
 # Încărcare bază de date produse (SKU mapping)
 PRODUCT_DB = {}
-try:
-    db_path = os.path.join(os.path.dirname(__file__), 'produse.xlsx')
-    if os.path.exists(db_path):
-        df_db = pd.read_excel(db_path)
-        # Creare mapare: Nume Produs -> SKU
-        # Normalizăm numele (strip) pentru matching mai sigur
-        for _, row in df_db.iterrows():
-            nume = str(row['Denumire Produs']).strip()
-            sku = str(row['Cod Produs (SKU)']).strip()
-            PRODUCT_DB[nume] = sku
-        logger.info(f"✅ Baza de date produse încărcată: {len(PRODUCT_DB)} produse")
-    else:
-        logger.warning("⚠ Fișierul produse.xlsx nu a fost găsit! Se va folosi fallback la atribute.")
-except Exception as e:
-    logger.error(f"❌ Eroare la încărcarea bazei de date produse: {e}")
+
+def normalize_name(text):
+    """
+    Normalizează numele produsului pentru matching:
+    - lowercase
+    - elimină 'parfum'
+    - elimină caractere non-alfanumerice
+    """
+    if not isinstance(text, str):
+        return ""
+    text = text.lower()
+    text = text.replace('parfum', '')
+    text = re.sub(r'[^a-z0-9]', '', text)
+    return text
+
+def load_product_db():
+    global PRODUCT_DB
+    try:
+        # Încercăm mai multe căi posibile pentru a găsi fișierul
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), 'produse.xlsx'),
+            os.path.join(os.getcwd(), 'produse.xlsx'),
+            'produse.xlsx'
+        ]
+        
+        db_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                db_path = path
+                break
+        
+        if db_path:
+            logger.info(f"📂 Încărcare bază de date din: {db_path}")
+            df_db = pd.read_excel(db_path)
+            # Creare mapare: Nume Produs Normalizat -> SKU
+            count = 0
+            for _, row in df_db.iterrows():
+                nume = str(row['Denumire Produs'])
+                sku = str(row['Cod Produs (SKU)']).strip()
+                if nume and sku:
+                    norm_nume = normalize_name(nume)
+                    PRODUCT_DB[norm_nume] = sku
+                    count += 1
+            logger.info(f"✅ Baza de date produse încărcată: {count} produse")
+        else:
+            logger.warning(f"⚠ Fișierul produse.xlsx nu a fost găsit! Căi verificate: {possible_paths}")
+            logger.warning(f"📂 Director curent: {os.getcwd()}")
+            logger.warning(f"📂 Conținut director: {os.listdir(os.getcwd())}")
+    except Exception as e:
+        logger.error(f"❌ Eroare la încărcarea bazei de date produse: {e}")
 
 app = Flask(__name__)
+
+# Încărcăm baza de date la pornire
+with app.app_context():
+    load_product_db()
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['EXPORT_FOLDER'] = 'exports'
@@ -232,13 +271,14 @@ def proceseazaComenzi(fisier_path):
                 # 1. Căutare în baza de date produse (Prioritate MAXIMĂ)
                 # Curățăm numele produsului din comandă (scoatem cantitatea de la final ", 1.00")
                 produs_clean = re.sub(r', \d+\.\d+$', '', produs.strip())
+                produs_norm = normalize_name(produs_clean)
                 
-                if produs_clean in PRODUCT_DB:
-                    found_sku = PRODUCT_DB[produs_clean]
+                if produs_norm in PRODUCT_DB:
+                    found_sku = PRODUCT_DB[produs_norm]
                     # logger.info(f"✅ SKU găsit în DB: {produs_clean} -> {found_sku}")
                 else:
                     # Fallback la logica veche (atribute) doar dacă nu e în DB
-                    # logger.warning(f"⚠ Produs negăsit în DB: {produs_clean}. Încerc fallback atribute...")
+                    # logger.warning(f"⚠ Produs negăsit în DB: {produs_clean} (norm: {produs_norm}). Încerc fallback atribute...")
                     
                     # 2. Căutare exactă după cantitate (ml) și sufix SKU
                     candidates = []
