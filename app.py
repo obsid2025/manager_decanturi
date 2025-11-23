@@ -169,15 +169,81 @@ def proceseazaComenzi(fisier_path):
         produse = produse_text.split(' | ')
 
         # Extrage SKU-uri din atribute
-        sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text) if atribute_text else []
+        # NOTA: Ordinea SKU-urilor în atribute NU corespunde cu ordinea produselor!
+        # Atributele sunt sortate alfabetic după SKU.
+        # Trebuie să facem matching inteligent.
+        
+        # Parsare structurată a atributelor
+        parsed_attributes = []
+        if atribute_text:
+            # Split după "), " pentru a separa blocurile de atribute
+            # Regex-ul caută "), " dar trebuie să fim atenți la ultimul element
+            raw_attrs = re.split(r'\),\s*(?=\d)', atribute_text + ", ") # Hack pentru split
+            
+            # Sau mai simplu, folosim regex-ul original pentru a găsi startul fiecărui bloc
+            matches = list(re.finditer(r'([^,\s]+):\s*\((.*?)\)(?:,|$)', atribute_text))
+            
+            for m in matches:
+                sku_code = m.group(1)
+                content = m.group(2)
+                
+                # Extrage cantitatea din textul atributului (dacă există)
+                qty_match = re.search(r'Cantitate:\s*(\d+)\s*ml', content, re.IGNORECASE)
+                qty = int(qty_match.group(1)) if qty_match else 0
+                
+                # Extrage sexul
+                sex_match = re.search(r'Sex:\s*([^,]+)', content, re.IGNORECASE)
+                sex = sex_match.group(1).strip().lower() if sex_match else ""
+                
+                parsed_attributes.append({
+                    'sku': sku_code,
+                    'content': content,
+                    'qty': qty,
+                    'sex': sex,
+                    'used': False
+                })
 
         for i, produs in enumerate(produse):
             info = extrageInfoProdus(produs.strip())
             if info:
                 nume_parfum, cantitate_ml, numar_bucati = info
+                
+                # Căutare SKU potrivit în lista de atribute
+                found_sku = 'N/A'
+                
+                # 1. Căutare exactă după cantitate (ml) și sufix SKU
+                candidates = []
+                for attr in parsed_attributes:
+                    if not attr['used']:
+                        # Verifică dacă SKU se termină cu cantitatea (ex: -5 pentru 5ml)
+                        if attr['sku'].endswith(f"-{cantitate_ml}"):
+                            candidates.append(attr)
+                        # Fallback: verifică dacă atributul menționează cantitatea explicit
+                        elif attr['qty'] == cantitate_ml:
+                             candidates.append(attr)
 
-                # Obține SKU pentru acest produs
-                sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+                if len(candidates) == 1:
+                    # Match unic perfect
+                    found_sku = candidates[0]['sku']
+                    candidates[0]['used'] = True
+                elif len(candidates) > 1:
+                    # Ambiguitate - încercăm să rafinăm după Sex
+                    produs_lower = produs.lower()
+                    sex_candidates = []
+                    for cand in candidates:
+                        if cand['sex'] and cand['sex'] in produs_lower:
+                            sex_candidates.append(cand)
+                    
+                    if len(sex_candidates) == 1:
+                        found_sku = sex_candidates[0]['sku']
+                        sex_candidates[0]['used'] = True
+                    else:
+                        # Dacă tot avem ambiguitate, luăm primul (FIFO)
+                        # Riscul de swap există, dar e minimizat de filtrarea pe cantitate
+                        found_sku = candidates[0]['sku']
+                        candidates[0]['used'] = True
+                
+                sku = found_sku
 
                 # FILTRARE SUPLIMENTARĂ: Exclude produsele care nu sunt decanturi (nu au extensie -3/-5/-10)
                 # Chiar dacă numele conține "Decant", verificăm SKU-ul pentru siguranță
@@ -187,7 +253,7 @@ def proceseazaComenzi(fisier_path):
                     continue
                 
                 if sku == 'N/A':
-                     logger.warning(f"Produs cu SKU N/A acceptat: {nume_parfum}")
+                     logger.warning(f"Produs cu SKU N/A acceptat (nu s-a găsit match în atribute): {nume_parfum}")
 
                 # Agregare pe SKU
                 raport[sku]['nume'] = nume_parfum
