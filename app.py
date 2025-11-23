@@ -15,6 +15,11 @@ import re
 from collections import defaultdict
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Încarcă variabilele din .env dacă există
+load_dotenv()
+
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
@@ -326,13 +331,20 @@ def login():
         valid_user = os.environ.get('APP_USER', 'admin')
         valid_pass = os.environ.get('APP_PASS', 'obsid123')
         
-        if username == valid_user and password == valid_pass:
-            user = User(1)
-            login_user(user)
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
+        # Debug temporar (doar în consolă)
+        print(f"DEBUG LOGIN: User input: '{username}', Env user: '{valid_user}'")
+        print(f"DEBUG LOGIN: Pass input len: {len(password) if password else 0}, Env pass len: {len(valid_pass) if valid_pass else 0}")
+        
+        if username and password and valid_user and valid_pass:
+            if username.strip() == valid_user.strip() and password.strip() == valid_pass.strip():
+                user = User(1)
+                login_user(user)
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('index'))
+            else:
+                return render_template('login.html', error='Invalid credentials')
         else:
-            return render_template('login.html', error='Invalid credentials')
+             return render_template('login.html', error='Missing credentials')
             
     return render_template('login.html')
 
