@@ -10,3 +10,4 @@ eventlet==0.35.2
 cloudinary
 flask-login
 python-dotenv
+requests
