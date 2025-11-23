@@ -63,7 +63,11 @@ def main():
 
     print(f"Loaded {len(PRODUCT_DB)} products in DB.")
 
-    orders_path = r'c:\DEV\Python\manager_decanturi\50.xlsx'
+    orders_path = '52.xlsx'
+    if not os.path.exists(orders_path):
+        print(f"File {orders_path} not found!")
+        return
+
     print(f"Processing {orders_path}...")
     df = pd.read_excel(orders_path)
 

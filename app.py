@@ -224,46 +224,14 @@ def proceseazaComenzi(fisier_path):
     # Raport agregat pe SKU (în loc de doar pe nume+cantitate)
     raport = defaultdict(lambda: {'nume': '', 'cantitate_ml': 0, 'bucati': 0})
 
+    # Log debug pentru DB
+    logger.info(f"🔍 Procesare comenzi... DB size: {len(PRODUCT_DB)}")
+
     for idx, row in df_finalizate.iterrows():
         produse_text = str(row[coloana_produse])
-        atribute_text = str(row[coloana_atribute]) if coloana_atribute else ''
+        # atribute_text = str(row[coloana_atribute]) if coloana_atribute else '' # Nu mai folosim atribute
 
         produse = produse_text.split(' | ')
-
-        # Extrage SKU-uri din atribute
-        # NOTA: Ordinea SKU-urilor în atribute NU corespunde cu ordinea produselor!
-        # Atributele sunt sortate alfabetic după SKU.
-        # Trebuie să facem matching inteligent.
-        
-        # Parsare structurată a atributelor
-        parsed_attributes = []
-        if atribute_text:
-            # Split după "), " pentru a separa blocurile de atribute
-            # Regex-ul caută "), " dar trebuie să fim atenți la ultimul element
-            raw_attrs = re.split(r'\),\s*(?=\d)', atribute_text + ", ") # Hack pentru split
-            
-            # Sau mai simplu, folosim regex-ul original pentru a găsi startul fiecărui bloc
-            matches = list(re.finditer(r'([^,\s]+):\s*\((.*?)\)(?:,|$)', atribute_text))
-            
-            for m in matches:
-                sku_code = m.group(1)
-                content = m.group(2)
-                
-                # Extrage cantitatea din textul atributului (dacă există)
-                qty_match = re.search(r'Cantitate:\s*(\d+)\s*ml', content, re.IGNORECASE)
-                qty = int(qty_match.group(1)) if qty_match else 0
-                
-                # Extrage sexul
-                sex_match = re.search(r'Sex:\s*([^,]+)', content, re.IGNORECASE)
-                sex = sex_match.group(1).strip().lower() if sex_match else ""
-                
-                parsed_attributes.append({
-                    'sku': sku_code,
-                    'content': content,
-                    'qty': qty,
-                    'sex': sex,
-                    'used': False
-                })
 
         for i, produs in enumerate(produse):
             info = extrageInfoProdus(produs.strip())
@@ -280,24 +248,19 @@ def proceseazaComenzi(fisier_path):
                 
                 if produs_norm in PRODUCT_DB:
                     found_sku = PRODUCT_DB[produs_norm]
-                    # logger.info(f"✅ SKU găsit în DB: {produs_clean} -> {found_sku}")
                 else:
-                    # Logăm faptul că nu s-a găsit în DB, dar NU facem fallback la atribute
-                    # deoarece utilizatorul a raportat că atributele sunt nesigure.
                     logger.warning(f"⚠ Produs negăsit în DB: {produs_clean} (norm: {produs_norm}). SKU setat la N/A.")
                     found_sku = 'N/A'
                 
                 sku = found_sku
 
                 # FILTRARE SUPLIMENTARĂ: Exclude produsele care nu sunt decanturi (nu au extensie -3/-5/-10)
-                # Chiar dacă numele conține "Decant", verificăm SKU-ul pentru siguranță
-                # Dacă SKU este N/A, permitem produsul dacă numele conține "Decant" (fallback)
                 if sku != 'N/A' and not re.search(r'-\d+$', sku):
                     logger.info(f"Produs exclus (SKU non-decant): {nume_parfum} | SKU: {sku}")
                     continue
                 
                 if sku == 'N/A':
-                     logger.warning(f"Produs cu SKU N/A acceptat (nu s-a găsit match în atribute): {nume_parfum}")
+                     logger.warning(f"Produs cu SKU N/A acceptat: {nume_parfum}")
 
                 # Agregare pe SKU
                 raport[sku]['nume'] = nume_parfum
