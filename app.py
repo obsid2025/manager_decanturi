@@ -192,6 +192,27 @@ def extrageInfoProdus(text_produs):
     return (nume_parfum, cantitate_ml, int(numar_bucati))
 
 
+def extrageInfoProdusIntreg(text_produs):
+    """
+    Extrage informații pentru produse întregi (non-decanturi)
+    Returns: (nume_produs, numar_bucati) sau None
+    """
+    if 'Decant' in text_produs:
+        return None
+        
+    # Extrage numărul de bucăți de la final (ex: ", 1.00")
+    match_bucati = re.search(r'(\d+\.\d+)$', text_produs.strip())
+    if match_bucati:
+        numar_bucati = float(match_bucati.group(1))
+        # Scoate cantitatea din nume
+        nume_produs = text_produs.rsplit(',', 1)[0].strip()
+    else:
+        numar_bucati = 1.0
+        nume_produs = text_produs.strip()
+        
+    return (nume_produs, int(numar_bucati))
+
+
 def detecteazaColoane(df):
     """
     Detectează automat coloanele necesare din Excel
@@ -253,6 +274,9 @@ def proceseazaComenzi(fisier_path):
 
     # Raport agregat pe SKU (în loc de doar pe nume+cantitate)
     raport = defaultdict(lambda: {'nume': '', 'cantitate_ml': 0, 'bucati': 0})
+    
+    # Raport separat pentru produse întregi
+    raport_intregi = defaultdict(lambda: {'nume': '', 'bucati': 0})
 
     # Log debug pentru DB
     logger.info(f"🔍 Procesare comenzi... DB size: {len(PRODUCT_DB)}")
@@ -264,6 +288,7 @@ def proceseazaComenzi(fisier_path):
         produse = produse_text.split(' | ')
 
         for i, produs in enumerate(produse):
+            # 1. Încearcă procesare ca DECANT
             info = extrageInfoProdus(produs.strip())
             if info:
                 nume_parfum, cantitate_ml, numar_bucati = info
@@ -296,8 +321,26 @@ def proceseazaComenzi(fisier_path):
                 raport[sku]['nume'] = nume_parfum
                 raport[sku]['cantitate_ml'] = cantitate_ml
                 raport[sku]['bucati'] += numar_bucati
+            
+            # 2. Dacă nu e decant, verifică dacă e PRODUS ÎNTREG
+            else:
+                info_intreg = extrageInfoProdusIntreg(produs.strip())
+                if info_intreg:
+                    nume_produs, numar_bucati = info_intreg
+                    
+                    # Căutare SKU pentru produs întreg
+                    produs_clean = re.sub(r', \d+\.\d+$', '', produs.strip())
+                    produs_norm = normalize_name(produs_clean)
+                    
+                    sku = PRODUCT_DB.get(produs_norm, 'N/A')
+                    
+                    # Agregare
+                    key = sku if sku != 'N/A' else nume_produs
+                    raport_intregi[key]['nume'] = nume_produs
+                    raport_intregi[key]['bucati'] += numar_bucati
+                    raport_intregi[key]['sku'] = sku
 
-    return raport, len(df_finalizate), len(df)
+    return raport, raport_intregi, len(df_finalizate), len(df)
 
 
 def genereazaTabelRaport(raport):
@@ -510,7 +553,7 @@ def upload_file():
         file.save(filepath)
 
         # Procesare comenzi (returnează raport cu SKU-uri)
-        raport, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
+        raport, raport_intregi, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
 
         # Generare tabel pentru Tab 1 (Raport Decanturi)
         randuri = genereazaTabelRaport(raport)
@@ -549,7 +592,12 @@ def upload_file():
             # Date pentru Tab 2 (Bonuri de Producție)
             'bonuri': bonuri,
             'total_bonuri': len(bonuri),
-            'total_bucati': total_decanturi
+            'total_bucati': total_decanturi,
+            # Date pentru Produse Întregi (pentru export)
+            'produse_intregi': [
+                {'sku': info['sku'], 'nume': info['nume'], 'bucati': info['bucati']}
+                for info in sorted(raport_intregi.values(), key=lambda x: x['nume'])
+            ]
         })
 
     except Exception as e:
@@ -613,7 +661,7 @@ def export_excel(filename):
             return jsonify({'error': 'Fișierul nu există'}), 404
 
         # Procesare comenzi (returnează raport cu SKU-uri)
-        raport, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
+        raport, raport_intregi, comenzi_finalizate, total_comenzi = proceseazaComenzi(filepath)
 
         # Pregătire date pentru Excel (include SKU)
         date_raport = []
@@ -627,6 +675,18 @@ def export_excel(filename):
 
         df_raport = pd.DataFrame(date_raport)
 
+        # Pregătire date pentru Produse Întregi
+        date_intregi = []
+        for key, info in sorted(raport_intregi.items(), key=lambda x: x[1]['nume']):
+            date_intregi.append({
+                'SKU': info['sku'],
+                'Parfum': info['nume'],
+                'Cantitate (ml)': 'FULL SIZE',
+                'Bucăți': info['bucati']
+            })
+        
+        df_intregi = pd.DataFrame(date_intregi)
+
         if df_raport.empty:
             # DataFrame gol - structură default pentru a evita erori
             df_raport = pd.DataFrame(columns=['SKU', 'Parfum', 'Cantitate (ml)', 'Bucăți'])
@@ -639,7 +699,35 @@ def export_excel(filename):
         # Creare Excel în memorie
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 1. Scrie Raportul Detaliat (Decanturi)
             df_raport.to_excel(writer, sheet_name='Raport Detaliat', index=False)
+            
+            # 2. Dacă avem produse întregi, le adăugăm după 5 rânduri goale
+            if not df_intregi.empty:
+                worksheet = writer.sheets['Raport Detaliat']
+                start_row = len(df_raport) + 7 # +1 header + 1 index-0 + 5 empty rows
+                
+                # Scrie Header pentru secțiunea nouă
+                worksheet.cell(row=start_row-1, column=1, value="PRODUSE ÎNTREGI (FULL SIZE)")
+                
+                # Scrie datele (folosind to_excel cu startrow)
+                # ATENȚIE: Pandas to_excel suprascrie sheet-ul dacă nu folosim mode='a' și if_sheet_exists='overlay'
+                # Dar openpyxl engine permite scrierea directă.
+                # Totuși, cea mai simplă metodă cu Pandas este să scriem totul deodată sau să folosim openpyxl direct.
+                
+                # Metoda sigură: Scriem manual cu openpyxl peste sheet-ul existent
+                from openpyxl.utils.dataframe import dataframe_to_rows
+                
+                # Header tabel
+                header_row = ['SKU', 'Parfum', 'Cantitate (ml)', 'Bucăți']
+                for col_idx, value in enumerate(header_row, 1):
+                    worksheet.cell(row=start_row, column=col_idx, value=value)
+                
+                # Date tabel
+                for r_idx, row in enumerate(dataframe_to_rows(df_intregi, index=False, header=False), 1):
+                    for c_idx, value in enumerate(row, 1):
+                        worksheet.cell(row=start_row + r_idx, column=c_idx, value=value)
+
             df_sumar.to_excel(writer, sheet_name='Sumar pe Parfum', index=False)
 
         output.seek(0)
