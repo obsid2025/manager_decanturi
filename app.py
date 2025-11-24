@@ -1103,6 +1103,7 @@ def run_automation_with_live_logs(bonuri, client_sid):
 
         # Procesare BON cu BON cu progress live (BATCH OPTIMIZATION)
         batch_size = 5 # Procesăm câte 5 bonuri în paralel (crescut de la 3)
+        retryable_bonuri = [] # Lista pentru bonuri care pot fi reîncercate (timeout, erori rețea)
         
         for i in range(0, len(bonuri), batch_size):
             if stop_requested:
@@ -1162,6 +1163,11 @@ def run_automation_with_live_logs(bonuri, client_sid):
                         stats['failed'] += 1
                         stats['errors'].append({'sku': sku, 'error': msg})
                         
+                        # Verificăm dacă eroarea este retryable (NU este stoc insuficient)
+                        if "stoc insuficient" not in msg.lower():
+                            retryable_bonuri.append(original_bon)
+                            logger.info(f"🔄 Bon adăugat la coada de retry: {sku} (Eroare: {msg})")
+                        
                         socketio.emit('bon_complete', {
                             'index': original_idx,
                             'total': len(bonuri),
@@ -1178,6 +1184,10 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 for idx, bon in zip(batch_indices, batch):
                     stats['failed'] += 1
                     stats['errors'].append({'sku': bon.get('sku'), 'error': str(e)})
+                    
+                    # Adăugăm tot batch-ul la retry
+                    retryable_bonuri.append(bon)
+                    
                     socketio.emit('bon_complete', {
                         'index': idx,
                         'total': len(bonuri),
@@ -1185,6 +1195,66 @@ def run_automation_with_live_logs(bonuri, client_sid):
                         'sku': bon.get('sku'),
                         'message': f'❌ Eroare batch: {str(e)[:100]}'
                     }, room=client_sid)
+
+        # ============================================================
+        # ETAPA 1.5: RETRY PENTRU BONURI EȘUATE (Timeout, Erori rețea)
+        # ============================================================
+        if retryable_bonuri and not stop_requested:
+            socketio.emit('log', {
+                'type': 'warning',
+                'message': f'🔄 START RETRY pentru {len(retryable_bonuri)} bonuri eșuate (fără probleme de stoc)...'
+            }, room=client_sid)
+            
+            # Procesăm retry-urile secvențial sau în batch-uri mici (2) pentru siguranță
+            retry_batch_size = 2
+            
+            for i in range(0, len(retryable_bonuri), retry_batch_size):
+                if stop_requested:
+                    break
+                    
+                batch = retryable_bonuri[i:i + retry_batch_size]
+                
+                socketio.emit('log', {
+                    'type': 'info',
+                    'message': f'🔄 Retry batch {i//retry_batch_size + 1}: {len(batch)} bonuri...'
+                }, room=client_sid)
+                
+                try:
+                    results = automation.create_production_vouchers_batch(
+                        batch,
+                        None,
+                        oblio_email,
+                        oblio_password
+                    )
+                    
+                    for res in results:
+                        sku = res['sku']
+                        success = res['success']
+                        msg = res['message']
+                        
+                        original_bon = next((b for b in batch if b.get('sku') == sku), {})
+                        
+                        if success:
+                            # Actualizăm stats: scădem din failed, adăugăm la success
+                            stats['failed'] -= 1
+                            stats['success'] += 1
+                            stats.setdefault('successful_products', []).append(original_bon)
+                            
+                            # Scoatem eroarea veche din listă
+                            stats['errors'] = [err for err in stats['errors'] if err['sku'] != sku]
+                            
+                            socketio.emit('log', {
+                                'type': 'success',
+                                'message': f'✅ RETRY REUȘIT pentru {sku}!'
+                            }, room=client_sid)
+                        else:
+                            socketio.emit('log', {
+                                'type': 'error',
+                                'message': f'❌ RETRY EȘUAT pentru {sku}: {msg}'
+                            }, room=client_sid)
+                            
+                except Exception as e:
+                    logger.error(f"❌ Eroare la retry batch: {e}")
 
         # Check stop request outside loop
         if stop_requested:
