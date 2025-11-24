@@ -1101,6 +1101,47 @@ def run_automation_with_live_logs(bonuri, client_sid):
                 'message': f'🔐 Folosesc credențiale din ENV: {oblio_email}'
             }, room=client_sid)
 
+        # --- SMART RESUME: Verifică ce s-a lucrat deja azi ---
+        try:
+            # Asigurăm login-ul înainte de a verifica raportul
+            if automation.login_if_needed(oblio_email, oblio_password):
+                processed_skus = automation.get_todays_processed_skus()
+                
+                if processed_skus:
+                    initial_count = len(bonuri)
+                    # Filtrăm bonurile care au deja SKU-ul în lista procesată
+                    bonuri = [b for b in bonuri if b.get('sku') not in processed_skus]
+                    skipped_count = initial_count - len(bonuri)
+                    
+                    if skipped_count > 0:
+                        socketio.emit('log', {
+                            'type': 'warning',
+                            'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
+                        }, room=client_sid)
+                        
+                        # Ajustăm totalul pentru progress bar
+                        stats['total'] = len(bonuri)
+                        stats['skipped'] = skipped_count
+                        
+                        if len(bonuri) == 0:
+                            socketio.emit('log', {
+                                'type': 'success',
+                                'message': '✅ Toate bonurile din listă au fost deja procesate astăzi!'
+                            }, room=client_sid)
+            else:
+                socketio.emit('log', {
+                    'type': 'warning',
+                    'message': '⚠️ Nu s-a putut verifica istoricul (login failed). Se continuă cu lista completă.'
+                }, room=client_sid)
+                
+        except Exception as e:
+            logger.error(f"Eroare Smart Resume: {e}")
+            socketio.emit('log', {
+                'type': 'warning',
+                'message': f'⚠️ Eroare la verificarea istoricului: {e}'
+            }, room=client_sid)
+        # ----------------------------------------------------
+
         # Procesare BON cu BON cu progress live (BATCH OPTIMIZATION)
         batch_size = 5 # Procesăm câte 5 bonuri în paralel (crescut de la 3)
         retryable_bonuri = [] # Lista pentru bonuri care pot fi reîncercate (timeout, erori rețea)
