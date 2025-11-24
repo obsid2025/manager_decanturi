@@ -1273,14 +1273,27 @@ def run_automation_with_live_logs(bonuri, client_sid):
         # ============================================================
         successful_products = stats.get('successful_products', [])
         
-        if successful_products and not stop_requested:
+        # FILTRARE: Păstrăm DOAR decanturile pentru transfer
+        # Parfumurile întregi nu se transferă din consumabile
+        products_to_transfer = []
+        for prod in successful_products:
+            if 'Decant' in prod.get('nume', ''):
+                products_to_transfer.append(prod)
+            else:
+                logger.info(f"Skip transfer produs non-decant: {prod.get('nume')}")
+                socketio.emit('log', {
+                    'type': 'info',
+                    'message': f'ℹ️ Skip transfer pentru produs întreg: {prod.get("nume")}'
+                }, room=client_sid)
+
+        if products_to_transfer and not stop_requested:
             socketio.emit('log', {
                 'type': 'info',
-                'message': f'🚚 START TRANSFER GESTIUNE pentru {len(successful_products)} produse...'
+                'message': f'🚚 START TRANSFER GESTIUNE pentru {len(products_to_transfer)} produse (din total {len(successful_products)})...'
             }, room=client_sid)
             eventlet.sleep(1)
 
-            transfer_success = automation.create_transfer_note(successful_products)
+            transfer_success = automation.create_transfer_note(products_to_transfer)
             
             if transfer_success:
                 socketio.emit('log', {
@@ -1293,10 +1306,11 @@ def run_automation_with_live_logs(bonuri, client_sid):
                     'message': '❌ EROARE LA EMITEREA NOTEI DE TRANSFER!'
                 }, room=client_sid)
         else:
-            socketio.emit('log', {
-                'type': 'warning',
-                'message': '⚠️ Nu există produse reușite pentru transfer.'
-            }, room=client_sid)
+            if not products_to_transfer:
+                socketio.emit('log', {
+                    'type': 'warning',
+                    'message': '⚠️ Nu există decanturi de transferat (doar produse întregi sau lista e goală).'
+                }, room=client_sid)
 
         # Închide browser
         automation.close()
