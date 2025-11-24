@@ -2285,59 +2285,87 @@ class OblioAutomation:
             except:
                 pass
 
-    def get_todays_processed_skus(self):
+    def get_todays_processed_texts(self):
         """
-        Returnează un set cu SKU-urile produselor procesate (bonuri create) astăzi.
-        Util pentru a evita duplicarea la restartarea scriptului.
+        Returnează o listă cu textul complet al rândurilor procesate astăzi.
+        Navighează prin pagini până găsește o dată diferită de azi.
         """
-        processed_skus = set()
+        processed_texts = []
         try:
-            self._log("🔍 Verificare bonuri existente de astăzi...", 'info')
+            self._log("🔍 Verificare istoric producție (pentru a evita duplicate)...", 'info')
             self.driver.get("https://www.oblio.eu/report/production")
             time.sleep(2)
             
             from datetime import datetime
             today = datetime.now().strftime("%d.%m.%Y")
             
-            # Așteaptă încărcarea tabelului
-            try:
-                WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#content-table tbody tr.table_row"))
-                )
-            except:
-                self._log("ℹ️ Tabelul de raport pare gol sau nu s-a încărcat.", 'info')
-                return set()
-
-            rows = self.driver.find_elements(By.CSS_SELECTOR, "#content-table tbody tr.table_row")
-            self._log(f"📊 Analiză {len(rows)} bonuri recente din raport...", 'info')
+            page = 1
+            max_pages = 10 # Limită de siguranță pentru a nu bloca scriptul
             
-            for row in rows:
+            while page <= max_pages:
+                # Așteaptă încărcarea tabelului
                 try:
-                    # Data
-                    date_elem = row.find_element(By.CSS_SELECTOR, ".text-muted")
-                    date_text = date_elem.text.strip()
+                    WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "#content-table tbody tr.table_row"))
+                    )
+                except:
+                    self._log("ℹ️ Tabelul de raport pare gol sau nu s-a încărcat.", 'info')
+                    break
+
+                rows = self.driver.find_elements(By.CSS_SELECTOR, "#content-table tbody tr.table_row")
+                if not rows:
+                    break
+                
+                found_today = False
+                stop_search = False
+                
+                self._log(f"📄 Pagina {page}: Analizez {len(rows)} rânduri...", 'info')
+
+                for row in rows:
+                    try:
+                        text = row.text
+                        # Verificăm data
+                        if today in text:
+                            processed_texts.append(text)
+                            found_today = True
+                        else:
+                            # Dacă găsim o dată care NU e azi, verificăm dacă e mai veche
+                            # Regex pentru dată DD.MM.YYYY
+                            match_date = re.search(r'(\d{2})\.(\d{2})\.(\d{4})', text)
+                            if match_date:
+                                date_str = match_date.group(0)
+                                if date_str != today:
+                                    # Presupunem sortare descrescătoare, deci ne putem opri
+                                    stop_search = True
+                                    # break # Nu dăm break imediat, poate sunt amestecate? De obicei sunt sortate.
+                    except:
+                        continue
+                
+                if stop_search:
+                    self._log("⏹️ Am ajuns la bonuri din zilele anterioare. Mă opresc.", 'info')
+                    break
                     
-                    if today in date_text:
-                        # Extrage textul complet pentru a găsi SKU-ul
-                        row_text = row.text
+                # Navigare pagina următoare
+                try:
+                    # Căutăm butonul Next activ
+                    next_li = self.driver.find_element(By.CSS_SELECTOR, "ul.pagination li.next")
+                    if "disabled" in next_li.get_attribute("class"):
+                        break # Ultima pagină
                         
-                        # Căutăm SKU-uri în text (secvențe de cifre, opțional cu sufix -3, -5, -10)
-                        # Ex: 6291106063717-3
-                        import re
-                        matches = re.findall(r'\b\d+(?:-\d+)?\b', row_text)
-                        for match in matches:
-                            if len(match) >= 6: # Filtru minim pentru a evita numere mici (cantități, prețuri)
-                                processed_skus.add(match)
-                                
+                    next_link = next_li.find_element(By.TAG_NAME, "a")
+                    self.driver.execute_script("arguments[0].click();", next_link)
+                    time.sleep(2)
+                    page += 1
                 except Exception as e:
-                    continue
-                    
-            self._log(f"✅ Găsite {len(processed_skus)} SKU-uri procesate astăzi: {list(processed_skus)[:5]}...", 'info')
-            return processed_skus
+                    # self._log(f"ℹ️ Nu mai există pagini următoare ({e})", 'info')
+                    break
+            
+            self._log(f"✅ Găsite {len(processed_texts)} bonuri procesate astăzi.", 'info')
+            return processed_texts
             
         except Exception as e:
-            self._log(f"⚠️ Eroare la preluarea bonurilor existente: {e}", 'warning')
-            return set()
+            self._log(f"⚠️ Eroare la citirea istoricului: {e}", 'warning')
+            return []
 
     def login_if_needed(self, email=None, password=None):
         """Asigură autentificarea în Oblio"""

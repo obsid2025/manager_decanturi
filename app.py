@@ -1105,12 +1105,56 @@ def run_automation_with_live_logs(bonuri, client_sid):
         try:
             # Asigurăm login-ul înainte de a verifica raportul
             if automation.login_if_needed(oblio_email, oblio_password):
-                processed_skus = automation.get_todays_processed_skus()
+                # Obținem textele rândurilor de azi (mult mai robust decât doar SKU)
+                processed_texts = automation.get_todays_processed_texts()
                 
-                if processed_skus:
+                if processed_texts:
                     initial_count = len(bonuri)
-                    # Filtrăm bonurile care au deja SKU-ul în lista procesată
-                    bonuri = [b for b in bonuri if b.get('sku') not in processed_skus]
+                    bonuri_filtrate = []
+                    
+                    for bon in bonuri:
+                        sku = bon.get('sku', '')
+                        nume = bon.get('nume', '')
+                        
+                        # Normalizare nume pentru matching (elimină "Decant X ml" dacă e cazul, sau păstrează esențialul)
+                        # Dar cel mai sigur e să căutăm SKU-ul sau Numele complet
+                        
+                        is_processed = False
+                        for text in processed_texts:
+                            # 1. Verificare SKU (Exact match în text)
+                            if sku and len(sku) > 3 and sku in text:
+                                is_processed = True
+                                break
+                            
+                            # 2. Verificare Nume (Partial match)
+                            # Dacă numele din bon e "Decant 5ml Parfum X", verificăm dacă "Parfum X" apare în text
+                            # Sau verificăm dacă întregul string apare
+                            if nume and len(nume) > 5:
+                                if nume in text:
+                                    is_processed = True
+                                    break
+                                    
+                                # Fallback: Verificăm dacă "Parfum X" (fără Decant Y ml) apare
+                                # Extragem numele parfumului din "Decant 5ml Parfum X"
+                                match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
+                                if match_parfum:
+                                    nume_parfum_doar = match_parfum.group(2).strip()
+                                    if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
+                                        # Verificăm și cantitatea ca să nu confundăm 5ml cu 10ml
+                                        match_ml = re.search(r'Decant (\d+)', nume)
+                                        if match_ml:
+                                            ml = match_ml.group(1)
+                                            # Căutăm și "5" sau "5ml" sau "5 ml" în text
+                                            if ml in text:
+                                                is_processed = True
+                                                break
+
+                        if not is_processed:
+                            bonuri_filtrate.append(bon)
+                        else:
+                            logger.info(f"⏭️ Skip bon deja procesat: {nume} (SKU: {sku})")
+                            
+                    bonuri = bonuri_filtrate
                     skipped_count = initial_count - len(bonuri)
                     
                     if skipped_count > 0:
