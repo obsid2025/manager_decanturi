@@ -1197,13 +1197,13 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
                         'type': 'success',
                         'message': '✅ Toate bonurile din listă au fost deja procesate astăzi!'
                     }, room=client_sid)
-                
-        except Exception as e:
-            logger.error(f"Eroare Smart Resume: {e}")
-            socketio.emit('log', {
-                'type': 'warning',
-                'message': f'⚠️ Eroare la verificarea istoricului: {e}'
-            }, room=client_sid)
+
+            except Exception as e:
+                logger.error(f"Eroare Smart Resume: {e}")
+                socketio.emit('log', {
+                    'type': 'warning',
+                    'message': f'⚠️ Eroare la verificarea istoricului: {e}'
+                }, room=client_sid)
         # ----------------------------------------------------
 
         # Procesare BON cu BON cu progress live (BATCH OPTIMIZATION)
