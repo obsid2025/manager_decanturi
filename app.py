@@ -449,6 +449,8 @@ def proceseazaBonuriProductie(fisier_path):
             match_parfum = re.search(r'Decant (\d+) ml parfum (.+?),', produs)
             if match_parfum:
                 ml = match_parfum.group(1)
+                nume_parfum = match_parfum.group(2)
+                nume_complet = f"Decant {ml}ml {nume_parfum}"
             else:
                 nume_complet = produs[:60]
 
