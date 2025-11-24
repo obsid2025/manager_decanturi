@@ -16,6 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import database
 
 # Încarcă variabilele din .env dacă există
 load_dotenv()
@@ -125,6 +126,7 @@ app = Flask(__name__)
 # Încărcăm baza de date la pornire
 with app.app_context():
     load_product_db()
+    database.init_db()
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['EXPORT_FOLDER'] = 'exports'
@@ -447,8 +449,6 @@ def proceseazaBonuriProductie(fisier_path):
             match_parfum = re.search(r'Decant (\d+) ml parfum (.+?),', produs)
             if match_parfum:
                 ml = match_parfum.group(1)
-                nume_parfum = match_parfum.group(2)
-                nume_complet = f"Decant {ml}ml {nume_parfum}"
             else:
                 nume_complet = produs[:60]
 
@@ -1103,80 +1103,81 @@ def run_automation_with_live_logs(bonuri, client_sid):
 
         # --- SMART RESUME: Verifică ce s-a lucrat deja azi ---
         try:
-            # Asigurăm login-ul înainte de a verifica raportul
-            if automation.login_if_needed(oblio_email, oblio_password):
-                # Obținem textele rândurilor de azi (mult mai robust decât doar SKU)
-                processed_texts = automation.get_todays_processed_texts()
-                
-                if processed_texts:
-                    initial_count = len(bonuri)
-                    bonuri_filtrate = []
-                    
-                    for bon in bonuri:
-                        sku = bon.get('sku', '')
-                        nume = bon.get('nume', '')
-                        
-                        # Normalizare nume pentru matching (elimină "Decant X ml" dacă e cazul, sau păstrează esențialul)
-                        # Dar cel mai sigur e să căutăm SKU-ul sau Numele complet
-                        
-                        is_processed = False
-                        for text in processed_texts:
-                            # 1. Verificare SKU (Exact match în text)
-                            if sku and len(sku) > 3 and sku in text:
-                                is_processed = True
-                                break
-                            
-                            # 2. Verificare Nume (Partial match)
-                            # Dacă numele din bon e "Decant 5ml Parfum X", verificăm dacă "Parfum X" apare în text
-                            # Sau verificăm dacă întregul string apare
-                            if nume and len(nume) > 5:
-                                if nume in text:
-                                    is_processed = True
-                                    break
-                                    
-                                # Fallback: Verificăm dacă "Parfum X" (fără Decant Y ml) apare
-                                # Extragem numele parfumului din "Decant 5ml Parfum X"
-                                match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
-                                if match_parfum:
-                                    nume_parfum_doar = match_parfum.group(2).strip()
-                                    if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
-                                        # Verificăm și cantitatea ca să nu confundăm 5ml cu 10ml
-                                        match_ml = re.search(r'Decant (\d+)', nume)
-                                        if match_ml:
-                                            ml = match_ml.group(1)
-                                            # Căutăm și "5" sau "5ml" sau "5 ml" în text
-                                            if ml in text:
-                                                is_processed = True
-                                                break
+            # 1. Verificare în Baza de Date (PostgreSQL) - Prioritar
+            processed_db = database.get_bonuri_azi()
+            processed_skus_db = {item['sku'] for item in processed_db}
+            
+            if processed_skus_db:
+                socketio.emit('log', {
+                    'type': 'info',
+                    'message': f'📊 Găsite {len(processed_skus_db)} bonuri în baza de date locală.'
+                }, room=client_sid)
 
-                        if not is_processed:
-                            bonuri_filtrate.append(bon)
-                        else:
-                            logger.info(f"⏭️ Skip bon deja procesat: {nume} (SKU: {sku})")
-                            
-                    bonuri = bonuri_filtrate
-                    skipped_count = initial_count - len(bonuri)
+            # 2. Verificare în Oblio (Scraping) - Fallback / Validare
+            # Facem asta doar dacă DB-ul e gol sau pentru siguranță maximă
+            processed_texts_oblio = []
+            if automation.login_if_needed(oblio_email, oblio_password):
+                processed_texts_oblio = automation.get_todays_processed_texts()
+            
+            # Filtrare
+            initial_count = len(bonuri)
+            bonuri_filtrate = []
+            
+            for bon in bonuri:
+                sku = bon.get('sku', '')
+                nume = bon.get('nume', '')
+                
+                is_processed = False
+                
+                # A. Verificare DB
+                if sku in processed_skus_db:
+                    is_processed = True
+                    logger.info(f"⏭️ Skip (DB): {nume} (SKU: {sku})")
+                
+                # B. Verificare Oblio (dacă nu e găsit în DB)
+                if not is_processed and processed_texts_oblio:
+                    for text in processed_texts_oblio:
+                        if sku and len(sku) > 3 and sku in text:
+                            is_processed = True
+                            break
+                        if nume and len(nume) > 5:
+                            # Match mai relaxat pe nume
+                            match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
+                            if match_parfum:
+                                nume_parfum_doar = match_parfum.group(2).strip()
+                                if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
+                                    match_ml = re.search(r'Decant (\d+)', nume)
+                                    if match_ml and match_ml.group(1) in text:
+                                        is_processed = True
+                                        break
                     
-                    if skipped_count > 0:
-                        socketio.emit('log', {
-                            'type': 'warning',
-                            'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
-                        }, room=client_sid)
-                        
-                        # Ajustăm totalul pentru progress bar
-                        stats['total'] = len(bonuri)
-                        stats['skipped'] = skipped_count
-                        
-                        if len(bonuri) == 0:
-                            socketio.emit('log', {
-                                'type': 'success',
-                                'message': '✅ Toate bonurile din listă au fost deja procesate astăzi!'
-                            }, room=client_sid)
-            else:
+                    if is_processed:
+                        logger.info(f"⏭️ Skip (Oblio): {nume} (SKU: {sku})")
+                        # Opțional: Salvăm în DB dacă am găsit în Oblio dar nu era în DB
+                        try:
+                            database.adauga_bon(sku, nume, bon.get('cantitate', 1))
+                        except: pass
+
+                if not is_processed:
+                    bonuri_filtrate.append(bon)
+                    
+            bonuri = bonuri_filtrate
+            skipped_count = initial_count - len(bonuri)
+            
+            if skipped_count > 0:
                 socketio.emit('log', {
                     'type': 'warning',
-                    'message': '⚠️ Nu s-a putut verifica istoricul (login failed). Se continuă cu lista completă.'
+                    'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
                 }, room=client_sid)
+                
+                stats['total'] = len(bonuri)
+                stats['skipped'] = skipped_count
+                
+                if len(bonuri) == 0:
+                    socketio.emit('log', {
+                        'type': 'success',
+                        'message': '✅ Toate bonurile din listă au fost deja procesate astăzi!'
+                    }, room=client_sid)
                 
         except Exception as e:
             logger.error(f"Eroare Smart Resume: {e}")

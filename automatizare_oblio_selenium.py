@@ -27,6 +27,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 import logging
 import cloudinary
 import cloudinary.uploader
+import database
 
 # Configurare Cloudinary
 cloudinary.config( 
@@ -1325,7 +1326,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Lanseaza in Productie'...")
                     launch_button.click()
-                    time.sleep(0.5)  # Optimizat: 1.5s → 0.5s
+                    time.sleep(0.5) # Optimizat: 1.5s → 0.5s
 
                     # PASUL 8: Click pe butonul OK din popup modal
                     logger.info("🔍 Căutare buton OK în popup modal...")
@@ -1350,7 +1351,7 @@ class OblioAutomation:
                     if ok_button:
                         logger.info("🖱️ Click pe butonul OK din popup...")
                         ok_button.click()
-                        time.sleep(0.5)  # Optimizat: 1s → 0.5s
+                        time.sleep(0.5) # Optimizat: 1s → 0.5s
                     else:
                         logger.warning("⚠️ Butonul OK nu a fost găsit (poate nu a apărut popup-ul)")
 
@@ -1379,7 +1380,7 @@ class OblioAutomation:
 
                     logger.info("🖱️ Click pe 'Finalizeaza Productia'...")
                     finalize_button.click()
-                    time.sleep(1)  # Optimizat: 2s → 1s
+                    time.sleep(1) # Optimizat: 2s → 1s
 
                     # PASUL 10: Verificare finalizare în raportul de producție
                     logger.info("🔍 Verificare finalizare în raportul de producție...")
@@ -1460,6 +1461,15 @@ class OblioAutomation:
                     msg += f"\n   📋 Link: https://www.oblio.eu/stock/preview_production/{production_id}"
                 self._log(msg, 'success')
                 self.stats['success'] += 1
+                
+                # Salvare în DB
+                try:
+                    # Obținem numele produsului (dacă îl avem în context, altfel folosim SKU)
+                    # În această metodă nu avem numele complet, dar îl putem deduce sau lăsa gol
+                    database.adauga_bon(sku, f"Produs {sku}", quantity)
+                except Exception as e:
+                    self._log(f"⚠️ Eroare salvare DB: {e}", 'warning')
+                    
                 return True
             else:
                 self._log(f"❌ BONUL NU A FOST FINALIZAT! SKU={sku} - Eroare la finalizarea producției", 'error')
@@ -2191,6 +2201,12 @@ class OblioAutomation:
                             
                             results.append({'sku': sku, 'success': True, 'message': 'Bon creat cu succes'})
                             self.stats['success'] += 1
+                            
+                            # Salvare în DB
+                            try:
+                                database.adauga_bon(sku, f"Produs {sku}", qty)
+                            except Exception as e:
+                                self._log(f"⚠️ Eroare salvare DB: {e}", 'warning')
                         else:
                             raise Exception("Buton Finalizare negăsit")
                     else:
