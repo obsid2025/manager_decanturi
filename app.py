@@ -1277,10 +1277,17 @@ def run_automation_with_live_logs(bonuri, client_sid):
         # Parfumurile întregi nu se transferă din consumabile
         products_to_transfer = []
         for prod in successful_products:
-            if 'Decant' in prod.get('nume', ''):
+            sku = prod.get('sku', '')
+            # Verificăm dacă SKU se termină în -3, -5, -10 (decanturi)
+            is_decant_sku = bool(re.search(r'-(3|5|10)$', sku))
+            
+            # Fallback pe nume doar dacă nu avem SKU valid
+            is_decant_name = 'Decant' in prod.get('nume', '')
+
+            if is_decant_sku or (sku == 'N/A' and is_decant_name):
                 products_to_transfer.append(prod)
             else:
-                logger.info(f"Skip transfer produs non-decant: {prod.get('nume')}")
+                logger.info(f"Skip transfer produs non-decant: {prod.get('nume')} (SKU: {sku})")
                 socketio.emit('log', {
                     'type': 'info',
                     'message': f'ℹ️ Skip transfer pentru produs întreg: {prod.get("nume")}'
