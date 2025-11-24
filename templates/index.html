@@ -121,7 +121,7 @@
                             <div class="upload-box">
                                 <p class="terminal-text">> INITIATE_PRODUCTION_SEQUENCE</p>
                                 <p class="terminal-text dim">> WAITING_FOR_INPUT_STREAM (.xlsx/.xls)...</p>
-                                
+
                                 <div class="input-group">
                                     <input type="file" id="fileInputVoucher" accept=".xlsx,.xls" class="hidden-input">
                                     <button class="terminal-btn" id="selectFileBtnVoucher">[ SELECT_SOURCE_FILE ]</button>
@@ -133,6 +133,13 @@
                                     <div class="loading" id="loadingVoucher" style="display: none;">
                                         <span class="blink">>> AGGREGATING_DATA...</span>
                                     </div>
+                                </div>
+
+                                <div class="checkbox-group" style="margin-top: 10px;">
+                                    <label class="terminal-checkbox">
+                                        <input type="checkbox" id="forceModeCheckbox" style="margin-right: 8px;">
+                                        <span class="terminal-text dim">[ FORCE_MODE: Bypass duplicate detection & process ALL vouchers ]</span>
+                                    </label>
                                 </div>
                             </div>
 

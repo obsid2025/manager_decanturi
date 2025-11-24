@@ -941,13 +941,18 @@ def handle_start_automation_live(data):
         return
 
     bonuri = data.get('bonuri', [])
+    force_mode = data.get('force_mode', False)
 
     if not bonuri:
         emit('log', {'type': 'error', 'message': '❌ Nu există bonuri de procesat'})
         return
 
     automation_active = True
-    emit('log', {'type': 'info', 'message': f'🚀 START AUTOMATIZARE: {len(bonuri)} bonuri'})
+
+    if force_mode:
+        emit('log', {'type': 'warning', 'message': f'🚀 START AUTOMATIZARE: {len(bonuri)} bonuri (FORCE MODE: Processing ALL vouchers)'})
+    else:
+        emit('log', {'type': 'info', 'message': f'🚀 START AUTOMATIZARE: {len(bonuri)} bonuri'})
 
     # DEBUG: Test emit înainte de thread
     emit('log', {'type': 'warning', 'message': '⚡ IMEDIAT PORNESC THREAD-UL...'})
@@ -957,7 +962,8 @@ def handle_start_automation_live(data):
         socketio.start_background_task(
             run_automation_with_live_logs,
             bonuri,
-            request.sid
+            request.sid,
+            force_mode
         )
         emit('log', {'type': 'success', 'message': '✅ BACKGROUND TASK PORNIT! Așteaptă logs...'})
     except Exception as e:
@@ -996,10 +1002,14 @@ def send_heartbeat(client_sid, stop_event):
             break
 
 
-def run_automation_with_live_logs(bonuri, client_sid):
+def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
     """
     Rulează automatizarea în background și trimite logs live
     FOLOSEȘTE socketio.start_background_task() care funcționează cu eventlet!
+    Args:
+        bonuri: Lista de bonuri de procesat
+        client_sid: Session ID al clientului WebSocket
+        force_mode: Dacă True, procesează TOATE bonurile fără verificare duplicate
     """
     global automation_active, stop_requested
 
@@ -1104,76 +1114,83 @@ def run_automation_with_live_logs(bonuri, client_sid):
             }, room=client_sid)
 
         # --- SMART RESUME: Verifică ce s-a lucrat deja azi ---
-        try:
-            # 1. Verificare în Baza de Date (PostgreSQL) - Prioritar
-            processed_db = database.get_bonuri_azi()
-            processed_skus_db = {item['sku'] for item in processed_db}
-            
-            if processed_skus_db:
-                socketio.emit('log', {
-                    'type': 'info',
-                    'message': f'📊 Găsite {len(processed_skus_db)} bonuri în baza de date locală.'
-                }, room=client_sid)
+        if force_mode:
+            socketio.emit('log', {
+                'type': 'warning',
+                'message': '⚠️ FORCE MODE ACTIVAT: Procesez TOATE bonurile fără verificare duplicate!'
+            }, room=client_sid)
 
-            # 2. Verificare în Oblio (Scraping) - Fallback / Validare
-            # Facem asta doar dacă DB-ul e gol sau pentru siguranță maximă
-            processed_texts_oblio = []
-            if automation.login_if_needed(oblio_email, oblio_password):
-                processed_texts_oblio = automation.get_todays_processed_texts()
-            
-            # Filtrare
-            initial_count = len(bonuri)
-            bonuri_filtrate = []
-            
-            for bon in bonuri:
-                sku = bon.get('sku', '')
-                nume = bon.get('nume', '')
-                
-                is_processed = False
-                
-                # A. Verificare DB
-                if sku in processed_skus_db:
-                    is_processed = True
-                    logger.info(f"⏭️ Skip (DB): {nume} (SKU: {sku})")
-                
-                # B. Verificare Oblio (dacă nu e găsit în DB)
-                if not is_processed and processed_texts_oblio:
-                    for text in processed_texts_oblio:
-                        if sku and len(sku) > 3 and sku in text:
-                            is_processed = True
-                            break
-                        if nume and len(nume) > 5:
-                            # Match mai relaxat pe nume
-                            match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
-                            if match_parfum:
-                                nume_parfum_doar = match_parfum.group(2).strip()
-                                if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
-                                    match_ml = re.search(r'Decant (\d+)', nume)
-                                    if match_ml and match_ml.group(1) in text:
-                                        is_processed = True
-                                        break
-                    
-                    if is_processed:
-                        logger.info(f"⏭️ Skip (Oblio): {nume} (SKU: {sku})")
-                        # Opțional: Salvăm în DB dacă am găsit în Oblio dar nu era în DB
-                        try:
-                            database.adauga_bon(sku, nume, bon.get('cantitate', 1))
-                        except: pass
+        if not force_mode:
+            try:
+                # 1. Verificare în Baza de Date (PostgreSQL) - Prioritar
+                processed_db = database.get_bonuri_azi()
+                processed_skus_db = {item['sku'] for item in processed_db}
 
-                if not is_processed:
-                    bonuri_filtrate.append(bon)
-                    
-            bonuri = bonuri_filtrate
-            skipped_count = initial_count - len(bonuri)
-            
-            if skipped_count > 0:
-                socketio.emit('log', {
-                    'type': 'warning',
-                    'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
-                }, room=client_sid)
-                
-                stats['total'] = len(bonuri)
-                stats['skipped'] = skipped_count
+                if processed_skus_db:
+                    socketio.emit('log', {
+                        'type': 'info',
+                        'message': f'📊 Găsite {len(processed_skus_db)} bonuri în baza de date locală.'
+                    }, room=client_sid)
+
+                # 2. Verificare în Oblio (Scraping) - Fallback / Validare
+                # Facem asta doar dacă DB-ul e gol sau pentru siguranță maximă
+                processed_texts_oblio = []
+                if automation.login_if_needed(oblio_email, oblio_password):
+                    processed_texts_oblio = automation.get_todays_processed_texts()
+
+                # Filtrare
+                initial_count = len(bonuri)
+                bonuri_filtrate = []
+
+                for bon in bonuri:
+                    sku = bon.get('sku', '')
+                    nume = bon.get('nume', '')
+
+                    is_processed = False
+
+                    # A. Verificare DB
+                    if sku in processed_skus_db:
+                        is_processed = True
+                        logger.info(f"⏭️ Skip (DB): {nume} (SKU: {sku})")
+
+                    # B. Verificare Oblio (dacă nu e găsit în DB)
+                    if not is_processed and processed_texts_oblio:
+                        for text in processed_texts_oblio:
+                            if sku and len(sku) > 3 and sku in text:
+                                is_processed = True
+                                break
+                            if nume and len(nume) > 5:
+                                # Match mai relaxat pe nume
+                                match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
+                                if match_parfum:
+                                    nume_parfum_doar = match_parfum.group(2).strip()
+                                    if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
+                                        match_ml = re.search(r'Decant (\d+)', nume)
+                                        if match_ml and match_ml.group(1) in text:
+                                            is_processed = True
+                                            break
+
+                        if is_processed:
+                            logger.info(f"⏭️ Skip (Oblio): {nume} (SKU: {sku})")
+                            # Opțional: Salvăm în DB dacă am găsit în Oblio dar nu era în DB
+                            try:
+                                database.adauga_bon(sku, nume, bon.get('cantitate', 1))
+                            except: pass
+
+                    if not is_processed:
+                        bonuri_filtrate.append(bon)
+
+                bonuri = bonuri_filtrate
+                skipped_count = initial_count - len(bonuri)
+
+                if skipped_count > 0:
+                    socketio.emit('log', {
+                        'type': 'warning',
+                        'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
+                    }, room=client_sid)
+
+                    stats['total'] = len(bonuri)
+                    stats['skipped'] = skipped_count
                 
                 if len(bonuri) == 0:
                     socketio.emit('log', {

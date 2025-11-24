@@ -465,23 +465,30 @@ function copyToClipboard(text) {
 
 function startAutomation() {
     if (isProcessing) return;
-    
+
     if (!currentVouchers || currentVouchers.length === 0) {
         logSystem('AUTO_ERR', 'No vouchers loaded. Please process a file first.', 'error');
         return;
     }
 
     logSystem('AUTO_INIT', 'Initializing Oblio Automation Bot...');
-    
-    dom.production.runBtn.disabled = true;
+
+    // Show stop button, hide run button
+    dom.production.runBtn.style.display = 'none';
+    dom.production.stopBtn.style.display = 'inline-block';
     dom.production.stopBtn.disabled = false;
     dom.production.status.textContent = 'STATUS: RUNNING';
     dom.production.status.className = 'val-success blink';
-    
+
     isProcessing = true;
 
+    // Check if force mode is enabled
+    const forceModeCheckbox = document.getElementById('forceModeCheckbox');
+    const forceMode = forceModeCheckbox ? forceModeCheckbox.checked : false;
+
     socket.emit('start_automation_live', {
-        bonuri: currentVouchers
+        bonuri: currentVouchers,
+        force_mode: forceMode
     });
 }
 
@@ -532,11 +539,13 @@ socket.on('input_required', (prompt) => {
 
 function resetAutomationUI() {
     isProcessing = false;
+    dom.production.runBtn.style.display = 'inline-block';
     dom.production.runBtn.disabled = false;
+    dom.production.stopBtn.style.display = 'none';
     dom.production.stopBtn.disabled = true;
+    dom.production.stopBtn.textContent = '[ KILL_PROCESS ]';
     dom.production.status.textContent = 'STATUS: IDLE';
     dom.production.status.className = 'dim';
-    dom.production.stopBtn.textContent = '[ CTRL+C (STOP) ]';
 }
 
 // --- CLI HANDLER ---
@@ -544,10 +553,10 @@ function resetAutomationUI() {
 function handleCliCommand(cmd) {
     const command = cmd.trim().toLowerCase();
     logSystem('USER', `> ${command}`);
-    
+
     switch(command) {
         case 'help':
-            logSystem('HELP', 'Available commands: help, clear, status, analysis, production');
+            logSystem('HELP', 'Available commands: help, clear, status, analysis, production, stop, /stop');
             break;
         case 'clear':
             dom.logs.innerHTML = '';
@@ -560,6 +569,14 @@ function handleCliCommand(cmd) {
             break;
         case 'production':
             switchModule('production');
+            break;
+        case 'stop':
+        case '/stop':
+            if (isProcessing) {
+                stopAutomation();
+            } else {
+                logSystem('INFO', 'No automation running.', 'info');
+            }
             break;
         default:
             logSystem('ERR', `Command not found: ${command}`, 'error');
