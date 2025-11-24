@@ -1302,28 +1302,34 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
                     }, room=client_sid)
 
         # ============================================================
-        # ETAPA 1.5: RETRY PENTRU BONURI EȘUATE (Timeout, Erori rețea)
+        # ETAPA 1.5: RETRY PENTRU BONURI EȘUATE (Timeout, Erori rețea) - 3 ÎNCERCĂRI
         # ============================================================
-        if retryable_bonuri and not stop_requested:
+        MAX_RETRY_ATTEMPTS = 3
+
+        for retry_round in range(1, MAX_RETRY_ATTEMPTS + 1):
+            if not retryable_bonuri or stop_requested:
+                break
+
             socketio.emit('log', {
                 'type': 'warning',
-                'message': f'🔄 START RETRY pentru {len(retryable_bonuri)} bonuri eșuate (fără probleme de stoc)...'
+                'message': f'🔄 RETRY ROUND {retry_round}/{MAX_RETRY_ATTEMPTS}: {len(retryable_bonuri)} bonuri eșuate...'
             }, room=client_sid)
-            
+
             # Procesăm retry-urile secvențial sau în batch-uri mici (2) pentru siguranță
             retry_batch_size = 2
-            
+            still_failing = []  # Bonuri care încă eșuează după acest round
+
             for i in range(0, len(retryable_bonuri), retry_batch_size):
                 if stop_requested:
                     break
-                    
+
                 batch = retryable_bonuri[i:i + retry_batch_size]
-                
+
                 socketio.emit('log', {
                     'type': 'info',
-                    'message': f'🔄 Retry batch {i//retry_batch_size + 1}: {len(batch)} bonuri...'
+                    'message': f'🔄 Batch {i//retry_batch_size + 1}: {len(batch)} bonuri...'
                 }, room=client_sid)
-                
+
                 try:
                     results = automation.create_production_vouchers_batch(
                         batch,
@@ -1331,35 +1337,56 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
                         oblio_email,
                         oblio_password
                     )
-                    
+
                     for res in results:
                         sku = res['sku']
                         success = res['success']
                         msg = res['message']
-                        
+
                         original_bon = next((b for b in batch if b.get('sku') == sku), {})
-                        
+
                         if success:
                             # Actualizăm stats: scădem din failed, adăugăm la success
                             stats['failed'] -= 1
                             stats['success'] += 1
                             stats.setdefault('successful_products', []).append(original_bon)
-                            
+
                             # Scoatem eroarea veche din listă
                             stats['errors'] = [err for err in stats['errors'] if err['sku'] != sku]
-                            
+
                             socketio.emit('log', {
                                 'type': 'success',
-                                'message': f'✅ RETRY REUȘIT pentru {sku}!'
+                                'message': f'✅ RETRY REUȘIT pentru {sku} (round {retry_round})!'
                             }, room=client_sid)
                         else:
-                            socketio.emit('log', {
-                                'type': 'error',
-                                'message': f'❌ RETRY EȘUAT pentru {sku}: {msg}'
-                            }, room=client_sid)
-                            
+                            # Încă eșuat, adăugăm pentru următorul round
+                            still_failing.append(original_bon)
+
+                            if retry_round == MAX_RETRY_ATTEMPTS:
+                                # Ultima încercare - screenshot și Cloudinary
+                                socketio.emit('log', {
+                                    'type': 'error',
+                                    'message': f'❌ FINAL FAIL pentru {sku} după {MAX_RETRY_ATTEMPTS} încercări: {msg}'
+                                }, room=client_sid)
+
+                                # TODO: Screenshot + Cloudinary upload (implementare în viitor)
+                                # automation.take_screenshot_and_upload(sku, msg)
+                            else:
+                                socketio.emit('log', {
+                                    'type': 'warning',
+                                    'message': f'⚠️ RETRY {retry_round} EȘUAT pentru {sku}: {msg}'
+                                }, room=client_sid)
+
                 except Exception as e:
                     logger.error(f"❌ Eroare la retry batch: {e}")
+                    # Păstrăm batch-ul pentru următorul round
+                    still_failing.extend(batch)
+
+            # Pregătim următorul round cu bonurile care încă eșuează
+            retryable_bonuri = still_failing
+
+            if retryable_bonuri and retry_round < MAX_RETRY_ATTEMPTS:
+                time.sleep(3)  # Pauză între round-uri
 
         # Check stop request outside loop
         if stop_requested:
