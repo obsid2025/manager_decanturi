@@ -941,6 +941,67 @@ def health():
     return jsonify({'status': 'healthy', 'service': 'OBSID Decant Manager'})
 
 
+@app.route('/test-db')
+def test_db():
+    """Test database connection - pentru debugging"""
+    import os
+    result = {
+        'database_url_set': bool(os.environ.get('DATABASE_URL')),
+        'database_url_preview': None,
+        'connection_test': None,
+        'insert_test': None,
+        'select_test': None
+    }
+
+    db_url = os.environ.get('DATABASE_URL', '')
+    if db_url:
+        # Arată doar host-ul pentru securitate
+        if '@' in db_url:
+            result['database_url_preview'] = db_url.split('@')[1][:50] + '...'
+        else:
+            result['database_url_preview'] = 'invalid format'
+
+    # Test conexiune
+    try:
+        conn = database.get_db_connection()
+        if conn:
+            result['connection_test'] = 'SUCCESS'
+
+            # Test insert
+            try:
+                cur = conn.cursor()
+                cur.execute('''
+                    INSERT INTO bonuri_procesate (sku, nume_produs, cantitate, order_id, order_number, data_procesare)
+                    VALUES ('TEST-DEBUG-123', 'Test Debug Connection', 1, 9999, 99999, CURRENT_DATE)
+                    ON CONFLICT (sku, order_number) DO UPDATE SET data_procesare = CURRENT_DATE
+                    RETURNING id
+                ''')
+                row = cur.fetchone()
+                conn.commit()
+                result['insert_test'] = f'SUCCESS - ID: {row[0]}'
+                cur.close()
+            except Exception as e:
+                result['insert_test'] = f'FAILED: {str(e)}'
+
+            # Test select
+            try:
+                cur = conn.cursor()
+                cur.execute('SELECT COUNT(*) FROM bonuri_procesate')
+                count = cur.fetchone()[0]
+                result['select_test'] = f'SUCCESS - {count} rows'
+                cur.close()
+            except Exception as e:
+                result['select_test'] = f'FAILED: {str(e)}'
+
+            conn.close()
+        else:
+            result['connection_test'] = 'FAILED - conn is None'
+    except Exception as e:
+        result['connection_test'] = f'FAILED: {str(e)}'
+
+    return jsonify(result)
+
+
 @app.route('/start-automation-selenium', methods=['POST'])
 @login_required
 def start_automation_selenium():
