@@ -203,10 +203,16 @@ function initEventListeners() {
         }
     });
 
-    // Export Logs Button
+    // Export Logs Button (header)
     const exportLogsBtn = document.getElementById('exportLogsBtn');
     if (exportLogsBtn) {
         exportLogsBtn.addEventListener('click', exportLogs);
+    }
+
+    // Export Logs Button (bottom - post automation)
+    const exportLogsBtnBottom = document.getElementById('exportLogsBtnBottom');
+    if (exportLogsBtnBottom) {
+        exportLogsBtnBottom.addEventListener('click', exportLogs);
     }
 
     // Clear Logs Button
@@ -299,25 +305,25 @@ function clearLogs() {
 }
 
 function showExportFailedButton() {
-    // Verifică dacă butonul există deja
-    let btn = document.getElementById('exportFailedBtn');
-    if (!btn) {
-        // Adaugă butonul lângă celelalte butoane de control
-        const logHeaderActions = document.querySelector('.log-header-actions');
-        if (logHeaderActions) {
-            btn = document.createElement('button');
-            btn.id = 'exportFailedBtn';
-            btn.className = 'terminal-btn-sm danger-btn';
-            btn.title = 'Export failed products to Excel';
-            btn.textContent = '[ EXPORT_FAILED ]';
-            btn.addEventListener('click', exportFailedProducts);
-            // Inserează la început
-            logHeaderActions.insertBefore(btn, logHeaderActions.firstChild);
-        }
+    // Afișează secțiunea de butoane post-automatizare
+    const postActions = document.getElementById('postAutomationActions');
+    if (postActions) {
+        postActions.style.display = 'flex';
     }
-    // Asigură-te că e vizibil
-    if (btn) {
-        btn.style.display = 'inline-block';
+
+    // Afișează butonul EXPORT_FAILED din secțiunea de sub consolă
+    const btnBottom = document.getElementById('exportFailedBtnBottom');
+    if (btnBottom) {
+        btnBottom.style.display = 'inline-block';
+        btnBottom.addEventListener('click', exportFailedProducts);
+    }
+}
+
+function showPostAutomationActions() {
+    // Afișează butoanele de sub consolă după ce automatizarea s-a terminat
+    const postActions = document.getElementById('postAutomationActions');
+    if (postActions) {
+        postActions.style.display = 'flex';
     }
 }
 
@@ -664,6 +670,9 @@ socket.on('automation_complete', (data) => {
     if (automationStats) {
         logSystem('STATS', `Total: ${automationStats.total} | Success: ${automationStats.success} | Failed: ${automationStats.failed}`, 'info');
     }
+
+    // Afișează butoanele de sub consolă (EXPORT_LOGS mereu, EXPORT_FAILED dacă e cazul)
+    showPostAutomationActions();
 
     // Dacă există produse eșuate, afișează butonul de export
     if (failedProducts.length > 0) {
