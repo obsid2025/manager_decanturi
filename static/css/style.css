@@ -339,6 +339,42 @@ nav {
     font-weight: bold;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+}
+
+.log-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.terminal-btn-sm {
+    background: transparent;
+    border: 1px solid var(--terminal-green);
+    color: var(--terminal-green);
+    padding: 2px 8px;
+    font-family: var(--font-main);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+}
+
+.terminal-btn-sm:hover {
+    background: var(--terminal-green);
+    color: black;
+    box-shadow: 0 0 5px var(--terminal-green);
+}
+
+.terminal-btn-sm.danger-btn {
+    border-color: var(--terminal-red);
+    color: var(--terminal-red);
+}
+
+.terminal-btn-sm.danger-btn:hover {
+    background: var(--terminal-red);
+    color: black;
+    box-shadow: 0 0 5px var(--terminal-red);
 }
 
 .log-content {

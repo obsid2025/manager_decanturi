@@ -188,14 +188,18 @@
             <div class="system-logs-container">
                 <div class="log-header">
                     <span>=== SYSTEM_LOGS ===</span>
-                    <span id="terminalStatus" class="status-indicator">⚪ IDLE</span>
+                    <div class="log-header-actions">
+                        <button class="terminal-btn-sm" id="exportLogsBtn" title="Export logs to file">[ EXPORT_LOGS ]</button>
+                        <button class="terminal-btn-sm" id="clearLogsBtn" title="Clear logs">[ CLEAR ]</button>
+                        <span id="terminalStatus" class="status-indicator">⚪ IDLE</span>
+                    </div>
                 </div>
                 <div id="terminalLogs" class="log-content">
                     <div class="log-entry"><span class="timestamp">[BOOT]</span> System initialized...</div>
                     <div class="log-entry"><span class="timestamp">[BOOT]</span> Modules loaded successfully.</div>
                     <div class="log-entry"><span class="timestamp">[INFO]</span> Waiting for user command...</div>
                 </div>
-                
+
                 <!-- CLI Input Section -->
                 <div id="cliInputSection" style="display: block;">
                     <div class="cli-wrapper">

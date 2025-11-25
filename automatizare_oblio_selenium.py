@@ -29,11 +29,11 @@ import cloudinary
 import cloudinary.uploader
 import database
 
-# Configurare Cloudinary
-cloudinary.config( 
-  cloud_name = "do1fmca8i", 
-  api_key = "986836174941413", 
-  api_secret = "kanoBXprGBCBR9ytbGQygeKIl1I" 
+# Configurare Cloudinary (OBSID account)
+cloudinary.config(
+  cloud_name = "dbecgc8il",
+  api_key = "247839385395521",
+  api_secret = "KxQ5g122_3rSbnsV3Cl5WZnMpOQ"
 )
 
 # Configurare logging
@@ -508,33 +508,214 @@ class OblioAutomation:
             logger.warning(f"⚠️ Element {selector} nu e clickable după {timeout}s")
             return None
 
-    def upload_screenshot_to_cloudinary(self, screenshot_path):
+    def wait_for_overlays_gone(self, timeout=10):
+        """
+        Așteaptă dispariția overlay-urilor comune din Oblio (loading spinners, modals)
+
+        Args:
+            timeout: Timeout maxim în secunde
+
+        Returns:
+            True dacă overlay-urile au dispărut, False dacă timeout
+        """
+        overlay_selectors = [
+            ".modal-backdrop",           # Bootstrap modal backdrop
+            ".loading",                  # Loading spinner generic
+            ".spinner",                  # Spinner
+            "#loading-overlay",          # Loading overlay explicit
+            ".page-loader",              # Page loader
+            "[class*='loading']",        # Orice element cu loading în clasă
+            ".overlay",                  # Overlay generic
+        ]
+
+        try:
+            for selector in overlay_selectors:
+                try:
+                    # Verifică dacă există overlay vizibil
+                    overlays = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for overlay in overlays:
+                        if overlay.is_displayed():
+                            # Așteaptă să devină invizibil
+                            WebDriverWait(self.driver, timeout).until(
+                                EC.invisibility_of_element(overlay)
+                            )
+                            logger.debug(f"✅ Overlay {selector} a dispărut")
+                except:
+                    continue
+            return True
+        except TimeoutException:
+            logger.warning(f"⚠️ Overlay încă vizibil după {timeout}s")
+            return False
+
+    def safe_click(self, element, retries=3, wait_after=0.5):
+        """
+        Click sigur pe un element, cu retry și handling pentru overlay-uri interceptate
+
+        Args:
+            element: WebElement pe care să se facă click
+            retries: Număr de încercări (default 3)
+            wait_after: Timp de așteptare după click (default 0.5s)
+
+        Returns:
+            True dacă click-ul a reușit, False altfel
+        """
+        from selenium.webdriver.common.action_chains import ActionChains
+
+        for attempt in range(retries):
+            try:
+                # Prima dată, așteaptă să dispară overlay-urile
+                self.wait_for_overlays_gone(timeout=5)
+
+                # Scroll element în view dacă e necesar
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                time.sleep(0.3)
+
+                # Încearcă click normal
+                element.click()
+                time.sleep(wait_after)
+                return True
+
+            except Exception as e:
+                error_msg = str(e).lower()
+
+                if "intercepted" in error_msg or "not clickable" in error_msg:
+                    logger.warning(f"⚠️ Click interceptat (încercare {attempt+1}/{retries}), încerc alternativă...")
+
+                    # Alternativa 1: Click prin JavaScript
+                    try:
+                        self.driver.execute_script("arguments[0].click();", element)
+                        time.sleep(wait_after)
+                        return True
+                    except:
+                        pass
+
+                    # Alternativa 2: ActionChains
+                    try:
+                        ActionChains(self.driver).move_to_element(element).click().perform()
+                        time.sleep(wait_after)
+                        return True
+                    except:
+                        pass
+
+                    # Alternativa 3: Închide modalele vizibile și reîncearcă
+                    try:
+                        self._close_blocking_modals()
+                        time.sleep(0.5)
+                    except:
+                        pass
+                else:
+                    logger.error(f"❌ Eroare la click: {e}")
+
+                time.sleep(0.5)
+
+        logger.error(f"❌ Nu s-a putut face click după {retries} încercări")
+        return False
+
+    def _close_blocking_modals(self):
+        """Închide orice modal care ar putea bloca interacțiunea"""
+        modal_close_selectors = [
+            ".modal.show .close",
+            ".modal.show [data-dismiss='modal']",
+            "#modal-message .ok-message-modal",
+            ".modal-backdrop",
+        ]
+
+        for selector in modal_close_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                for el in elements:
+                    if el.is_displayed():
+                        try:
+                            el.click()
+                            logger.debug(f"✅ Închis modal: {selector}")
+                        except:
+                            # Încearcă prin JS
+                            self.driver.execute_script("arguments[0].click();", el)
+            except:
+                continue
+
+    def upload_screenshot_to_cloudinary(self, screenshot_path, context="error"):
         """
         Încarcă un screenshot pe Cloudinary și returnează URL-ul
+
+        Args:
+            screenshot_path: Calea către screenshot
+            context: Context pentru log (ex: "error", "stoc_insuficient", "redirect_fail")
+
+        Returns:
+            URL-ul imaginii sau None
         """
         try:
             if not os.path.exists(screenshot_path):
+                self._log(f"⚠️ Screenshot nu există: {screenshot_path}", 'warning')
                 return None
-                
-            self._log(f"☁️ Upload screenshot pe Cloudinary: {screenshot_path}...", 'info')
-            
-            # Upload
+
+            # Generează un public_id unic cu timestamp și dată
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = os.path.basename(screenshot_path).replace('.png', '')
+            public_id = f"obsid_errors/{timestamp}_{filename}"
+
+            self._log(f"☁️ Upload screenshot pe Cloudinary...", 'info')
+
+            # Upload cu folder dinamic bazat pe dată
             response = cloudinary.uploader.upload(
-                screenshot_path, 
-                folder="obsid_errors",
-                resource_type="image"
+                screenshot_path,
+                public_id=public_id,
+                resource_type="image",
+                overwrite=True,
+                tags=[context, datetime.now().strftime("%Y-%m-%d")]
             )
-            
+
             url = response.get('secure_url')
             if url:
-                self._log(f"📸 SCREENSHOT URL: {url}", 'error') # Log as error to be visible red
+                # Log URL vizibil în roșu pentru atenție
+                self._log(f"📸 SCREENSHOT [{context.upper()}]: {url}", 'error')
+
+                # Șterge fișierul local după upload reușit
+                try:
+                    os.remove(screenshot_path)
+                except:
+                    pass
+
                 return url
             else:
                 self._log("⚠️ Upload Cloudinary reușit dar fără URL", 'warning')
                 return None
-                
+
         except Exception as e:
             self._log(f"⚠️ Eroare upload Cloudinary: {str(e)}", 'warning')
+            return None
+
+    def capture_error_screenshot(self, sku, error_type="error"):
+        """
+        Captură screenshot pentru eroare și upload pe Cloudinary
+
+        Args:
+            sku: SKU-ul produsului cu eroare
+            error_type: Tipul erorii (error, stoc_insuficient, redirect_fail, click_intercepted)
+
+        Returns:
+            URL-ul imaginii sau None
+        """
+        try:
+            # Asigură-te că folderul uploads există
+            uploads_dir = os.path.join(os.getcwd(), 'uploads')
+            os.makedirs(uploads_dir, exist_ok=True)
+
+            # Generează nume unic pentru screenshot
+            timestamp = int(time.time())
+            safe_sku = str(sku).replace('/', '_').replace('\\', '_')[:30]
+            screenshot_path = os.path.join(uploads_dir, f"{error_type}_{safe_sku}_{timestamp}.png")
+
+            # Captură screenshot
+            self.driver.save_screenshot(screenshot_path)
+
+            # Upload și returnează URL
+            return self.upload_screenshot_to_cloudinary(screenshot_path, context=f"{error_type}_{safe_sku}")
+
+        except Exception as e:
+            self._log(f"⚠️ Eroare la captura screenshot: {str(e)}", 'warning')
             return None
 
     def load_cookies_from_json(self, cookies_json):
@@ -864,14 +1045,14 @@ class OblioAutomation:
         except Exception as e:
             logger.error(f"❌ Eroare la autentificare: {e}")
             
-            # Screenshot pentru debugging
+            # Screenshot pentru debugging - upload la Cloudinary
             try:
-                screenshot_path = f"error_login_{int(time.time())}.png"
-                self.driver.save_screenshot(screenshot_path)
-                logger.info(f"📸 Screenshot salvat: {screenshot_path}")
+                screenshot_url = self.capture_error_screenshot("login", "login_error")
+                if screenshot_url:
+                    logger.info(f"🖼️ Screenshot eroare login: {screenshot_url}")
             except:
                 pass
-            
+
             return False
 
     def type_slowly(self, element, text, delay=0.005):
@@ -1081,7 +1262,9 @@ class OblioAutomation:
                         if consumed_val > stock_val:
                             logger.warning(f"⚠️ STOC INSUFICIENT! Necesar: {consumed_val}, Disponibil: {stock_val}")
                             self._log(f"⚠️ STOC INSUFICIENT pentru {sku}! Necesar: {consumed_val}, Disponibil: {stock_val}. Se sare peste acest bon.", 'warning')
-                            
+                            # Captură screenshot pentru stoc insuficient
+                            self.capture_error_screenshot(sku, "stoc_insuficient")
+
                             # Închide tab-ul curent sau navighează înapoi pentru a nu bloca procesul
                             # Deoarece suntem pe pagina de creare, putem doar să returnăm False
                             # și să lăsăm bucla principală să continue
@@ -1273,11 +1456,11 @@ class OblioAutomation:
             except:
                 pass
 
-            # DEBUG: Screenshot după click pentru debugging
+            # DEBUG: Screenshot după click pentru debugging (upload Cloudinary)
             try:
-                screenshot_path = f"after_click_{sku}_{int(time.time())}.png"
-                self.driver.save_screenshot(screenshot_path)
-                logger.info(f"📸 Screenshot după click: {screenshot_path}")
+                screenshot_url = self.capture_error_screenshot(sku, "after_click")
+                if screenshot_url:
+                    logger.info(f"🖼️ Screenshot după click: {screenshot_url}")
             except:
                 pass
 
@@ -1490,14 +1673,11 @@ class OblioAutomation:
                 'error': str(e)
             })
 
-            # Screenshot pentru debugging
+            # Screenshot pentru debugging - upload la Cloudinary cu URL în log
             try:
-                screenshot_path = f"error_screenshot_{sku}_{int(time.time())}.png"
-                self.driver.save_screenshot(screenshot_path)
-                self._log(f"📸 Screenshot salvat: {screenshot_path}", 'info')
-                
-                # Upload to Cloudinary
-                self.upload_screenshot_to_cloudinary(screenshot_path)
+                screenshot_url = self.capture_error_screenshot(sku, "voucher_error")
+                if screenshot_url:
+                    self._log(f"🖼️ Screenshot eroare: {screenshot_url}", 'error')
             except:
                 pass
 
@@ -1849,13 +2029,12 @@ class OblioAutomation:
                     if error_modal.is_displayed():
                         error_text = error_modal.text
                         self._log(f"❌ EROARE afișată în modal: {error_text}", 'error')
-                        
-                        # SCREENSHOT 1: Cu eroarea
+
+                        # SCREENSHOT 1: Cu eroarea - upload Cloudinary cu URL în log
                         try:
-                            ts = int(time.time())
-                            shot_path = os.path.join(os.getcwd(), 'uploads', f'error_modal_{ts}.png')
-                            self.driver.save_screenshot(shot_path)
-                            self.upload_screenshot_to_cloudinary(shot_path)
+                            screenshot_url = self.capture_error_screenshot("transfer", "error_modal")
+                            if screenshot_url:
+                                self._log(f"🖼️ Screenshot eroare modal: {screenshot_url}", 'error')
                         except:
                             pass
 
@@ -1866,16 +2045,14 @@ class OblioAutomation:
                             time.sleep(1)
                         except:
                             pass
-                        
-                        # SCREENSHOT 2: Produsele de sus (pentru debug stoc)
+
+                        # SCREENSHOT 2: Produsele de sus (pentru debug stoc) - upload Cloudinary
                         try:
                             self.driver.execute_script("window.scrollTo(0, 0);")
                             time.sleep(1)
-                            ts = int(time.time())
-                            shot_path_top = os.path.join(os.getcwd(), 'uploads', f'products_top_{ts}.png')
-                            self.driver.save_screenshot(shot_path_top)
-                            self.upload_screenshot_to_cloudinary(shot_path_top)
-                            self._log("📸 Screenshot cu produsele salvat pentru debug", 'info')
+                            screenshot_url2 = self.capture_error_screenshot("transfer", "products_debug")
+                            if screenshot_url2:
+                                self._log(f"🖼️ Screenshot produse debug: {screenshot_url2}", 'info')
                         except:
                             pass
                 except:
@@ -1932,18 +2109,15 @@ class OblioAutomation:
 
         except Exception as e:
             self._log(f"❌ EROARE TRANSFER: {e}", 'error')
-            
-            # Screenshot pentru debugging
+
+            # Screenshot pentru debugging - upload la Cloudinary cu URL în log
             try:
-                screenshot_path = f"error_transfer_{int(time.time())}.png"
-                self.driver.save_screenshot(screenshot_path)
-                self._log(f"📸 Screenshot salvat: {screenshot_path}", 'info')
-                
-                # Upload to Cloudinary
-                self.upload_screenshot_to_cloudinary(screenshot_path)
+                screenshot_url = self.capture_error_screenshot("transfer", "transfer_error")
+                if screenshot_url:
+                    self._log(f"🖼️ Screenshot eroare transfer: {screenshot_url}", 'error')
             except:
                 pass
-                
+
             return False
 
     def create_production_vouchers_batch(self, batch_list, oblio_cookies=None, oblio_email=None, oblio_password=None):
@@ -2000,10 +2174,8 @@ class OblioAutomation:
             self._log("✅ Login confirmat. Începem procesarea batch...", 'success')
         except TimeoutException:
              self._log("❌ Login eșuat sau pagina nu s-a încărcat! Nu pot începe batch-ul.", 'error')
-             try:
-                self.driver.save_screenshot("batch_login_fail.png")
-                self.upload_screenshot_to_cloudinary("batch_login_fail.png")
-             except: pass
+             # Captură screenshot pentru login eșuat
+             self.capture_error_screenshot("batch", "login_failed")
              return [{'sku': b.get('sku'), 'success': False, 'message': 'Login failed - Page not loaded'} for b in batch_list]
 
         self._log(f"🚀 START BATCH: {len(batch_list)} bonuri în paralel...", 'info')
@@ -2101,6 +2273,8 @@ class OblioAutomation:
                             
                             if consumed_val > stock_val:
                                 self._log(f"⚠️ [Tab {tab['index']+1}] STOC INSUFICIENT pentru {sku}! Necesar: {consumed_val}, Disponibil: {stock_val}", 'warning')
+                                # Captură screenshot pentru stoc insuficient
+                                self.capture_error_screenshot(sku, "stoc_insuficient")
                                 tab['status'] = 'skipped'
                                 tab['error'] = f"Stoc insuficient (Necesar: {consumed_val}, Disponibil: {stock_val})"
                                 continue # Skip la următorul tab
@@ -2112,6 +2286,8 @@ class OblioAutomation:
                 
             except Exception as e:
                 self._log(f"❌ [Tab {tab['index']+1}] Eroare la completare: {e}", 'error')
+                # Captură screenshot pentru eroare completare
+                self.capture_error_screenshot(tab.get('sku', 'unknown'), "completare_error")
                 tab['status'] = 'error'
                 tab['error'] = str(e)
 
@@ -2173,22 +2349,22 @@ class OblioAutomation:
                         except: continue
 
                     if launch_btn:
-                        launch_btn.click()
-                        time.sleep(1.0)
-                        
+                        # Folosește safe_click pentru a evita interceptarea de overlay-uri
+                        if not self.safe_click(launch_btn, retries=3, wait_after=1.0):
+                            raise Exception("Nu s-a putut face click pe butonul Lansare (overlay intercept)")
+
                         # Confirmă Popup
                         ok_btn = self.wait_for_clickable(By.CSS_SELECTOR, ".ok-message-modal", timeout=3)
                         if ok_btn:
-                            ok_btn.click()
-                            time.sleep(1.0)
-                            
+                            self.safe_click(ok_btn, retries=2, wait_after=1.0)
+
                         # Finalizează
                         finalize_btn = None
                         finalize_selectors = [
                             (By.XPATH, "//a[contains(text(), 'Finalizeaza Productia')]"),
                             (By.CSS_SELECTOR, f"a[href*='production_complete/{prod_id}']")
                         ]
-                        
+
                         for by, sel in finalize_selectors:
                             try:
                                 finalize_btn = self.wait_for_clickable(by, sel, timeout=5)
@@ -2196,8 +2372,8 @@ class OblioAutomation:
                             except: continue
 
                         if finalize_btn:
-                            finalize_btn.click()
-                            time.sleep(2.0)
+                            if not self.safe_click(finalize_btn, retries=3, wait_after=2.0):
+                                raise Exception("Nu s-a putut face click pe butonul Finalizare (overlay intercept)")
                             
                             results.append({'sku': sku, 'success': True, 'message': 'Bon creat cu succes'})
                             self.stats['success'] += 1
@@ -2220,8 +2396,16 @@ class OblioAutomation:
                         raise Exception(f"Nu s-a făcut redirect la preview. URL curent: {current_url}")
                     
             except Exception as e:
-                self._log(f"❌ [Tab {tab['index']+1}] Eroare la salvare: {e}", 'error')
-                results.append({'sku': tab['sku'], 'success': False, 'message': str(e)})
+                error_msg = str(e)
+                self._log(f"❌ [Tab {tab['index']+1}] Eroare la salvare: {error_msg}", 'error')
+
+                # Captură screenshot pentru eroare salvare/redirect
+                error_type = "redirect_fail" if "redirect" in error_msg.lower() else "salvare_error"
+                if "click" in error_msg.lower() or "intercept" in error_msg.lower():
+                    error_type = "click_intercepted"
+                self.capture_error_screenshot(tab['sku'], error_type)
+
+                results.append({'sku': tab['sku'], 'success': False, 'message': error_msg})
                 self.stats['failed'] += 1
             finally:
                 self.driver.close()

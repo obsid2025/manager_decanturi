@@ -3,6 +3,8 @@
 // Global State
 let currentFilename = null;
 let currentVouchers = [];
+let failedProducts = [];  // Produse eșuate din automation
+let automationStats = null;  // Statistici automation
 let socket = io();
 let isProcessing = false;
 let currentInputType = null;
@@ -200,6 +202,18 @@ function initEventListeners() {
             }
         }
     });
+
+    // Export Logs Button
+    const exportLogsBtn = document.getElementById('exportLogsBtn');
+    if (exportLogsBtn) {
+        exportLogsBtn.addEventListener('click', exportLogs);
+    }
+
+    // Clear Logs Button
+    const clearLogsBtn = document.getElementById('clearLogsBtn');
+    if (clearLogsBtn) {
+        clearLogsBtn.addEventListener('click', clearLogs);
+    }
 }
 
 // --- CORE FUNCTIONS ---
@@ -233,6 +247,118 @@ function logSystem(source, message, type = 'info') {
     
     dom.logs.appendChild(entry);
     dom.logs.scrollTop = dom.logs.scrollHeight;
+}
+
+function exportLogs() {
+    // Colectează toate log-urile din terminal
+    const logEntries = dom.logs.querySelectorAll('.log-entry');
+    let logContent = '=== OBSID DECANT MANAGER - SYSTEM LOGS ===\n';
+    logContent += `Export Date: ${new Date().toLocaleString('ro-RO')}\n`;
+    logContent += '==========================================\n\n';
+
+    logEntries.forEach(entry => {
+        // Extrage textul din fiecare log entry
+        const text = entry.textContent || entry.innerText;
+        logContent += text.trim() + '\n';
+    });
+
+    // Adaugă summary dacă există date despre vouchers procesate
+    if (currentVouchers && currentVouchers.length > 0) {
+        logContent += '\n==========================================\n';
+        logContent += '=== VOUCHER SUMMARY ===\n';
+        logContent += `Total Vouchers: ${currentVouchers.length}\n`;
+        currentVouchers.forEach((v, i) => {
+            logContent += `${i+1}. SKU: ${v.sku} | ${v.nume} | Qty: ${v.cantitate}\n`;
+        });
+    }
+
+    // Creează și descarcă fișierul
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `obsid_logs_${timestamp}.txt`;
+
+    const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    logSystem('EXPORT', `Logs exported to ${filename}`, 'success');
+}
+
+function clearLogs() {
+    // Păstrează doar mesajele de boot
+    dom.logs.innerHTML = `
+        <div class="log-entry"><span class="timestamp">[${new Date().toLocaleTimeString('ro-RO', { hour12: false })}]</span> Logs cleared.</div>
+    `;
+    logSystem('SYSTEM', 'Log buffer cleared', 'info');
+}
+
+function showExportFailedButton() {
+    // Verifică dacă butonul există deja
+    let btn = document.getElementById('exportFailedBtn');
+    if (!btn) {
+        // Adaugă butonul lângă celelalte butoane de control
+        const logHeaderActions = document.querySelector('.log-header-actions');
+        if (logHeaderActions) {
+            btn = document.createElement('button');
+            btn.id = 'exportFailedBtn';
+            btn.className = 'terminal-btn-sm danger-btn';
+            btn.title = 'Export failed products to Excel';
+            btn.textContent = '[ EXPORT_FAILED ]';
+            btn.addEventListener('click', exportFailedProducts);
+            // Inserează la început
+            logHeaderActions.insertBefore(btn, logHeaderActions.firstChild);
+        }
+    }
+    // Asigură-te că e vizibil
+    if (btn) {
+        btn.style.display = 'inline-block';
+    }
+}
+
+function exportFailedProducts() {
+    if (!failedProducts || failedProducts.length === 0) {
+        logSystem('EXPORT', 'Nu există produse eșuate de exportat.', 'warning');
+        return;
+    }
+
+    // Generează conținut CSV (poate fi deschis în Excel)
+    let csvContent = 'SKU,Nume Produs,Cantitate,Eroare\n';
+
+    failedProducts.forEach(fp => {
+        // Găsește datele originale din currentVouchers
+        const originalVoucher = currentVouchers.find(v => v.sku === fp.sku);
+        const nume = originalVoucher ? originalVoucher.nume : 'N/A';
+        const cantitate = originalVoucher ? originalVoucher.cantitate : 'N/A';
+        // Escapare pentru CSV
+        const error = (fp.error || 'Unknown error').replace(/"/g, '""');
+
+        csvContent += `"${fp.sku}","${nume}","${cantitate}","${error}"\n`;
+    });
+
+    // Creează și descarcă fișierul
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `produse_esuate_${timestamp}.csv`;
+
+    // BOM pentru UTF-8 în Excel
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    logSystem('EXPORT', `Exportat ${failedProducts.length} produse eșuate în ${filename}`, 'success');
 }
 
 // --- ANALYSIS MODULE ---
@@ -529,6 +655,22 @@ socket.on('bon_complete', (data) => {
 
 socket.on('automation_complete', (data) => {
     logSystem('COMPLETE', data.message || 'Automation sequence finished.', data.success ? 'success' : 'error');
+
+    // Salvează statisticile și produsele eșuate
+    automationStats = data.stats || null;
+    failedProducts = data.failed_products || [];
+
+    // Afișează rezumat statistici
+    if (automationStats) {
+        logSystem('STATS', `Total: ${automationStats.total} | Success: ${automationStats.success} | Failed: ${automationStats.failed}`, 'info');
+    }
+
+    // Dacă există produse eșuate, afișează butonul de export
+    if (failedProducts.length > 0) {
+        logSystem('FAILED', `${failedProducts.length} produse au eșuat. Folosește butonul EXPORT_FAILED pentru descărcare.`, 'warning');
+        showExportFailedButton();
+    }
+
     resetAutomationUI();
 });
 

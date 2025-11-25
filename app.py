@@ -427,14 +427,18 @@ def proceseazaBonuriProductie(fisier_path):
         # Split produse
         produse = produse_text.split(' | ')
 
-        # Extrage SKU-uri din atribute
+        # Extrage SKU-uri din atribute - format: "SKU: (cantitate)"
+        # Exemplu: "6291106063717-10: (1.00), 6291106063717-5: (2.00)"
         sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text)
 
-        # Match produse cu SKU-uri
+        # Match produse cu SKU-uri (trebuie să menținem indexul sincronizat)
         for i, produs in enumerate(produse):
             produs = produs.strip()
 
-            # Doar decanturi
+            # SKU pentru acest produs (IMPORTANT: preluăm SKU-ul înainte de a sări)
+            sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+
+            # Doar decanturi (dar continuăm să avansăm pentru indexul SKU)
             if 'Decant' not in produs:
                 continue
 
@@ -442,14 +446,21 @@ def proceseazaBonuriProductie(fisier_path):
             match_cantitate = re.search(r'(\d+\.\d+)$', produs)
             cantitate = int(float(match_cantitate.group(1))) if match_cantitate else 1
 
-            # SKU pentru acest produs
-            sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+            # Extrage ml din SKU (mai sigur decât din text, evită desincronizarea)
+            # SKU format: XXXXX-3, XXXXX-5, XXXXX-10
+            ml_from_sku = None
+            if sku and sku != 'N/A':
+                match_sku_ml = re.search(r'-(\d+)$', sku)
+                if match_sku_ml:
+                    ml_from_sku = match_sku_ml.group(1)
 
-            # Extrage numele parfumului
+            # Extrage numele parfumului din text
             match_parfum = re.search(r'Decant (\d+) ml parfum (.+?),', produs)
             if match_parfum:
-                ml = match_parfum.group(1)
+                ml_from_text = match_parfum.group(1)
                 nume_parfum = match_parfum.group(2)
+                # Folosește ml din SKU dacă disponibil, altfel din text
+                ml = ml_from_sku if ml_from_sku else ml_from_text
                 nume_complet = f"Decant {ml}ml {nume_parfum}"
             else:
                 nume_complet = produs[:60]
@@ -1458,6 +1469,7 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
         socketio.emit('automation_complete', {
             'success': True,
             'stats': stats,
+            'failed_products': stats.get('errors', []),
             'message': f'✅ Automatizare finalizată! {stats["success"]}/{stats["total"]} bonuri create'
         }, room=client_sid)
 
