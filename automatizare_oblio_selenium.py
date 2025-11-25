@@ -1071,7 +1071,8 @@ class OblioAutomation:
                 time.sleep(delay)
         # logger.debug(f"⌨️ Tastat: {text}")
 
-    def create_production_voucher(self, sku, quantity, oblio_cookies=None, oblio_email=None, oblio_password=None):
+    def create_production_voucher(self, sku, quantity, oblio_cookies=None, oblio_email=None, oblio_password=None,
+                                   nume=None, order_id=None, order_number=None):
         """
         Creează un bon de producție în Oblio
 
@@ -1081,10 +1082,19 @@ class OblioAutomation:
             oblio_cookies (str/dict): Cookies Oblio pentru sesiune (PREFERAT - pe Linux)
             oblio_email (str): Email Oblio (fallback pentru autentificare)
             oblio_password (str): Parolă Oblio (fallback pentru autentificare)
+            nume (str): Numele produsului (opțional, pentru salvare în DB)
+            order_id (int): ID-ul comenzii din Excel (opțional, pentru tracking)
+            order_number (int): Numărul comenzii (opțional, pentru tracking duplicate)
 
         Returns:
             bool: True dacă succès, False dacă eșec
         """
+        # Salvăm parametrii pentru folosire la salvarea în DB
+        self._current_voucher_info = {
+            'nume': nume or f"Produs {sku}",
+            'order_id': order_id,
+            'order_number': order_number
+        }
         self._log(f"{'='*60}", 'info')
         self._log(f"🎯 Creare bon: SKU={sku}, Cantitate={quantity}", 'info')
         self._log(f"{'='*60}", 'info')
@@ -1644,15 +1654,22 @@ class OblioAutomation:
                     msg += f"\n   📋 Link: https://www.oblio.eu/stock/preview_production/{production_id}"
                 self._log(msg, 'success')
                 self.stats['success'] += 1
-                
-                # Salvare în DB
+
+                # Salvare în DB cu order tracking
                 try:
-                    # Obținem numele produsului (dacă îl avem în context, altfel folosim SKU)
-                    # În această metodă nu avem numele complet, dar îl putem deduce sau lăsa gol
-                    database.adauga_bon(sku, f"Produs {sku}", quantity)
+                    voucher_info = getattr(self, '_current_voucher_info', {})
+                    nume = voucher_info.get('nume', f"Produs {sku}")
+                    order_id = voucher_info.get('order_id')
+                    order_number = voucher_info.get('order_number')
+
+                    database.adauga_bon(sku, nume, quantity, order_id, order_number)
+                    if order_number:
+                        self._log(f"💾 Salvat în DB: {sku} comanda #{order_number}", 'info')
+                    else:
+                        self._log(f"💾 Salvat în DB: {sku}", 'info')
                 except Exception as e:
                     self._log(f"⚠️ Eroare salvare DB: {e}", 'warning')
-                    
+
                 return True
             else:
                 self._log(f"❌ BONUL NU A FOST FINALIZAT! SKU={sku} - Eroare la finalizarea producției", 'error')
@@ -2184,23 +2201,29 @@ class OblioAutomation:
         for i, item in enumerate(batch_list):
             sku = item.get('sku')
             qty = item.get('cantitate', 1)
-            
+            nume = item.get('nume', f"Produs {sku}")
+            order_ids = item.get('order_ids', [])
+            order_numbers = item.get('order_numbers', [])
+
             self._log(f"🌐 [Tab {i+1}] Deschidere tab pentru {sku}...", 'info')
-            
+
             # Deschide tab nou
             self.driver.execute_script("window.open('about:blank', '_blank');")
-            
+
             # Switch la noul tab (ultimul deschis)
             self.driver.switch_to.window(self.driver.window_handles[-1])
             tab_handle = self.driver.current_window_handle
-            
+
             # Navighează la producție
             self.driver.get(url_prod)
-            
+
             tabs.append({
                 'handle': tab_handle,
                 'sku': sku,
                 'qty': qty,
+                'nume': nume,
+                'order_ids': order_ids,
+                'order_numbers': order_numbers,
                 'index': i
             })
 
@@ -2374,13 +2397,26 @@ class OblioAutomation:
                         if finalize_btn:
                             if not self.safe_click(finalize_btn, retries=3, wait_after=2.0):
                                 raise Exception("Nu s-a putut face click pe butonul Finalizare (overlay intercept)")
-                            
+
                             results.append({'sku': sku, 'success': True, 'message': 'Bon creat cu succes'})
                             self.stats['success'] += 1
-                            
-                            # Salvare în DB
+
+                            # Salvare în DB - pentru FIECARE comandă din order_numbers
                             try:
-                                database.adauga_bon(sku, f"Produs {sku}", qty)
+                                nume = tab.get('nume', f"Produs {sku}")
+                                order_ids = tab.get('order_ids', [])
+                                order_numbers = tab.get('order_numbers', [])
+
+                                if order_numbers:
+                                    # Salvăm câte o înregistrare pentru fiecare comandă
+                                    for idx, order_num in enumerate(order_numbers):
+                                        order_id = order_ids[idx] if idx < len(order_ids) else None
+                                        database.adauga_bon(sku, nume, 1, order_id, order_num)
+                                        self._log(f"💾 Salvat în DB: {sku} comanda #{order_num}", 'info')
+                                else:
+                                    # Fallback fără order tracking
+                                    database.adauga_bon(sku, nume, qty)
+                                    self._log(f"💾 Salvat în DB: {sku} (fără order tracking)", 'info')
                             except Exception as e:
                                 self._log(f"⚠️ Eroare salvare DB: {e}", 'warning')
                         else:

@@ -451,9 +451,12 @@ def get_product_database():
 
 def proceseazaBonuriProductie(fisier_path):
     """
-    Procesează fișierul și extrage bonuri de producție agregate pe SKU
+    Procesează fișierul și extrage bonuri de producție NEAGREGATE (per comandă)
     IMPORTANT: Folosește baza de date Google Sheets pentru numele corecte ale produselor!
-    Returns: lista de bonuri cu SKU, nume produs, cantitate agregată
+    Returns: lista de bonuri cu SKU, nume produs, cantitate, order_id, order_number
+
+    SCHIMBARE MAJORĂ: Nu mai agregăm pe SKU! Fiecare bon conține info despre comanda originală
+    pentru a permite Smart Resume precis (verificare duplicate per SKU + order_number)
     """
     df = pd.read_excel(fisier_path)
 
@@ -471,17 +474,45 @@ def proceseazaBonuriProductie(fisier_path):
     if not coloana_atribute:
         raise ValueError('Nu s-a găsit coloana cu atributele produselor')
 
+    # Detectare coloane order_id și order_number
+    coloana_order_id = None
+    coloana_order_number = None
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if 'id comanda' in col_lower or 'id_comanda' in col_lower:
+            coloana_order_id = col
+        if 'numar comanda' in col_lower or 'numar_comanda' in col_lower or col_lower == 'numar comanda':
+            coloana_order_number = col
+
+    logger.info(f"📋 Coloane detectate: order_id='{coloana_order_id}', order_number='{coloana_order_number}'")
+
     # Încarcă baza de date de produse din Google Sheets
     product_db = get_product_database()
 
     # Filtrare comenzi finalizate
     df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
 
-    # Agregare bonuri pe SKU
-    bonuri_agregate = defaultdict(lambda: {'nume': '', 'cantitate': 0, 'comenzi': []})
+    # Lista de bonuri NEAGREGATE (per comandă pentru tracking precis)
+    bonuri_list = []
 
     for idx, row in df_finalizate.iterrows():
         atribute_text = str(row[coloana_atribute])
+
+        # Extrage order_id și order_number din rând
+        order_id = None
+        order_number = None
+
+        if coloana_order_id:
+            try:
+                order_id = int(row[coloana_order_id])
+            except (ValueError, TypeError):
+                order_id = None
+
+        if coloana_order_number:
+            try:
+                order_number = int(row[coloana_order_number])
+            except (ValueError, TypeError):
+                order_number = None
 
         # Extrage TOATE SKU-urile din atribute - format: "SKU: (atribute...)"
         # Pattern: caută toate SKU-urile care au format XXXXXX-3, XXXXXX-5, XXXXXX-10 (decanturi)
@@ -493,9 +524,6 @@ def proceseazaBonuriProductie(fisier_path):
             if not re.search(r'-\d{1,2}$', sku):
                 continue  # Skip parfumuri 100ml
 
-            # Extrage cantitatea pentru acest SKU din atribute
-            # Format: "SKU: (Cantitate: X ml..." sau "SKU: (Aplicare:..., Cantitate: X ml..."
-            cantitate_pattern = rf'{re.escape(sku)}:\s*\([^)]*'
             cantitate = 1  # Default
 
             # Extrage ml din SKU pentru a determina tipul de decant
@@ -519,26 +547,56 @@ def proceseazaBonuriProductie(fisier_path):
                 else:
                     nume_complet = f"Decant {ml}ml (SKU: {sku})"
 
-            # Agregare
-            bonuri_agregate[sku]['nume'] = nume_complet
-            bonuri_agregate[sku]['cantitate'] += cantitate
-            bonuri_agregate[sku]['comenzi'].append(str(row.get('Numar Comanda', '')))
+            # Adaugă bon individual cu info despre comandă
+            bonuri_list.append({
+                'sku': sku,
+                'nume': nume_complet,
+                'cantitate': cantitate,
+                'order_id': order_id,
+                'order_number': order_number
+            })
+
+    # AGREGARE pentru afișare: grupăm bonurile identice (același SKU din aceeași comandă)
+    # dar păstrăm referința la comenzi
+    bonuri_agregate = defaultdict(lambda: {
+        'nume': '',
+        'cantitate': 0,
+        'comenzi': [],
+        'order_ids': [],
+        'order_numbers': []
+    })
+
+    for bon in bonuri_list:
+        sku = bon['sku']
+        bonuri_agregate[sku]['nume'] = bon['nume']
+        bonuri_agregate[sku]['cantitate'] += bon['cantitate']
+        if bon['order_number']:
+            bonuri_agregate[sku]['comenzi'].append(str(bon['order_number']))
+            bonuri_agregate[sku]['order_numbers'].append(bon['order_number'])
+        if bon['order_id']:
+            bonuri_agregate[sku]['order_ids'].append(bon['order_id'])
 
     # Sortare după cantitate (descrescător)
     bonuri_sortate = sorted(bonuri_agregate.items(), key=lambda x: x[1]['cantitate'], reverse=True)
 
-    # Convertire la format pentru JSON
+    # Convertire la format pentru JSON (păstrăm listele de order_id și order_number)
     rezultat = []
     for sku, info in bonuri_sortate:
         comenzi_unice = list(set(info['comenzi']))[:5]
+        order_numbers_unice = list(set(info['order_numbers']))
+        order_ids_unice = list(set(info['order_ids']))
+
         rezultat.append({
             'sku': sku,
             'nume': info['nume'],
             'cantitate': info['cantitate'],
             'comenzi': comenzi_unice,
-            'total_comenzi': len(set(info['comenzi']))
+            'total_comenzi': len(set(info['comenzi'])),
+            'order_ids': order_ids_unice,
+            'order_numbers': order_numbers_unice
         })
 
+    logger.info(f"📦 Procesat: {len(rezultat)} SKU-uri unice din {len(bonuri_list)} bonuri totale")
     return rezultat
 
 
@@ -1178,7 +1236,7 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
                 'message': f'🔐 Folosesc credențiale din ENV: {oblio_email}'
             }, room=client_sid)
 
-        # --- SMART RESUME: Verifică ce s-a lucrat deja azi ---
+        # --- SMART RESUME: Verifică ce s-a lucrat deja (per comandă!) ---
         if force_mode:
             socketio.emit('log', {
                 'type': 'warning',
@@ -1187,63 +1245,84 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
 
         if not force_mode:
             try:
-                # 1. Verificare în Baza de Date (PostgreSQL) - Prioritar
-                processed_db = database.get_bonuri_azi()
-                processed_skus_db = {item['sku'] for item in processed_db}
+                # Colectăm toate order_numbers din bonurile curente
+                all_order_numbers = set()
+                for bon in bonuri:
+                    order_nums = bon.get('order_numbers', [])
+                    all_order_numbers.update(order_nums)
 
-                if processed_skus_db:
+                socketio.emit('log', {
+                    'type': 'info',
+                    'message': f'🔍 Verific {len(all_order_numbers)} comenzi în baza de date...'
+                }, room=client_sid)
+
+                # 1. Verificare în Baza de Date (PostgreSQL) - per (sku, order_number)
+                processed_pairs_db = database.get_bonuri_procesate_pentru_comenzi(list(all_order_numbers))
+
+                if processed_pairs_db:
                     socketio.emit('log', {
                         'type': 'info',
-                        'message': f'📊 Găsite {len(processed_skus_db)} bonuri în baza de date locală.'
+                        'message': f'📊 Găsite {len(processed_pairs_db)} perechi (SKU, comandă) deja procesate în DB.'
                     }, room=client_sid)
 
-                # 2. Verificare în Oblio (Scraping) - Fallback / Validare
-                # Facem asta doar dacă DB-ul e gol sau pentru siguranță maximă
+                # 2. Verificare în Oblio (Scraping) - Fallback pentru SKU-uri fără order tracking
                 processed_texts_oblio = []
                 if automation.login_if_needed(oblio_email, oblio_password):
                     processed_texts_oblio = automation.get_todays_processed_texts()
 
-                # Filtrare
+                # Filtrare bonuri
                 initial_count = len(bonuri)
                 bonuri_filtrate = []
 
                 for bon in bonuri:
                     sku = bon.get('sku', '')
                     nume = bon.get('nume', '')
+                    order_numbers = bon.get('order_numbers', [])
 
-                    is_processed = False
+                    # Verificăm dacă TOATE comenzile pentru acest SKU sunt deja procesate
+                    if order_numbers:
+                        # Numărăm câte comenzi sunt încă neprocesate
+                        comenzi_neprocesate = []
+                        for order_num in order_numbers:
+                            if (sku, order_num) not in processed_pairs_db:
+                                comenzi_neprocesate.append(order_num)
 
-                    # A. Verificare DB
-                    if sku in processed_skus_db:
-                        is_processed = True
-                        logger.info(f"⏭️ Skip (DB): {nume} (SKU: {sku})")
+                        if not comenzi_neprocesate:
+                            # Toate comenzile pentru acest SKU sunt procesate
+                            logger.info(f"⏭️ Skip (DB): {nume} (SKU: {sku}) - toate {len(order_numbers)} comenzi procesate")
+                            continue
 
-                    # B. Verificare Oblio (dacă nu e găsit în DB)
-                    if not is_processed and processed_texts_oblio:
-                        for text in processed_texts_oblio:
-                            if sku and len(sku) > 3 and sku in text:
-                                is_processed = True
-                                break
-                            if nume and len(nume) > 5:
-                                # Match mai relaxat pe nume
-                                match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
-                                if match_parfum:
-                                    nume_parfum_doar = match_parfum.group(2).strip()
-                                    if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
-                                        match_ml = re.search(r'Decant (\d+)', nume)
-                                        if match_ml and match_ml.group(1) in text:
-                                            is_processed = True
-                                            break
+                        # Actualizăm bonul să conțină doar comenzile neprocesate
+                        bon_filtrat = bon.copy()
+                        bon_filtrat['order_numbers'] = comenzi_neprocesate
+                        bon_filtrat['cantitate'] = len(comenzi_neprocesate)  # Actualizăm cantitatea
+                        bonuri_filtrate.append(bon_filtrat)
+
+                        if len(comenzi_neprocesate) < len(order_numbers):
+                            logger.info(f"⏭️ Parțial (DB): {nume} - {len(order_numbers) - len(comenzi_neprocesate)}/{len(order_numbers)} comenzi deja procesate")
+                    else:
+                        # Fallback pentru bonuri fără order tracking - verificăm doar în Oblio
+                        is_processed = False
+
+                        if processed_texts_oblio:
+                            for text in processed_texts_oblio:
+                                if sku and len(sku) > 3 and sku in text:
+                                    is_processed = True
+                                    break
+                                if nume and len(nume) > 5:
+                                    match_parfum = re.search(r'Decant \d+ ?ml (parfum )?(.+)', nume, re.IGNORECASE)
+                                    if match_parfum:
+                                        nume_parfum_doar = match_parfum.group(2).strip()
+                                        if len(nume_parfum_doar) > 4 and nume_parfum_doar in text:
+                                            match_ml = re.search(r'Decant (\d+)', nume)
+                                            if match_ml and match_ml.group(1) in text:
+                                                is_processed = True
+                                                break
 
                         if is_processed:
                             logger.info(f"⏭️ Skip (Oblio): {nume} (SKU: {sku})")
-                            # Opțional: Salvăm în DB dacă am găsit în Oblio dar nu era în DB
-                            try:
-                                database.adauga_bon(sku, nume, bon.get('cantitate', 1))
-                            except: pass
-
-                    if not is_processed:
-                        bonuri_filtrate.append(bon)
+                        else:
+                            bonuri_filtrate.append(bon)
 
                 bonuri = bonuri_filtrate
                 skipped_count = initial_count - len(bonuri)
@@ -1251,16 +1330,16 @@ def run_automation_with_live_logs(bonuri, client_sid, force_mode=False):
                 if skipped_count > 0:
                     socketio.emit('log', {
                         'type': 'warning',
-                        'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja create astăzi.'
+                        'message': f'⏭️ SMART RESUME: Am sărit peste {skipped_count} bonuri deja procesate.'
                     }, room=client_sid)
 
                     stats['total'] = len(bonuri)
                     stats['skipped'] = skipped_count
-                
+
                 if len(bonuri) == 0:
                     socketio.emit('log', {
                         'type': 'success',
-                        'message': '✅ Toate bonurile din listă au fost deja procesate astăzi!'
+                        'message': '✅ Toate bonurile din listă au fost deja procesate!'
                     }, room=client_sid)
 
             except Exception as e:
