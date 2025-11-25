@@ -393,9 +393,66 @@ def genereazaTabelRaport(raport):
     return randuri
 
 
+def load_product_database():
+    """
+    Încarcă baza de date de produse din Google Sheets
+    Returns: dict {sku: nume_produs}
+    """
+    import requests
+    import csv
+    from io import StringIO
+
+    GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/17FhRBDaknpXgsoTXOkpEWcMf2o55uOjDymlaGiiKUwU/export?format=csv&gid=1884124540"
+
+    try:
+        logger.info("📊 Încărcare bază de date produse din Google Sheets...")
+        response = requests.get(GOOGLE_SHEETS_URL, timeout=30, allow_redirects=True)
+        response.raise_for_status()
+
+        # Parse CSV
+        csv_content = StringIO(response.text)
+        reader = csv.DictReader(csv_content)
+
+        product_db = {}
+        for row in reader:
+            sku = row.get('Cod Produs (SKU)', '').strip()
+            nume = row.get('Denumire Produs', '').strip()
+            if sku and nume:
+                product_db[sku] = nume
+
+        logger.info(f"✅ Încărcate {len(product_db)} produse din baza de date")
+        return product_db
+    except Exception as e:
+        logger.warning(f"⚠️ Nu s-a putut încărca baza de date produse: {e}")
+        return {}
+
+
+# Cache pentru baza de date produse (se reîncarcă la fiecare repornire)
+_product_db_cache = None
+_product_db_cache_time = None
+
+def get_product_database():
+    """
+    Returnează baza de date de produse, cu cache de 1 oră
+    """
+    global _product_db_cache, _product_db_cache_time
+    from datetime import datetime, timedelta
+
+    # Verifică dacă cache-ul e valid (mai vechi de 1 oră)
+    if _product_db_cache is not None and _product_db_cache_time is not None:
+        if datetime.now() - _product_db_cache_time < timedelta(hours=1):
+            return _product_db_cache
+
+    # Reîncarcă baza de date
+    _product_db_cache = load_product_database()
+    _product_db_cache_time = datetime.now()
+    return _product_db_cache
+
+
 def proceseazaBonuriProductie(fisier_path):
     """
     Procesează fișierul și extrage bonuri de producție agregate pe SKU
+    IMPORTANT: Folosește baza de date Google Sheets pentru numele corecte ale produselor!
     Returns: lista de bonuri cu SKU, nume produs, cantitate agregată
     """
     df = pd.read_excel(fisier_path)
@@ -414,6 +471,9 @@ def proceseazaBonuriProductie(fisier_path):
     if not coloana_atribute:
         raise ValueError('Nu s-a găsit coloana cu atributele produselor')
 
+    # Încarcă baza de date de produse din Google Sheets
+    product_db = get_product_database()
+
     # Filtrare comenzi finalizate
     df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
 
@@ -421,49 +481,43 @@ def proceseazaBonuriProductie(fisier_path):
     bonuri_agregate = defaultdict(lambda: {'nume': '', 'cantitate': 0, 'comenzi': []})
 
     for idx, row in df_finalizate.iterrows():
-        produse_text = str(row[coloana_produse])
         atribute_text = str(row[coloana_atribute])
 
-        # Split produse
-        produse = produse_text.split(' | ')
+        # Extrage TOATE SKU-urile din atribute - format: "SKU: (atribute...)"
+        # Pattern: caută toate SKU-urile care au format XXXXXX-3, XXXXXX-5, XXXXXX-10 (decanturi)
+        # sau XXXXXX (parfumuri 100ml) urmate de ": ("
+        sku_matches = re.findall(r'(\d{10,}-\d{1,2}|\d{10,}):\s*\(', atribute_text)
 
-        # Extrage SKU-uri din atribute - format: "SKU: (cantitate)"
-        # Exemplu: "6291106063717-10: (1.00), 6291106063717-5: (2.00)"
-        sku_matches = re.findall(r'([^,\s]+):\s*\(', atribute_text)
+        for sku in sku_matches:
+            # Doar decanturi (SKU-uri care au sufixul -3, -5 sau -10)
+            if not re.search(r'-\d{1,2}$', sku):
+                continue  # Skip parfumuri 100ml
 
-        # Match produse cu SKU-uri (trebuie să menținem indexul sincronizat)
-        for i, produs in enumerate(produse):
-            produs = produs.strip()
+            # Extrage cantitatea pentru acest SKU din atribute
+            # Format: "SKU: (Cantitate: X ml..." sau "SKU: (Aplicare:..., Cantitate: X ml..."
+            cantitate_pattern = rf'{re.escape(sku)}:\s*\([^)]*'
+            cantitate = 1  # Default
 
-            # SKU pentru acest produs (IMPORTANT: preluăm SKU-ul înainte de a sări)
-            sku = sku_matches[i] if i < len(sku_matches) else 'N/A'
+            # Extrage ml din SKU pentru a determina tipul de decant
+            match_sku_ml = re.search(r'-(\d{1,2})$', sku)
+            ml = match_sku_ml.group(1) if match_sku_ml else '?'
 
-            # Doar decanturi (dar continuăm să avansăm pentru indexul SKU)
-            if 'Decant' not in produs:
-                continue
-
-            # Extrage cantitatea din produs
-            match_cantitate = re.search(r'(\d+\.\d+)$', produs)
-            cantitate = int(float(match_cantitate.group(1))) if match_cantitate else 1
-
-            # Extrage ml din SKU (mai sigur decât din text, evită desincronizarea)
-            # SKU format: XXXXX-3, XXXXX-5, XXXXX-10
-            ml_from_sku = None
-            if sku and sku != 'N/A':
-                match_sku_ml = re.search(r'-(\d+)$', sku)
-                if match_sku_ml:
-                    ml_from_sku = match_sku_ml.group(1)
-
-            # Extrage numele parfumului din text
-            match_parfum = re.search(r'Decant (\d+) ml parfum (.+?),', produs)
-            if match_parfum:
-                ml_from_text = match_parfum.group(1)
-                nume_parfum = match_parfum.group(2)
-                # Folosește ml din SKU dacă disponibil, altfel din text
-                ml = ml_from_sku if ml_from_sku else ml_from_text
-                nume_complet = f"Decant {ml}ml {nume_parfum}"
+            # Obține numele CORECT din baza de date Google Sheets
+            if sku in product_db:
+                nume_complet = product_db[sku]
             else:
-                nume_complet = produs[:60]
+                # Fallback: construiește un nume generic
+                base_sku = re.sub(r'-\d{1,2}$', '', sku)
+                if base_sku in product_db:
+                    base_name = product_db[base_sku]
+                    # Extrage doar numele parfumului din denumirea completă
+                    match_parfum = re.search(r'Parfum (.+?),', base_name)
+                    if match_parfum:
+                        nume_complet = f"Decant {ml}ml {match_parfum.group(1)}"
+                    else:
+                        nume_complet = f"Decant {ml}ml (SKU: {sku})"
+                else:
+                    nume_complet = f"Decant {ml}ml (SKU: {sku})"
 
             # Agregare
             bonuri_agregate[sku]['nume'] = nume_complet
