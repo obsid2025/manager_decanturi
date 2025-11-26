@@ -1575,7 +1575,47 @@ class OblioAutomation:
                     finalize_button.click()
                     time.sleep(1) # Optimizat: 2s → 1s
 
-                    # PASUL 10: Verificare finalizare în raportul de producție
+                    # PASUL 10: Handler pentru popup-ul de confirmare preț
+                    # "Pretul de vanzare este mai mic decat costul de achizitie. Continuati?"
+                    logger.info("🔍 Verificare popup confirmare preț...")
+                    try:
+                        # Așteaptă puțin pentru a permite popup-ului să apară
+                        time.sleep(0.5)
+
+                        # Căutăm butonul "DA" din popup-ul de confirmare preț
+                        price_confirm_selectors = [
+                            (By.CSS_SELECTOR, "button.ok-confirm-modal1"),
+                            (By.CSS_SELECTOR, ".ok-confirm-modal1"),
+                            (By.XPATH, "//button[contains(@class, 'ok-confirm-modal1')]"),
+                            (By.XPATH, "//button[contains(text(), 'DA')]"),
+                        ]
+
+                        price_confirm_button = None
+                        for by, selector in price_confirm_selectors:
+                            try:
+                                price_confirm_button = WebDriverWait(self.driver, 2).until(
+                                    EC.element_to_be_clickable((by, selector))
+                                )
+                                if price_confirm_button and price_confirm_button.is_displayed():
+                                    logger.info(f"✅ Popup confirmare preț detectat! Selector: {selector}")
+                                    break
+                            except:
+                                continue
+
+                        if price_confirm_button and price_confirm_button.is_displayed():
+                            logger.info("🖱️ Click pe butonul 'DA' din popup-ul de confirmare preț...")
+                            price_confirm_button.click()
+                            time.sleep(1)
+                            logger.info("✅ Popup confirmare preț acceptat!")
+                        else:
+                            logger.info("ℹ️ Popup confirmare preț nu a apărut (preț OK)")
+
+                    except TimeoutException:
+                        logger.info("ℹ️ Popup confirmare preț nu a apărut (timeout)")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Eroare la handler popup confirmare preț: {e}")
+
+                    # PASUL 11: Verificare finalizare în raportul de producție
                     logger.info("🔍 Verificare finalizare în raportul de producție...")
                     success = True
 
