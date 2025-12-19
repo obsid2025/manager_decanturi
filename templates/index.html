@@ -141,6 +141,29 @@
                                         <span class="terminal-text dim">[ FORCE_MODE: Bypass duplicate detection & process ALL vouchers ]</span>
                                     </label>
                                 </div>
+
+                                <!-- Status Filter Checkboxes -->
+                                <div class="status-filter-group" style="margin-top: 15px; padding: 10px; border: 1px solid #444; border-radius: 4px;">
+                                    <p class="terminal-text" style="margin-bottom: 8px; color: #00ff00;">> SELECT_ORDER_STATUSES:</p>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                        <label class="terminal-checkbox">
+                                            <input type="checkbox" id="statusFinalizata" checked style="margin-right: 5px;">
+                                            <span class="terminal-text dim">Finalizata</span>
+                                        </label>
+                                        <label class="terminal-checkbox">
+                                            <input type="checkbox" id="statusConfirmata" checked style="margin-right: 5px;">
+                                            <span class="terminal-text dim">Confirmata</span>
+                                        </label>
+                                        <label class="terminal-checkbox">
+                                            <input type="checkbox" id="statusNoua" style="margin-right: 5px;">
+                                            <span class="terminal-text dim">Comanda noua</span>
+                                        </label>
+                                        <label class="terminal-checkbox">
+                                            <input type="checkbox" id="statusProcesare" style="margin-right: 5px;">
+                                            <span class="terminal-text dim">In procesare</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Results Section -->

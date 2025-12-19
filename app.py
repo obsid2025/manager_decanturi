@@ -449,7 +449,7 @@ def get_product_database():
     return _product_db_cache
 
 
-def proceseazaBonuriProductie(fisier_path):
+def proceseazaBonuriProductie(fisier_path, statuses=None):
     """
     Procesează fișierul și extrage bonuri de producție NEAGREGATE (per comandă)
     IMPORTANT: Folosește baza de date Google Sheets pentru numele corecte ale produselor!
@@ -457,7 +457,14 @@ def proceseazaBonuriProductie(fisier_path):
 
     SCHIMBARE MAJORĂ: Nu mai agregăm pe SKU! Fiecare bon conține info despre comanda originală
     pentru a permite Smart Resume precis (verificare duplicate per SKU + order_number)
+
+    Args:
+        fisier_path: Calea către fișierul Excel
+        statuses: Lista de statusuri de comenzi de procesat (default: ['Finalizata', 'Confirmata'])
     """
+    if statuses is None:
+        statuses = ['Finalizata', 'Confirmata']
+
     df = pd.read_excel(fisier_path)
 
     # Detectare automată coloane
@@ -489,8 +496,12 @@ def proceseazaBonuriProductie(fisier_path):
     # Încarcă baza de date de produse din Google Sheets
     product_db = get_product_database()
 
-    # Filtrare comenzi finalizate
-    df_finalizate = df[df[coloana_status].astype(str).str.contains('Finalizata|Confirmata', case=False, na=False)]
+    # Filtrare comenzi după statusurile selectate
+    # Construiește pattern regex din lista de statusuri
+    status_pattern = '|'.join([re.escape(s) for s in statuses])
+    logger.info(f"🔍 Filtru status: {status_pattern}")
+    df_finalizate = df[df[coloana_status].astype(str).str.contains(status_pattern, case=False, na=False)]
+    logger.info(f"📊 Comenzi găsite cu statusurile selectate: {len(df_finalizate)} din {len(df)}")
 
     # Lista de bonuri NEAGREGATE (per comandă pentru tracking precis)
     bonuri_list = []
@@ -754,8 +765,17 @@ def process_vouchers():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], save_filename)
         file.save(filepath)
 
+        # Obține statusurile selectate din request
+        statuses_json = request.form.get('statuses', '["Finalizata", "Confirmata"]')
+        try:
+            import json
+            statuses = json.loads(statuses_json)
+            logger.info(f"📋 Statusuri selectate: {statuses}")
+        except:
+            statuses = ['Finalizata', 'Confirmata']  # Default
+
         # Procesare bonuri de producție
-        bonuri = proceseazaBonuriProductie(filepath)
+        bonuri = proceseazaBonuriProductie(filepath, statuses=statuses)
 
         total_bonuri = len(bonuri)
         total_bucati = sum(bon['cantitate'] for bon in bonuri)

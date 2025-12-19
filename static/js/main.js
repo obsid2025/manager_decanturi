@@ -529,8 +529,25 @@ async function processVouchers() {
     dom.production.loading.style.display = 'block';
     dom.production.errorAlert.style.display = 'none';
 
+    // Collect selected statuses
+    const selectedStatuses = [];
+    if (document.getElementById('statusFinalizata')?.checked) selectedStatuses.push('Finalizata');
+    if (document.getElementById('statusConfirmata')?.checked) selectedStatuses.push('Confirmata');
+    if (document.getElementById('statusNoua')?.checked) selectedStatuses.push('Comanda noua');
+    if (document.getElementById('statusProcesare')?.checked) selectedStatuses.push('In procesare');
+
+    if (selectedStatuses.length === 0) {
+        logSystem('PRODUCTION_FAIL', 'No order statuses selected! Please select at least one status.', 'error');
+        dom.production.processBtn.disabled = false;
+        dom.production.loading.style.display = 'none';
+        return;
+    }
+
+    logSystem('PRODUCTION', `Filtering by statuses: ${selectedStatuses.join(', ')}`, 'info');
+
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('statuses', JSON.stringify(selectedStatuses));
 
     try {
         const response = await fetch('/process-vouchers', {
