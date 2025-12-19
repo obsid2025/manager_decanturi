@@ -1219,12 +1219,30 @@ class OblioAutomation:
             logger.info("🔍 Verificare selecție produs...")
             time.sleep(1)
 
+            # Verifică dacă a apărut pop-up cu mesaj de eroare/instrucțiuni
+            try:
+                modal_message = self.driver.find_element(By.CSS_SELECTOR, "#modal-message")
+                if modal_message.is_displayed():
+                    modal_text = modal_message.text
+                    if "Selecteaza produsul" in modal_text or "produsul pentru productie" in modal_text.lower():
+                        logger.error(f"❌ Pop-up detectat: Produsul {sku} NU există în Oblio!")
+                        # Închide pop-up-ul
+                        try:
+                            ok_btn = modal_message.find_element(By.CSS_SELECTOR, ".ok-message-modal")
+                            ok_btn.click()
+                            time.sleep(0.5)
+                        except:
+                            pass
+                        raise Exception(f"Produsul cu SKU '{sku}' NU EXISTĂ în baza de date Oblio! Verifică SKU-ul.")
+            except NoSuchElementException:
+                pass  # Nu există pop-up, continuăm normal
+
             try:
                 pp_name_id = self.driver.find_element(By.ID, "pp_name_id")
                 if pp_name_id.get_attribute("value"):
                     logger.info(f"✅ Produs selectat: ID={pp_name_id.get_attribute('value')}")
                 else:
-                    raise Exception(f"Produsul cu SKU '{sku}' nu a fost selectat! SKU invalid sau nu există în baza de date.")
+                    raise Exception(f"Produsul cu SKU '{sku}' nu a fost selectat! SKU invalid sau nu există în baza de date Oblio.")
             except NoSuchElementException:
                 raise Exception("Element #pp_name_id nu a fost găsit!")
 
